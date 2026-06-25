@@ -57,6 +57,7 @@ func NewServer() *http.Server {
 			log.Fatalf("storage init failed: %v", err)
 		}
 		srv.backend = backend
+		scheduleGC(backend)
 	}
 
 	if cfg.AuthUsername == "" || cfg.AuthPassword == "" || cfg.JWTSecret == "" {

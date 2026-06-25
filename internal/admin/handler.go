@@ -13,23 +13,29 @@ import (
 	"github.com/labstack/echo/v4"
 )
 
-// gcBackend is the optional interface for local-only GC operations.
+// gcBackend: GC operations — implemented by both LocalBackend and S3Backend.
 type gcBackend interface {
 	AllBlobs() ([]string, error)
 	BlobSize(digest string) (int64, error)
 	ReferencedBlobs() (map[string]struct{}, error)
 	RemoveBlob(digest string) error
+}
+
+// treeBackend: local filesystem tree — LocalBackend only.
+type treeBackend interface {
 	Root() string
 }
 
 type Handler struct {
-	store   storage.Backend
-	gcStore gcBackend // non-nil only for LocalBackend
+	store     storage.Backend
+	gcStore   gcBackend   // non-nil for local and S3
+	treeStore treeBackend // non-nil for local only
 }
 
 func New(backend storage.Backend) *Handler {
 	gc, _ := backend.(gcBackend)
-	return &Handler{store: backend, gcStore: gc}
+	tree, _ := backend.(treeBackend)
+	return &Handler{store: backend, gcStore: gc, treeStore: tree}
 }
 
 // GET /api/admin/repositories
@@ -104,8 +110,8 @@ func (h *Handler) StorageStats(c echo.Context) error {
 		"blob_count":       stats.BlobCount,
 		"repo_count":       stats.RepoCount,
 	}
-	if h.gcStore != nil {
-		result["storage_path"] = h.gcStore.Root()
+	if h.treeStore != nil {
+		result["storage_path"] = h.treeStore.Root()
 	}
 	return c.JSON(http.StatusOK, result)
 }
@@ -147,7 +153,7 @@ func (h *Handler) GarbageCollect(c echo.Context) error {
 
 // GET /api/admin/storage/tree — storage tree for debugging
 func (h *Handler) StorageTree(c echo.Context) error {
-	if h.gcStore == nil {
+	if h.treeStore == nil {
 		return c.JSON(http.StatusNotImplemented, map[string]string{
 			"error": "storage tree is only available with the local storage backend",
 		})
@@ -156,7 +162,7 @@ func (h *Handler) StorageTree(c echo.Context) error {
 		Path string `json:"path"`
 		Size int64  `json:"size"`
 	}
-	root := h.gcStore.Root()
+	root := h.treeStore.Root()
 	var entries []entry
 	filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {

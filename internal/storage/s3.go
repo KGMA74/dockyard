@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io"
 	"strings"
@@ -263,6 +264,88 @@ func (s *S3Backend) ListTags(name string) ([]string, error) {
 		}
 	}
 	return tags, nil
+}
+
+// ── GC helpers (mirrors LocalBackend, enables GC in S3 mode) ─────────────────
+
+func (s *S3Backend) AllBlobs() ([]string, error) {
+	ctx := context.Background()
+	var blobs []string
+	for obj := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
+		Prefix:    "blobs/",
+		Recursive: true,
+	}) {
+		if obj.Err != nil {
+			continue
+		}
+		digest := strings.TrimPrefix(obj.Key, "blobs/")
+		if digest != "" {
+			blobs = append(blobs, digest)
+		}
+	}
+	return blobs, nil
+}
+
+func (s *S3Backend) BlobSize(digest string) (int64, error) {
+	key := fmt.Sprintf("blobs/%s", digest)
+	info, err := s.client.StatObject(context.Background(), s.bucket, key, minio.StatObjectOptions{})
+	if err != nil {
+		return 0, err
+	}
+	return info.Size, nil
+}
+
+func (s *S3Backend) ReferencedBlobs() (map[string]struct{}, error) {
+	ctx := context.Background()
+	referenced := make(map[string]struct{})
+
+	for obj := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
+		Prefix:    "manifests/",
+		Recursive: true,
+	}) {
+		if obj.Err != nil {
+			continue
+		}
+		// Only read digest keys (sha256:…) to avoid processing each manifest twice
+		parts := strings.Split(obj.Key, "/")
+		if !strings.HasPrefix(parts[len(parts)-1], "sha256:") {
+			continue
+		}
+		reader, err := s.client.GetObject(ctx, s.bucket, obj.Key, minio.GetObjectOptions{})
+		if err != nil {
+			continue
+		}
+		data, err := io.ReadAll(reader)
+		reader.Close()
+		if err != nil {
+			continue
+		}
+		var m struct {
+			Config struct {
+				Digest string `json:"digest"`
+			} `json:"config"`
+			Layers []struct {
+				Digest string `json:"digest"`
+			} `json:"layers"`
+		}
+		if err := json.Unmarshal(data, &m); err != nil {
+			continue
+		}
+		if m.Config.Digest != "" {
+			referenced[m.Config.Digest] = struct{}{}
+		}
+		for _, l := range m.Layers {
+			if l.Digest != "" {
+				referenced[l.Digest] = struct{}{}
+			}
+		}
+	}
+	return referenced, nil
+}
+
+func (s *S3Backend) RemoveBlob(digest string) error {
+	key := fmt.Sprintf("blobs/%s", digest)
+	return s.client.RemoveObject(context.Background(), s.bucket, key, minio.RemoveObjectOptions{})
 }
 
 func (s *S3Backend) Stats() (StorageStats, error) {
