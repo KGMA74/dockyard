@@ -87,7 +87,15 @@ export interface StorageStats {
 }
 
 export async function getStorageStats(): Promise<StorageStats> {
-  return req('/storage/stats')
+  const res = await fetch(BASE + '/storage/stats', {
+    headers: { Authorization: `Bearer ${token()}` },
+  })
+  // proxy mode: stats not supported → return sentinel values
+  if (res.status === 501) {
+    return { total_size_bytes: -1, total_size_human: '—', blob_count: -1, repo_count: -1 }
+  }
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
 }
 
 export interface GCResult {
@@ -99,4 +107,11 @@ export interface GCResult {
 
 export async function runGC(): Promise<GCResult> {
   return req('/gc', { method: 'POST' })
+}
+
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  return req('/auth/password', {
+    method: 'POST',
+    body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
+  })
 }

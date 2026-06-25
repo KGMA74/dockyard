@@ -32,7 +32,6 @@ clean:
 	@rm -rf internal/ui/dist
 	@mkdir -p internal/ui/dist
 	@echo "<p>UI not built — run: make ui</p>" > internal/ui/dist/index.html
-
 watch:
 	@powershell -ExecutionPolicy Bypass -Command "if (Get-Command air -ErrorAction SilentlyContinue) { \
 		air; \

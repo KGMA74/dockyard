@@ -1,6 +1,7 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { getTags, deleteManifest, TagInfo, RepoSummary } from '../api'
 import DeleteModal from './DeleteModal'
+import { useToast } from './Toast'
 
 interface Props {
   repos: RepoSummary[]
@@ -18,6 +19,7 @@ export default function RepoList({ repos, onRefresh }: Props) {
 }
 
 function RepoCard({ repo, onRefresh }: { repo: RepoSummary; onRefresh: () => void }) {
+  const { toast } = useToast()
   const [open, setOpen] = useState(false)
   const [tags, setTags] = useState<TagInfo[]>([])
   const [loadingTags, setLoadingTags] = useState(false)
@@ -40,6 +42,7 @@ function RepoCard({ repo, onRefresh }: { repo: RepoSummary; onRefresh: () => voi
     await deleteManifest(repo.name, tag.digest)
     setTags(ts => ts.filter(t => t.digest !== tag.digest))
     setToDelete(null)
+    toast(`Deleted ${repo.name}:${tag.tag}`)
     onRefresh()
   }
 
@@ -48,7 +51,7 @@ function RepoCard({ repo, onRefresh }: { repo: RepoSummary; onRefresh: () => voi
       <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
         <button
           onClick={handleExpand}
-          className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-zinc-800/40 active:bg-zinc-800/60 transition-colors text-left group"
+          className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-zinc-800/40 active:bg-zinc-800/60 transition-colors text-left"
         >
           <div className="flex items-center gap-3 min-w-0">
             <svg className="w-4 h-4 text-zinc-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -80,34 +83,18 @@ function RepoCard({ repo, onRefresh }: { repo: RepoSummary; onRefresh: () => voi
                   <tr className="border-b border-zinc-800">
                     <th className="text-left px-4 py-2 text-xs text-zinc-600 font-medium">Tag</th>
                     <th className="text-left px-4 py-2 text-xs text-zinc-600 font-medium hidden sm:table-cell">Digest</th>
+                    <th className="text-left px-4 py-2 text-xs text-zinc-600 font-medium hidden md:table-cell">Pull</th>
                     <th className="px-4 py-2 w-16" />
                   </tr>
                 </thead>
                 <tbody>
                   {tags.map(tag => (
-                    <tr
+                    <TagRow
                       key={tag.digest}
-                      className="border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/20 group/row"
-                    >
-                      <td className="px-4 py-3">
-                        <span className="font-mono text-blue-400 text-xs bg-blue-950/30 px-2 py-0.5 rounded-md border border-blue-900/30">
-                          {tag.tag}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 hidden sm:table-cell">
-                        <span className="font-mono text-xs text-zinc-600" title={tag.digest}>
-                          {tag.digest.slice(0, 7)}…{tag.digest.slice(-6)}
-                        </span>
-                      </td>
-                      <td className="px-4 py-3 text-right">
-                        <button
-                          onClick={() => setToDelete(tag)}
-                          className="text-xs text-zinc-700 hover:text-red-400 transition-colors opacity-0 group-hover/row:opacity-100"
-                        >
-                          Delete
-                        </button>
-                      </td>
-                    </tr>
+                      imageName={repo.name}
+                      tag={tag}
+                      onDelete={() => setToDelete(tag)}
+                    />
                   ))}
                 </tbody>
               </table>
@@ -125,5 +112,77 @@ function RepoCard({ repo, onRefresh }: { repo: RepoSummary; onRefresh: () => voi
         />
       )}
     </>
+  )
+}
+
+function TagRow({ imageName, tag, onDelete }: { imageName: string; tag: TagInfo; onDelete: () => void }) {
+  const { toast } = useToast()
+  const [copiedDigest, setCopiedDigest] = useState(false)
+  const [copiedPull, setCopiedPull] = useState(false)
+
+  const pullCmd = `docker pull ${window.location.host}/${imageName}:${tag.tag}`
+
+  const copyDigest = useCallback(() => {
+    navigator.clipboard.writeText(tag.digest)
+    setCopiedDigest(true)
+    setTimeout(() => setCopiedDigest(false), 1500)
+  }, [tag.digest])
+
+  const copyPull = useCallback(() => {
+    navigator.clipboard.writeText(pullCmd)
+    setCopiedPull(true)
+    toast('Pull command copied', 'info')
+    setTimeout(() => setCopiedPull(false), 1500)
+  }, [pullCmd, toast])
+
+  return (
+    <tr className="border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/20 group/row">
+      <td className="px-4 py-3">
+        <span className="font-mono text-blue-400 text-xs bg-blue-950/30 px-2 py-0.5 rounded-md border border-blue-900/30">
+          {tag.tag}
+        </span>
+      </td>
+
+      <td className="px-4 py-3 hidden sm:table-cell">
+        <button
+          onClick={copyDigest}
+          title={tag.digest}
+          className="group/digest flex items-center gap-1.5 font-mono text-xs text-zinc-600 hover:text-zinc-300 transition-colors"
+        >
+          <span>{copiedDigest ? 'Copied!' : `${tag.digest.slice(0, 7)}…${tag.digest.slice(-6)}`}</span>
+          {!copiedDigest && (
+            <svg className="w-3 h-3 opacity-0 group-hover/digest:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+          )}
+        </button>
+      </td>
+
+      <td className="px-4 py-3 hidden md:table-cell">
+        <button
+          onClick={copyPull}
+          title={pullCmd}
+          className="group/pull flex items-center gap-1.5 font-mono text-xs text-zinc-700 hover:text-zinc-300 transition-colors max-w-[220px] truncate"
+        >
+          <span className="truncate">{copiedPull ? 'Copied!' : pullCmd}</span>
+          {!copiedPull && (
+            <svg className="w-3 h-3 shrink-0 opacity-0 group-hover/pull:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
+                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+            </svg>
+          )}
+        </button>
+      </td>
+
+      <td className="px-4 py-3 text-right">
+        <button
+          onClick={onDelete}
+          className="text-xs text-zinc-700 hover:text-red-400 transition-colors opacity-0 group-hover/row:opacity-100"
+        >
+          Delete
+        </button>
+      </td>
+    </tr>
   )
 }
