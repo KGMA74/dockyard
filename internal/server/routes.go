@@ -117,26 +117,30 @@ func (s *Server) RegisterRoutes() http.Handler {
 		return c.JSON(http.StatusOK, body)
 	})
 
-	// ── UI SPA — catch-all ────────────────────────────────────────────────────
+	// ── UI SPA ────────────────────────────────────────────────────────────────
 	staticFS, _ := fs.Sub(uiassets.Assets, "dist")
 	fileServer := http.FileServer(http.FS(staticFS))
 
-	e.GET("/*", func(c echo.Context) error {
-		path := c.Param("*")
-		if path != "" {
-			if f, err := staticFS.Open(path); err == nil {
-				f.Close()
-				fileServer.ServeHTTP(c.Response(), c.Request())
-				return nil
-			}
-		}
-		// SPA fallback → index.html
+	serveIndex := func(c echo.Context) error {
 		content, err := fs.ReadFile(staticFS, "index.html")
 		if err != nil {
 			return c.String(http.StatusServiceUnavailable, "UI not built — run: make ui\n")
 		}
 		c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
 		return c.HTMLBlob(http.StatusOK, content)
+	}
+
+	// Root path — explicit route needed, /* does not match /
+	e.GET("/", serveIndex)
+
+	e.GET("/*", func(c echo.Context) error {
+		path := c.Param("*")
+		if f, err := staticFS.Open(path); err == nil {
+			f.Close()
+			fileServer.ServeHTTP(c.Response(), c.Request())
+			return nil
+		}
+		return serveIndex(c)
 	})
 
 	return e
