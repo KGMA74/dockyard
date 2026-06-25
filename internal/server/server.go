@@ -2,8 +2,9 @@ package server
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"net/http"
+	"os"
 	"time"
 
 	"maestro/config"
@@ -47,32 +48,37 @@ func NewServer() *http.Server {
 	switch m {
 	case modeProxy:
 		if cfg.RegistryURL == "" {
-			log.Fatal("REGISTRY_MODE=proxy requires REGISTRY_URL to be set")
+			slog.Error("REGISTRY_MODE=proxy requires REGISTRY_URL to be set")
+			os.Exit(1)
 		}
 		srv.proxy = registry.NewClient(cfg.RegistryURL, cfg.RegistryUsername, cfg.RegistryPassword)
 
 	default:
 		backend, err := storage.NewBackend(cfg)
 		if err != nil {
-			log.Fatalf("storage init failed: %v", err)
+			slog.Error("storage init failed", "err", err)
+			os.Exit(1)
 		}
 		srv.backend = backend
 		scheduleGC(backend)
 	}
 
 	if cfg.AuthUsername == "" || cfg.AuthPassword == "" || cfg.JWTSecret == "" {
-		log.Fatal("AUTH_USERNAME, AUTH_PASSWORD and JWT_SECRET must be set")
+		slog.Error("AUTH_USERNAME, AUTH_PASSWORD and JWT_SECRET must be set")
+		os.Exit(1)
 	}
 	authMgr, err := auth.New(cfg.AuthUsername, cfg.AuthPassword, cfg.JWTSecret, cfg.StoragePath)
 	if err != nil {
-		log.Fatalf("auth init failed: %v", err)
+		slog.Error("auth init failed", "err", err)
+		os.Exit(1)
 	}
 	srv.auth = authMgr
 
 	if cfg.V2AuthEnabled {
 		hash, err := authMgr.PasswordHash()
 		if err != nil {
-			log.Fatalf("V2_AUTH_ENABLED=true but cannot read password hash: %v", err)
+			slog.Error("V2_AUTH_ENABLED=true but cannot read password hash", "err", err)
+			os.Exit(1)
 		}
 		srv.v2AuthHash = hash
 	}

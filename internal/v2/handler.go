@@ -7,9 +7,11 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 
 	"maestro/internal/storage"
 )
@@ -33,40 +35,61 @@ var (
 	reBlobUpload    = regexp.MustCompile(`^/v2/(.+)/blobs/uploads/([^/]+)$`)
 )
 
+// statusRecorder wraps http.ResponseWriter to capture the written status code.
+type statusRecorder struct {
+	http.ResponseWriter
+	status int
+}
+
+func (r *statusRecorder) WriteHeader(code int) {
+	r.status = code
+	r.ResponseWriter.WriteHeader(code)
+}
+
 func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	rec := &statusRecorder{ResponseWriter: w, status: http.StatusOK}
+	start := time.Now()
+
 	w.Header().Set("Docker-Distribution-Api-Version", "registry/2.0")
 	path := r.URL.Path
 
 	switch {
 	case path == "/v2/" || path == "/v2":
-		w.WriteHeader(http.StatusOK)
+		rec.WriteHeader(http.StatusOK)
 
 	case reCatalog.MatchString(path) && r.Method == http.MethodGet:
-		h.catalog(w, r)
+		h.catalog(rec, r)
 
 	case reTags.MatchString(path) && r.Method == http.MethodGet:
 		m := reTags.FindStringSubmatch(path)
-		h.tags(w, r, m[1])
+		h.tags(rec, r, m[1])
 
 	case reManifests.MatchString(path):
 		m := reManifests.FindStringSubmatch(path)
-		h.manifests(w, r, m[1], m[2])
+		h.manifests(rec, r, m[1], m[2])
 
 	case reBlobGet.MatchString(path) && (r.Method == http.MethodGet || r.Method == http.MethodHead):
 		m := reBlobGet.FindStringSubmatch(path)
-		h.getBlob(w, r, m[1], m[2])
+		h.getBlob(rec, r, m[1], m[2])
 
 	case reBlobUploadNew.MatchString(path) && r.Method == http.MethodPost:
 		m := reBlobUploadNew.FindStringSubmatch(path)
-		h.initUpload(w, r, m[1])
+		h.initUpload(rec, r, m[1])
 
 	case reBlobUpload.MatchString(path):
 		m := reBlobUpload.FindStringSubmatch(path)
-		h.patchOrCommitUpload(w, r, m[1], m[2])
+		h.patchOrCommitUpload(rec, r, m[1], m[2])
 
 	default:
-		registryError(w, http.StatusNotFound, "UNSUPPORTED", "unsupported endpoint")
+		registryError(rec, http.StatusNotFound, "UNSUPPORTED", "unsupported endpoint")
 	}
+
+	slog.Info("v2",
+		"method", r.Method,
+		"path", path,
+		"status", rec.status,
+		"duration_ms", time.Since(start).Milliseconds(),
+	)
 }
 
 func (h *Handler) catalog(w http.ResponseWriter, _ *http.Request) {

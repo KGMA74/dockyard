@@ -2,7 +2,7 @@ package server
 
 import (
 	"fmt"
-	"log"
+	"log/slog"
 	"time"
 
 	"maestro/internal/storage"
@@ -23,7 +23,7 @@ func scheduleGC(backend storage.Backend) {
 	if !ok {
 		return
 	}
-	log.Println("gc: scheduled daily at midnight UTC")
+	slog.Info("gc: scheduled daily at midnight UTC")
 	go func() {
 		for {
 			time.Sleep(timeUntilMidnightUTC())
@@ -33,15 +33,15 @@ func scheduleGC(backend storage.Backend) {
 }
 
 func runGC(gc gcable) {
-	log.Println("gc: starting scheduled garbage collection")
+	slog.Info("gc: starting scheduled garbage collection")
 	referenced, err := gc.ReferencedBlobs()
 	if err != nil {
-		log.Printf("gc: cannot list referenced blobs: %v", err)
+		slog.Error("gc: cannot list referenced blobs", "err", err)
 		return
 	}
 	allBlobs, err := gc.AllBlobs()
 	if err != nil {
-		log.Printf("gc: cannot list blobs: %v", err)
+		slog.Error("gc: cannot list blobs", "err", err)
 		return
 	}
 	var freed int64
@@ -56,7 +56,7 @@ func runGC(gc gcable) {
 			count++
 		}
 	}
-	log.Printf("gc: done — removed %d blob(s), freed %s", count, gcHumanSize(freed))
+	slog.Info("gc: done", "removed", count, "freed", gcHumanSize(freed))
 }
 
 func timeUntilMidnightUTC() time.Duration {

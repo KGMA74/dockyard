@@ -1,7 +1,9 @@
 package server
 
 import (
+	"log/slog"
 	"net/http"
+	"time"
 
 	"maestro/internal/admin"
 	"maestro/internal/auth"
@@ -14,7 +16,27 @@ import (
 func (s *Server) RegisterRoutes() http.Handler {
 	e := echo.New()
 	e.HideBanner = true
-	e.Use(middleware.RequestLogger())
+	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
+		LogMethod:  true,
+		LogURI:     true,
+		LogStatus:  true,
+		LogLatency: true,
+		LogError:   true,
+		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
+			attrs := []any{
+				"method", v.Method,
+				"uri", v.URI,
+				"status", v.Status,
+				"duration_ms", v.Latency / time.Millisecond,
+			}
+			if v.Error != nil {
+				slog.Error("request", append(attrs, "err", v.Error)...)
+			} else {
+				slog.Info("request", attrs...)
+			}
+			return nil
+		},
+	}))
 	e.Use(middleware.Recover())
 	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
 		AllowOrigins:     []string{"https://*", "http://*"},
