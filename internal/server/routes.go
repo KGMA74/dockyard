@@ -1,12 +1,14 @@
 package server
 
 import (
+	"io/fs"
 	"log/slog"
 	"net/http"
 	"time"
 
 	"maestro/internal/admin"
 	"maestro/internal/auth"
+	uiassets "maestro/internal/ui"
 	"maestro/internal/v2"
 
 	"github.com/labstack/echo/v4"
@@ -113,6 +115,28 @@ func (s *Server) RegisterRoutes() http.Handler {
 			}
 		}
 		return c.JSON(http.StatusOK, body)
+	})
+
+	// ── UI SPA — catch-all ────────────────────────────────────────────────────
+	staticFS, _ := fs.Sub(uiassets.Assets, "dist")
+	fileServer := http.FileServer(http.FS(staticFS))
+
+	e.GET("/*", func(c echo.Context) error {
+		path := c.Param("*")
+		if path != "" {
+			if f, err := staticFS.Open(path); err == nil {
+				f.Close()
+				fileServer.ServeHTTP(c.Response(), c.Request())
+				return nil
+			}
+		}
+		// SPA fallback → index.html
+		content, err := fs.ReadFile(staticFS, "index.html")
+		if err != nil {
+			return c.String(http.StatusServiceUnavailable, "UI not built — run: make ui\n")
+		}
+		c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
+		return c.HTMLBlob(http.StatusOK, content)
 	})
 
 	return e
