@@ -1,37 +1,62 @@
 # Maestro — Self-hosted Docker Registry
 
-A lightweight, self-hosted Docker Registry V2 server written in Go. Single binary, no external dependencies for local mode.
+A lightweight, self-hosted Docker Registry V2 server written in Go. Ships as a **single binary** with an embedded React UI — no external dependencies for local mode.
 
 > Built on the [Docker Registry HTTP API V2](https://distribution.github.io/distribution/spec/api/) specification — the same protocol implemented by [distribution/distribution](https://github.com/distribution/distribution).
+
+## Features
+
+- **Embedded UI** — React + Tailwind dashboard served directly by the binary
+- **Two storage backends** — local filesystem or any S3-compatible object store
+- **Two modes** — embedded registry or proxy in front of an existing registry
+- **Garbage collection** — manual trigger via UI or API, automatic daily cron at midnight UTC
+- **JWT auth** on the admin API, optional Basic Auth on `/v2/*`
+- **Structured JSON logging** via `log/slog`
+- **Single Docker image** — multi-stage build, final image from `scratch`
+
+---
 
 ## Modes
 
 | Mode | Description |
 |---|---|
 | `embedded` | Maestro **is** the registry — stores blobs and manifests itself |
-| `proxy` | Maestro sits in front of an existing registry and exposes the admin API |
+| `proxy` | Maestro sits in front of an existing registry and exposes the admin UI/API |
 
 ---
 
 ## Getting Started
 
 ### Prerequisites
+
 - Go 1.21+
+- Node.js 22+ (to build the UI)
 - Docker (to push/pull images)
 
-### Run locally
+### Run locally (dev)
 
 ```bash
 cp .env.example .env   # adjust values as needed
+
+# Terminal 1 — Go server
 make run
+
+# Terminal 2 — Vite dev server with hot reload (proxies /api → Go)
+make ui-dev
 ```
 
-The server starts on `http://localhost:8080`.
+Open `http://localhost:5173` for the UI with hot reload, or `http://localhost:<PORT>` to use the embedded UI.
 
-### Build binary
+### Build production binary
 
 ```bash
-make build   # produces maestro.exe / maestro
+make release   # builds UI then embeds it in the Go binary → maestro.exe
+```
+
+Or step by step:
+```bash
+make ui      # npm ci + vite build → internal/ui/dist/
+make build   # go build with embedded UI
 ```
 
 ### Docker
@@ -40,6 +65,8 @@ make build   # produces maestro.exe / maestro
 docker build -t maestro .
 docker run -p 8080:8080 --env-file .env maestro
 ```
+
+The Dockerfile uses a **3-stage build**: Node.js → Go → scratch. The final image contains only the statically linked binary with the UI embedded inside.
 
 ---
 
@@ -239,10 +266,14 @@ Maestro implements the [Docker Registry HTTP API V2](https://distribution.github
 ## Makefile
 
 ```bash
-make run     # Start the server (reads .env automatically)
-make build   # Compile to maestro.exe
-make test    # Run all tests with -v
-make watch   # Live reload via air
+make run       # Start the Go server (reads .env automatically)
+make ui        # Build the React UI → internal/ui/dist/
+make ui-dev    # Start Vite dev server on :5173 (proxy /api → Go)
+make release   # Build UI then compile binary (production)
+make build     # Compile binary only (UI must be built first)
+make test      # Run all tests with -v
+make watch     # Live reload via air
+make clean     # Remove binary and reset UI placeholder
 ```
 
 ---
@@ -251,38 +282,63 @@ make watch   # Live reload via air
 
 # Maestro — Registry Docker auto-hébergée
 
-Un serveur Docker Registry V2 léger, écrit en Go. Binaire unique, aucune dépendance externe en mode local.
+Un serveur Docker Registry V2 léger, écrit en Go. Livré sous forme d'un **binaire unique** avec une UI React embarquée — aucune dépendance externe en mode local.
 
 > Basé sur la spécification [Docker Registry HTTP API V2](https://distribution.github.io/distribution/spec/api/) — le même protocole qu'implémente [distribution/distribution](https://github.com/distribution/distribution).
+
+## Fonctionnalités
+
+- **UI embarquée** — dashboard React + Tailwind servi directement par le binaire
+- **Deux backends de stockage** — filesystem local ou tout stockage objet compatible S3
+- **Deux modes** — registry embarquée ou proxy devant une registry existante
+- **Garbage collection** — déclenchement manuel via UI ou API, cron automatique quotidien à minuit UTC
+- **Auth JWT** sur l'API admin, Basic Auth optionnelle sur `/v2/*`
+- **Logs structurés JSON** via `log/slog`
+- **Image Docker unique** — build multi-stage, image finale depuis `scratch`
+
+---
 
 ## Modes
 
 | Mode | Description |
 |---|---|
 | `embedded` | Maestro **est** la registry — stocke blobs et manifests lui-même |
-| `proxy` | Maestro se place devant une registry existante et expose l'API admin |
+| `proxy` | Maestro se place devant une registry existante et expose l'UI/API admin |
 
 ---
 
 ## Démarrage rapide
 
 ### Prérequis
+
 - Go 1.21+
+- Node.js 22+ (pour builder l'UI)
 - Docker (pour push/pull)
 
-### Lancer en local
+### Lancer en local (dev)
 
 ```bash
 cp .env.example .env   # ajuster les valeurs si nécessaire
+
+# Terminal 1 — serveur Go
 make run
+
+# Terminal 2 — serveur Vite avec hot reload (proxifie /api → Go)
+make ui-dev
 ```
 
-Le serveur démarre sur `http://localhost:8080`.
+Ouvrir `http://localhost:5173` pour l'UI avec hot reload, ou `http://localhost:<PORT>` pour utiliser l'UI embarquée.
 
-### Compiler le binaire
+### Compiler le binaire de production
 
 ```bash
-make build   # produit maestro.exe / maestro
+make release   # build l'UI puis l'embarque dans le binaire Go → maestro.exe
+```
+
+Ou étape par étape :
+```bash
+make ui      # npm ci + vite build → internal/ui/dist/
+make build   # go build avec UI embarquée
 ```
 
 ### Docker
@@ -291,6 +347,8 @@ make build   # produit maestro.exe / maestro
 docker build -t maestro .
 docker run -p 8080:8080 --env-file .env maestro
 ```
+
+Le Dockerfile utilise un **build 3 stages** : Node.js → Go → scratch. L'image finale contient uniquement le binaire statiquement lié avec l'UI embarquée.
 
 ---
 
@@ -490,8 +548,12 @@ Maestro implémente le [Docker Registry HTTP API V2](https://distribution.github
 ## Makefile
 
 ```bash
-make run     # Démarrer le serveur (lit .env automatiquement)
-make build   # Compiler en maestro.exe
-make test    # Lancer tous les tests avec -v
-make watch   # Rechargement automatique via air
+make run       # Démarrer le serveur Go (lit .env automatiquement)
+make ui        # Builder l'UI React → internal/ui/dist/
+make ui-dev    # Démarrer Vite sur :5173 (proxifie /api → Go)
+make release   # Builder l'UI puis compiler le binaire (production)
+make build     # Compiler le binaire uniquement (UI doit être buildée avant)
+make test      # Lancer tous les tests avec -v
+make watch     # Rechargement automatique via air
+make clean     # Supprimer le binaire et réinitialiser le placeholder UI
 ```
