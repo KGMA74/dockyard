@@ -1,4 +1,4 @@
-# Maestro Registry Console
+# Dockyard Registry Console
 
 all: build test
 
@@ -9,14 +9,14 @@ ui:
 
 ## Compile the Go binary (embeds the UI — run `make ui` first)
 build:
-	@echo "Building maestro..."
-	@go build -o maestro.exe ./cmd/maestro
+	@echo "Building dockyard..."
+	@go build -o dockyard.exe ./cmd/dockyard
 
 ## Build UI then binary
 release: ui build
 
 run:
-	@go run ./cmd/maestro
+	@go run ./cmd/dockyard
 
 ## Start Vite dev server (proxies /api to :8080 — run `make run` in parallel)
 ui-dev:
@@ -28,7 +28,7 @@ test:
 
 clean:
 	@echo "Cleaning..."
-	@rm -f maestro.exe
+	@rm -f dockyard.exe
 	@rm -rf internal/ui/dist
 	@mkdir -p internal/ui/dist
 	@echo "<p>UI not built — run: make ui</p>" > internal/ui/dist/index.html

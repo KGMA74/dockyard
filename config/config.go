@@ -53,7 +53,7 @@ func Load() *Config {
 		S3Endpoint:       getEnv("S3_ENDPOINT", ""),
 		S3AccessKey:      getEnv("S3_ACCESS_KEY", ""),
 		S3SecretKey:      getEnv("S3_SECRET_KEY", ""),
-		S3Bucket:         getEnv("S3_BUCKET", "maestro-registry"),
+		S3Bucket:         getEnv("S3_BUCKET", "dockyard-registry"),
 		S3Region:         getEnv("S3_REGION", "us-east-1"),
 		S3Secure:         getEnv("S3_SECURE", "false") == "true",
 		AuthUsername:     getEnv("AUTH_USERNAME", ""),

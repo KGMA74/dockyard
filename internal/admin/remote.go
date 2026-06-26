@@ -4,7 +4,7 @@ import (
 	"net/http"
 	"strings"
 
-	"maestro/internal/registry"
+	"dockyard/internal/registry"
 
 	"github.com/labstack/echo/v4"
 )

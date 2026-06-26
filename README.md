@@ -1,4 +1,4 @@
-# Maestro — Self-hosted Docker Registry
+# Dockyard — Self-hosted Docker Registry
 
 A lightweight, self-hosted Docker Registry V2 server written in Go. Ships as a **single binary** with an embedded React UI — no external dependencies for local mode.
 
@@ -20,8 +20,8 @@ A lightweight, self-hosted Docker Registry V2 server written in Go. Ships as a *
 
 | Mode | Description |
 |---|---|
-| `embedded` | Maestro **is** the registry — stores blobs and manifests itself |
-| `proxy` | Maestro sits in front of an existing registry and exposes the admin UI/API |
+| `embedded` | Dockyard **is** the registry — stores blobs and manifests itself |
+| `proxy` | Dockyard sits in front of an existing registry and exposes the admin UI/API |
 
 ---
 
@@ -50,7 +50,7 @@ Open `http://localhost:5173` for the UI with hot reload, or `http://localhost:<P
 ### Build production binary
 
 ```bash
-make release   # builds UI then embeds it in the Go binary → maestro.exe
+make release   # builds UI then embeds it in the Go binary → dockyard.exe
 ```
 
 Or step by step:
@@ -62,8 +62,8 @@ make build   # go build with embedded UI
 ### Docker
 
 ```bash
-docker build -t maestro .
-docker run -p 8080:8080 --env-file .env maestro
+docker build -t dockyard .
+docker run -p 8080:8080 --env-file .env dockyard
 ```
 
 The Dockerfile uses a **3-stage build**: Node.js → Go → scratch. The final image contains only the statically linked binary with the UI embedded inside.
@@ -86,7 +86,7 @@ REGISTRY_STORAGE_PATH=./data/registry
 S3_ENDPOINT=http://rustfs:9000
 S3_ACCESS_KEY=your-access-key
 S3_SECRET_KEY=your-secret-key
-S3_BUCKET=maestro-registry
+S3_BUCKET=dockyard-registry
 S3_REGION=us-east-1
 S3_SECURE=false                 # true if TLS is enabled on S3
 
@@ -136,7 +136,7 @@ REGISTRY_STORAGE_BACKEND=s3
 S3_ENDPOINT=http://rustfs:9000
 S3_ACCESS_KEY=your-access-key
 S3_SECRET_KEY=your-secret-key
-S3_BUCKET=maestro-registry
+S3_BUCKET=dockyard-registry
 S3_REGION=us-east-1
 S3_SECURE=false
 ```
@@ -194,7 +194,7 @@ Uses the same credentials as the admin panel (`AUTH_USERNAME` / `AUTH_PASSWORD`)
 docker login localhost:8080 -u admin -p changeme123
 
 # Kubernetes imagePullSecret
-kubectl create secret docker-registry maestro-secret \
+kubectl create secret docker-registry dockyard-secret \
   --docker-server=registry.yourdomain.com \
   --docker-username=admin \
   --docker-password=changeme123 \
@@ -246,7 +246,7 @@ All endpoints require `Authorization: Bearer <token>` (except login/logout).
 
 ## Docker Registry V2 API
 
-Maestro implements the [Docker Registry HTTP API V2](https://distribution.github.io/distribution/spec/api/). Standard `docker push` / `docker pull` work out of the box.
+Dockyard implements the [Docker Registry HTTP API V2](https://distribution.github.io/distribution/spec/api/). Standard `docker push` / `docker pull` work out of the box.
 
 | Endpoint | Description |
 |---|---|
@@ -280,7 +280,7 @@ make clean     # Remove binary and reset UI placeholder
 
 ---
 
-# Maestro — Registry Docker auto-hébergée
+# Dockyard — Registry Docker auto-hébergée
 
 Un serveur Docker Registry V2 léger, écrit en Go. Livré sous forme d'un **binaire unique** avec une UI React embarquée — aucune dépendance externe en mode local.
 
@@ -302,8 +302,8 @@ Un serveur Docker Registry V2 léger, écrit en Go. Livré sous forme d'un **bin
 
 | Mode | Description |
 |---|---|
-| `embedded` | Maestro **est** la registry — stocke blobs et manifests lui-même |
-| `proxy` | Maestro se place devant une registry existante et expose l'UI/API admin |
+| `embedded` | Dockyard **est** la registry — stocke blobs et manifests lui-même |
+| `proxy` | Dockyard se place devant une registry existante et expose l'UI/API admin |
 
 ---
 
@@ -332,7 +332,7 @@ Ouvrir `http://localhost:5173` pour l'UI avec hot reload, ou `http://localhost:<
 ### Compiler le binaire de production
 
 ```bash
-make release   # build l'UI puis l'embarque dans le binaire Go → maestro.exe
+make release   # build l'UI puis l'embarque dans le binaire Go → dockyard.exe
 ```
 
 Ou étape par étape :
@@ -344,8 +344,8 @@ make build   # go build avec UI embarquée
 ### Docker
 
 ```bash
-docker build -t maestro .
-docker run -p 8080:8080 --env-file .env maestro
+docker build -t dockyard .
+docker run -p 8080:8080 --env-file .env dockyard
 ```
 
 Le Dockerfile utilise un **build 3 stages** : Node.js → Go → scratch. L'image finale contient uniquement le binaire statiquement lié avec l'UI embarquée.
@@ -368,7 +368,7 @@ REGISTRY_STORAGE_PATH=./data/registry
 S3_ENDPOINT=http://rustfs:9000
 S3_ACCESS_KEY=votre-access-key
 S3_SECRET_KEY=votre-secret-key
-S3_BUCKET=maestro-registry
+S3_BUCKET=dockyard-registry
 S3_REGION=us-east-1
 S3_SECURE=false                 # true si TLS activé sur S3
 
@@ -418,7 +418,7 @@ REGISTRY_STORAGE_BACKEND=s3
 S3_ENDPOINT=http://rustfs:9000
 S3_ACCESS_KEY=votre-access-key
 S3_SECRET_KEY=votre-secret-key
-S3_BUCKET=maestro-registry
+S3_BUCKET=dockyard-registry
 S3_REGION=us-east-1
 S3_SECURE=false
 ```
@@ -476,7 +476,7 @@ Utilise les mêmes identifiants que le panel admin (`AUTH_USERNAME` / `AUTH_PASS
 docker login localhost:8080 -u admin -p changeme123
 
 # imagePullSecret Kubernetes
-kubectl create secret docker-registry maestro-secret \
+kubectl create secret docker-registry dockyard-secret \
   --docker-server=registry.votredomaine.com \
   --docker-username=admin \
   --docker-password=changeme123 \
@@ -528,7 +528,7 @@ Tous les endpoints nécessitent `Authorization: Bearer <token>` (sauf login/logo
 
 ## API Docker Registry V2
 
-Maestro implémente le [Docker Registry HTTP API V2](https://distribution.github.io/distribution/spec/api/). Les commandes `docker push` / `docker pull` fonctionnent sans configuration supplémentaire.
+Dockyard implémente le [Docker Registry HTTP API V2](https://distribution.github.io/distribution/spec/api/). Les commandes `docker push` / `docker pull` fonctionnent sans configuration supplémentaire.
 
 | Endpoint | Description |
 |---|---|

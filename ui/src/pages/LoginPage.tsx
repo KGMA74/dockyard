@@ -36,7 +36,7 @@ export default function LoginPage({ onLogin }: Props) {
                 d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10" />
             </svg>
           </div>
-          <h1 className="text-xl font-semibold text-zinc-100 tracking-tight">Maestro</h1>
+          <h1 className="text-xl font-semibold text-zinc-100 tracking-tight">Dockyard</h1>
           <p className="text-zinc-500 text-sm mt-1">Docker Registry</p>
         </div>
 

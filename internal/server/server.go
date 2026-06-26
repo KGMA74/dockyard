@@ -7,10 +7,10 @@ import (
 	"os"
 	"time"
 
-	"maestro/config"
-	"maestro/internal/auth"
-	"maestro/internal/registry"
-	"maestro/internal/storage"
+	"dockyard/config"
+	"dockyard/internal/auth"
+	"dockyard/internal/registry"
+	"dockyard/internal/storage"
 )
 
 type mode string

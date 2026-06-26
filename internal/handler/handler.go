@@ -3,7 +3,7 @@ package handler
 import (
 	"net/http"
 
-	"maestro/internal/registry"
+	"dockyard/internal/registry"
 
 	"github.com/labstack/echo/v4"
 )

@@ -1,5 +1,5 @@
 const BASE = '/api/admin'
-const TOKEN_KEY = 'maestro_token'
+const TOKEN_KEY = 'dockyard_token'
 
 function token(): string {
   return localStorage.getItem(TOKEN_KEY) ?? ''

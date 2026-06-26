@@ -3,7 +3,7 @@ package storage
 import (
 	"fmt"
 
-	"maestro/config"
+	"dockyard/config"
 )
 
 func NewBackend(cfg *config.Config) (Backend, error) {

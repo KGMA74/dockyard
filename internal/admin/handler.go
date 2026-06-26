@@ -8,7 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 
-	"maestro/internal/storage"
+	"dockyard/internal/storage"
 
 	"github.com/labstack/echo/v4"
 )

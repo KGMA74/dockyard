@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"maestro/internal/storage"
+	"dockyard/internal/storage"
 )
 
 // Handler implements http.Handler for the Docker Registry V2 protocol.

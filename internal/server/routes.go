@@ -6,10 +6,10 @@ import (
 	"net/http"
 	"time"
 
-	"maestro/internal/admin"
-	"maestro/internal/auth"
-	uiassets "maestro/internal/ui"
-	"maestro/internal/v2"
+	"dockyard/internal/admin"
+	"dockyard/internal/auth"
+	uiassets "dockyard/internal/ui"
+	"dockyard/internal/v2"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"

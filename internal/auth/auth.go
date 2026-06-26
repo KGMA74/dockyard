@@ -165,7 +165,7 @@ func BasicAuthMiddleware(username, passwordHash string) func(http.Handler) http.
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 			user, pass, ok := r.BasicAuth()
 			if !ok {
-				w.Header().Set("WWW-Authenticate", `Basic realm="Maestro Registry"`)
+				w.Header().Set("WWW-Authenticate", `Basic realm="Dockyard Registry"`)
 				w.Header().Set("Content-Type", "application/json")
 				w.WriteHeader(http.StatusUnauthorized)
 				w.Write([]byte(`{"errors":[{"code":"UNAUTHORIZED","message":"authentication required"}]}`))

@@ -24,15 +24,15 @@ RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 \
     go build \
     -ldflags="-w -s" \
     -trimpath \
-    -o maestro \
-    ./cmd/maestro
+    -o dockyard \
+    ./cmd/dockyard
 
 # ── Stage 3 : Final image ─────────────────────────────────────────────────────
 FROM scratch
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
-COPY --from=builder /app/maestro /maestro
+COPY --from=builder /app/dockyard /dockyard
 
 EXPOSE 8080
 
-ENTRYPOINT ["/maestro"]
+ENTRYPOINT ["/dockyard"]
