@@ -9,6 +9,7 @@ permissions:
   contents: read
   packages: write
 
+# jobs
 jobs:
   build:
     runs-on: ubuntu-latest
