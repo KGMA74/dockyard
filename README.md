@@ -61,12 +61,21 @@ make build   # go build with embedded UI
 
 ### Docker
 
+Pull the pre-built image from GitHub Container Registry:
+
+```bash
+docker pull ghcr.io/kgma74/dockyard:latest
+docker run -p 8080:8080 --env-file .env ghcr.io/kgma74/dockyard:latest
+```
+
+Or build locally:
+
 ```bash
 docker build -t dockyard .
 docker run -p 8080:8080 --env-file .env dockyard
 ```
 
-The Dockerfile uses a **3-stage build**: Node.js → Go → scratch. The final image contains only the statically linked binary with the UI embedded inside.
+The Dockerfile uses a **3-stage build**: Node.js → Go → scratch. The final image contains only the statically linked binary with the UI embedded inside. Multi-arch: `linux/amd64` and `linux/arm64`.
 
 ---
 
@@ -343,12 +352,21 @@ make build   # go build avec UI embarquée
 
 ### Docker
 
+Récupérer l'image pré-compilée depuis GitHub Container Registry :
+
+```bash
+docker pull ghcr.io/kgma74/dockyard:latest
+docker run -p 8080:8080 --env-file .env ghcr.io/kgma74/dockyard:latest
+```
+
+Ou compiler localement :
+
 ```bash
 docker build -t dockyard .
 docker run -p 8080:8080 --env-file .env dockyard
 ```
 
-Le Dockerfile utilise un **build 3 stages** : Node.js → Go → scratch. L'image finale contient uniquement le binaire statiquement lié avec l'UI embarquée.
+Le Dockerfile utilise un **build 3 stages** : Node.js → Go → scratch. L'image finale contient uniquement le binaire statiquement lié avec l'UI embarquée. Multi-arch : `linux/amd64` et `linux/arm64`.
 
 ---
 
