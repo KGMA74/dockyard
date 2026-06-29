@@ -1,0 +1,79 @@
+replicaCount: 1
+
+image:
+  repository: ghcr.io/kgma74/dockyard
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+
+registry:
+  # embedded: Dockyard is the registry (blobs stored locally or on S3)
+  # proxy: Dockyard forwards /v2/* to an upstream registry
+  mode: embedded
+
+  storage:
+    backend: local  # local | s3
+    path: /data/registry
+
+  s3:
+    endpoint: ""
+    bucket: "dockyard-registry"
+    region: "us-east-1"
+    secure: "true"
+    accessKey: ""
+    secretKey: ""
+
+  proxy:
+    url: ""
+    username: ""
+    password: ""
+
+auth:
+  username: admin
+  password: "changeme"
+  # Enable HTTP Basic auth on /v2/* endpoints
+  v2Enabled: false
+  # JWT secret: auto-generated on first install, preserved across upgrades.
+  # Set explicitly to override auto-generation.
+  jwtSecret: ""
+  # Name of an existing Secret that already contains jwt-secret and auth-password
+  # (and optionally s3-access-key, s3-secret-key, registry-password).
+  # When set, no Secret is created by this chart.
+  existingSecret: ""
+
+service:
+  type: ClusterIP
+  port: 80
+
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: registry.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Persistent volume for local storage backend.
+# Ignored when registry.storage.backend=s3.
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 10Gi
+  existingClaim: ""
+
+resources: {}
+
+podAnnotations: {}
+podSecurityContext: {}
+securityContext: {}
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

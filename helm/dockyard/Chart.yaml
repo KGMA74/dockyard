@@ -1,0 +1,24 @@
+apiVersion: v2
+name: dockyard
+description: A self-hosted Docker Registry V2 server
+type: application
+version: 0.1.0
+appVersion: "latest"
+keywords:
+  - docker
+  - registry
+  - container
+home: https://github.com/kgma74/dockyard
+sources:
+  - https://github.com/kgma74/dockyard
+maintainers:
+  - name: KGMA74
+    email: marmelkambou2@gmail.com
+annotations:
+  artifacthub.io/license: MIT
+  artifacthub.io/links: |
+    - name: Source
+      url: https://github.com/kgma74/dockyard
+  artifacthub.io/changes: |
+    - kind: added
+      description: Initial release

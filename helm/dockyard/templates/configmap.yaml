@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ include "dockyard.fullname" . }}
+  labels:
+    {{- include "dockyard.labels" . | nindent 4 }}
+data:
+  PORT: "8080"
+  REGISTRY_MODE: {{ .Values.registry.mode | quote }}
+  REGISTRY_STORAGE_BACKEND: {{ .Values.registry.storage.backend | quote }}
+  REGISTRY_STORAGE_PATH: {{ .Values.registry.storage.path | quote }}
+  S3_ENDPOINT: {{ .Values.registry.s3.endpoint | quote }}
+  S3_BUCKET: {{ .Values.registry.s3.bucket | quote }}
+  S3_REGION: {{ .Values.registry.s3.region | quote }}
+  S3_SECURE: {{ .Values.registry.s3.secure | quote }}
+  AUTH_USERNAME: {{ .Values.auth.username | quote }}
+  V2_AUTH_ENABLED: {{ .Values.auth.v2Enabled | toString | quote }}
+  REGISTRY_URL: {{ .Values.registry.proxy.url | quote }}
+  REGISTRY_USERNAME: {{ .Values.registry.proxy.username | quote }}
