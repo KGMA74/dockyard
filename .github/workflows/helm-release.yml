@@ -40,7 +40,7 @@ jobs:
           VERSION=${GITHUB_REF_NAME#v}
           helm package helm/dockyard \
             --version "$VERSION" \
-            --app-version "$GITHUB_REF_NAME"
+            --app-version "$VERSION"
 
       - name: Push chart to GHCR
         run: |
