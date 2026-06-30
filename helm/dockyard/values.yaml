@@ -50,6 +50,14 @@ service:
 
 ingress:
   enabled: false
+  # Set className to "traefik" (k3s default) or "nginx".
+  # For Traefik: the chart automatically creates a Middleware to allow large
+  # blob uploads without digest mismatch errors.
+  # For nginx-ingress, set className: "nginx" and add these annotations:
+  #   nginx.ingress.kubernetes.io/proxy-body-size: "0"
+  #   nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+  #   nginx.ingress.kubernetes.io/proxy-read-timeout: "600"
+  #   nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
   className: ""
   annotations: {}
   hosts:

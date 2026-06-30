@@ -128,9 +128,6 @@ export default function Dashboard({ onLogout }: Props) {
           ) : repos.length === 0 ? (
             <div className="text-center py-20">
               <p className="text-zinc-600 text-sm">No images pushed yet</p>
-              <p className="text-zinc-700 text-xs mt-1">
-                docker push host.docker.internal:8080/my-image:tag
-              </p>
             </div>
           ) : filtered.length === 0 ? (
             <div className="text-center py-20 text-zinc-600 text-sm">
