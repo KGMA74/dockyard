@@ -86,7 +86,7 @@ func NewServer() *http.Server {
 	return &http.Server{
 		Addr:              fmt.Sprintf(":%d", srv.port),
 		Handler:           srv.RegisterRoutes(),
-		IdleTimeout:       time.Minute,
+		IdleTimeout:       10 * time.Minute,
 		ReadHeaderTimeout: 30 * time.Second,
 	}
 }
