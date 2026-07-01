@@ -77,6 +77,16 @@ docker run -p 8080:8080 --env-file .env dockyard
 
 The Dockerfile uses a **3-stage build**: Node.js → Go → scratch. The final image contains only the statically linked binary with the UI embedded inside. Multi-arch: `linux/amd64` and `linux/arm64`.
 
+### Helm (Kubernetes)
+
+```bash
+helm upgrade --install dockyard oci://ghcr.io/kgma74/charts/dockyard \
+  --namespace registry --create-namespace \
+  --set auth.password=changeme
+```
+
+See `helm/dockyard/values.yaml` for the full set of options (storage backend, S3, ingress, proxy mode, etc.).
+
 ---
 
 ## Configuration
@@ -368,6 +378,16 @@ docker run -p 8080:8080 --env-file .env dockyard
 
 Le Dockerfile utilise un **build 3 stages** : Node.js → Go → scratch. L'image finale contient uniquement le binaire statiquement lié avec l'UI embarquée. Multi-arch : `linux/amd64` et `linux/arm64`.
 
+### Helm (Kubernetes)
+
+```bash
+helm upgrade --install dockyard oci://ghcr.io/kgma74/charts/dockyard \
+  --namespace registry --create-namespace \
+  --set auth.password=changeme
+```
+
+Voir `helm/dockyard/values.yaml` pour l'ensemble des options (backend de stockage, S3, ingress, mode proxy, etc.).
+
 ---
 
 ## Configuration
@@ -575,3 +595,9 @@ make test      # Lancer tous les tests avec -v
 make watch     # Rechargement automatique via air
 make clean     # Supprimer le binaire et réinitialiser le placeholder UI
 ```
+
+---
+
+## License / Licence
+
+MIT — see [LICENSE](./LICENSE).
