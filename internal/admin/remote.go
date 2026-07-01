@@ -1,6 +1,7 @@
 package admin
 
 import (
+	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -66,6 +67,30 @@ func (h *RemoteHandler) GetTags(c echo.Context) error {
 		result = append(result, tagInfo{Tag: tag, Digest: digest})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"name": name, "tags": result, "total": len(result)})
+}
+
+// GET /api/admin/repositories/manifest?name=<image>&reference=<tag-or-digest>
+func (h *RemoteHandler) GetManifestDetails(c echo.Context) error {
+	name := c.QueryParam("name")
+	reference := c.QueryParam("reference")
+	if name == "" || reference == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "params 'name' and 'reference' required"})
+	}
+	m, err := h.client.Manifest(name, reference)
+	if err != nil {
+		return c.JSON(http.StatusBadGateway, map[string]string{"error": err.Error()})
+	}
+	raw, err := json.Marshal(m)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	result, err := parseManifestDetails(raw, m.Digest, func(digest string) ([]byte, error) {
+		return h.client.Blob(name, digest)
+	})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, result)
 }
 
 // DELETE /api/admin/repositories/manifests?name=<image>&digest=sha256:<hash>

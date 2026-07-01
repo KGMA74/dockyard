@@ -11,8 +11,13 @@ interface Props {
 export default function DeleteModal({ imageName, tag, onConfirm, onCancel }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
+  const [confirmText, setConfirmText] = useState('')
+
+  const resourceName = `${imageName}:${tag.tag}`
+  const matches = confirmText === resourceName
 
   async function handleConfirm() {
+    if (!matches) return
     setLoading(true)
     setError('')
     try {
@@ -52,6 +57,22 @@ export default function DeleteModal({ imageName, tag, onConfirm, onCancel }: Pro
           {tag.digest}
         </p>
 
+        <label className="block mb-4">
+          <span className="text-xs text-zinc-500">
+            Type <span className="font-mono text-zinc-300">{resourceName}</span> to confirm
+          </span>
+          <input
+            type="text"
+            value={confirmText}
+            onChange={e => setConfirmText(e.target.value)}
+            autoFocus
+            autoComplete="off"
+            spellCheck={false}
+            className="mt-1.5 w-full bg-zinc-950 border border-zinc-800 rounded-lg px-3 py-2 text-sm font-mono text-zinc-200 placeholder-zinc-700 focus:outline-none focus:ring-1 focus:ring-red-800/60 focus:border-red-900/60 transition-colors"
+            placeholder={resourceName}
+          />
+        </label>
+
         {error && (
           <p className="text-xs text-red-400 mb-3">{error}</p>
         )}
@@ -66,8 +87,8 @@ export default function DeleteModal({ imageName, tag, onConfirm, onCancel }: Pro
           </button>
           <button
             onClick={handleConfirm}
-            disabled={loading}
-            className="text-sm bg-red-600 hover:bg-red-500 active:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed text-white font-medium px-4 py-2 rounded-lg transition-colors"
+            disabled={loading || !matches}
+            className="text-sm bg-red-600 hover:bg-red-500 active:bg-red-700 disabled:opacity-40 disabled:cursor-not-allowed text-white font-medium px-4 py-2 rounded-lg transition-colors"
           >
             {loading ? 'Deleting…' : 'Delete'}
           </button>

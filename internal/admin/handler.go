@@ -2,6 +2,7 @@ package admin
 
 import (
 	"fmt"
+	"io"
 	"io/fs"
 	"net/http"
 	"os"
@@ -80,6 +81,31 @@ func (h *Handler) GetTags(c echo.Context) error {
 		result = append(result, tagInfo{Tag: tag, Digest: digest})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"name": name, "tags": result, "total": len(result)})
+}
+
+// GET /api/admin/repositories/manifest?name=<image>&reference=<tag-or-digest>
+func (h *Handler) GetManifestDetails(c echo.Context) error {
+	name := c.QueryParam("name")
+	reference := c.QueryParam("reference")
+	if name == "" || reference == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "params 'name' and 'reference' required"})
+	}
+	raw, digest, err := h.store.GetManifest(name, reference)
+	if err != nil {
+		return c.JSON(http.StatusNotFound, err500(err))
+	}
+	result, err := parseManifestDetails(raw, digest, func(blobDigest string) ([]byte, error) {
+		rc, _, err := h.store.GetBlob(blobDigest)
+		if err != nil {
+			return nil, err
+		}
+		defer rc.Close()
+		return io.ReadAll(rc)
+	})
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, err500(err))
+	}
+	return c.JSON(http.StatusOK, result)
 }
 
 // DELETE /api/admin/repositories/manifests?name=<image>&digest=sha256:<hash>

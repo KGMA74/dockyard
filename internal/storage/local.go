@@ -223,6 +223,14 @@ func (b *LocalBackend) DeleteManifest(name, digest string) error {
 			os.Remove(filepath.Join(tagsDir, e.Name()))
 		}
 	}
+
+	// If no manifests remain, the repository is empty — drop it entirely so it
+	// no longer shows up in ListRepositories (which detects repos by walking
+	// for a "tags" directory, and an empty one would otherwise still match).
+	manifestsDir := filepath.Join(b.root, "repositories", filepath.FromSlash(name), "manifests")
+	if remaining, err := os.ReadDir(manifestsDir); err == nil && len(remaining) == 0 {
+		os.RemoveAll(filepath.Join(b.root, "repositories", filepath.FromSlash(name)))
+	}
 	return nil
 }
 

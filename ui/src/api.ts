@@ -78,6 +78,28 @@ export async function deleteManifest(name: string, digest: string): Promise<void
   })
 }
 
+export interface LayerInfo {
+  digest: string
+  size_bytes: number
+  size_human: string
+}
+
+export interface ManifestDetails {
+  digest: string
+  media_type: string
+  total_size_bytes: number
+  total_size_human: string
+  layers: LayerInfo[]
+  config_digest: string
+  created?: string
+  architecture?: string
+  os?: string
+}
+
+export async function getManifestDetails(name: string, reference: string): Promise<ManifestDetails> {
+  return req(`/repositories/manifest?name=${encodeURIComponent(name)}&reference=${encodeURIComponent(reference)}`)
+}
+
 export interface StorageStats {
   total_size_bytes: number
   total_size_human: string

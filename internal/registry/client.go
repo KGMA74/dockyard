@@ -3,6 +3,7 @@ package registry
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"time"
 )
@@ -131,6 +132,16 @@ func (c *Client) Manifest(name, ref string) (*Manifest, error) {
 	}
 	m.Digest = resp.Header.Get("Docker-Content-Digest")
 	return &m, nil
+}
+
+// Blob fetches a blob's raw content (used to read the image config for manifest details).
+func (c *Client) Blob(name, digest string) ([]byte, error) {
+	resp, err := c.do(http.MethodGet, "/v2/"+name+"/blobs/"+digest, "")
+	if err != nil {
+		return nil, err
+	}
+	defer resp.Body.Close()
+	return io.ReadAll(resp.Body)
 }
 
 func (c *Client) DeleteManifest(name, digest string) error {
