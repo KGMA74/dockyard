@@ -266,6 +266,28 @@ func (s *S3Backend) ListTags(name string) ([]string, error) {
 	return tags, nil
 }
 
+// DeleteRepository removes every manifest and tag object under the repository.
+// Blobs stay in the bucket until the next GC run, like manifest deletion.
+func (s *S3Backend) DeleteRepository(name string) error {
+	ctx := context.Background()
+	prefix := fmt.Sprintf("manifests/%s/", name)
+	found := false
+	for obj := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
+		Prefix:    prefix,
+		Recursive: true,
+	}) {
+		if obj.Err != nil {
+			continue
+		}
+		found = true
+		s.client.RemoveObject(ctx, s.bucket, obj.Key, minio.RemoveObjectOptions{})
+	}
+	if !found {
+		return fmt.Errorf("repository %q not found", name)
+	}
+	return nil
+}
+
 // ── GC helpers (mirrors LocalBackend, enables GC in S3 mode) ─────────────────
 
 func (s *S3Backend) AllBlobs() ([]string, error) {

@@ -31,6 +31,18 @@ export function isAuthenticated(): boolean {
   return !!localStorage.getItem(TOKEN_KEY)
 }
 
+export function getUsername(): string | null {
+  const raw = token()
+  const payload = raw.split('.')[1]
+  if (!payload) return null
+  try {
+    const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'))
+    return (JSON.parse(json) as { sub?: string }).sub ?? null
+  } catch {
+    return null
+  }
+}
+
 export async function login(username: string, password: string): Promise<void> {
   const res = await fetch(BASE + '/auth/login', {
     method: 'POST',
@@ -74,6 +86,12 @@ export async function getTags(name: string): Promise<{ name: string; tags: TagIn
 
 export async function deleteManifest(name: string, digest: string): Promise<void> {
   return req(`/repositories/manifests?name=${encodeURIComponent(name)}&digest=${encodeURIComponent(digest)}`, {
+    method: 'DELETE',
+  })
+}
+
+export async function deleteRepository(name: string): Promise<void> {
+  return req(`/repositories?name=${encodeURIComponent(name)}`, {
     method: 'DELETE',
   })
 }
@@ -136,4 +154,16 @@ export async function changePassword(currentPassword: string, newPassword: strin
     method: 'POST',
     body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
   })
+}
+
+export interface HealthInfo {
+  status: string
+  mode: 'embedded' | 'proxy'
+  registry?: string
+}
+
+export async function getHealth(): Promise<HealthInfo> {
+  const res = await fetch('/health')
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
 }

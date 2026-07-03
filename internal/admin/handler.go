@@ -124,6 +124,18 @@ func (h *Handler) DeleteManifest(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// DELETE /api/admin/repositories?name=<image>
+func (h *Handler) DeleteRepository(c echo.Context) error {
+	name := c.QueryParam("name")
+	if name == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "query param 'name' required"})
+	}
+	if err := h.store.DeleteRepository(name); err != nil {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": err.Error()})
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
 // GET /api/admin/storage/stats
 func (h *Handler) StorageStats(c echo.Context) error {
 	stats, err := h.store.Stats()

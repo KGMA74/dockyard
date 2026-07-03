@@ -26,6 +26,7 @@ type Backend interface {
 	// Catalog
 	ListRepositories() ([]string, error)
 	ListTags(name string) ([]string, error)
+	DeleteRepository(name string) error
 
 	// Stats
 	Stats() (StorageStats, error)

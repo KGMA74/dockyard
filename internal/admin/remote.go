@@ -109,6 +109,36 @@ func (h *RemoteHandler) DeleteManifest(c echo.Context) error {
 	return c.NoContent(http.StatusNoContent)
 }
 
+// DELETE /api/admin/repositories?name=<image>
+// La registry distante n'a pas de suppression de dépôt : on supprime
+// le manifest de chaque tag, un par un.
+func (h *RemoteHandler) DeleteRepository(c echo.Context) error {
+	name := c.QueryParam("name")
+	if name == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "query param 'name' required"})
+	}
+	tags, err := h.client.Tags(name)
+	if err != nil {
+		return c.JSON(http.StatusBadGateway, map[string]string{"error": err.Error()})
+	}
+	deleted := 0
+	for _, tag := range tags {
+		m, err := h.client.Manifest(name, tag)
+		if err != nil || m.Digest == "" {
+			continue
+		}
+		if err := h.client.DeleteManifest(name, m.Digest); err == nil {
+			deleted++
+		}
+	}
+	if deleted == 0 && len(tags) > 0 {
+		return c.JSON(http.StatusBadGateway, map[string]string{
+			"error": "no manifest could be deleted (upstream may forbid deletion)",
+		})
+	}
+	return c.NoContent(http.StatusNoContent)
+}
+
 // NotSupported renvoie 501 pour les opérations indisponibles en mode proxy.
 func NotSupported(c echo.Context) error {
 	return c.JSON(http.StatusNotImplemented, map[string]string{

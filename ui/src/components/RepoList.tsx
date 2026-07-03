@@ -1,8 +1,19 @@
 import { useState, useCallback } from 'react'
-import { getTags, deleteManifest, TagInfo, RepoSummary } from '../api'
+import { toast } from 'sonner'
+import { Box, ChevronDown, Copy, Check, Info, Trash2 } from 'lucide-react'
+import { getTags, deleteManifest, deleteRepository, TagInfo, RepoSummary } from '../api'
 import DeleteModal from './DeleteModal'
 import ImageDetailsPanel from './ImageDetailsPanel'
-import { useToast } from './Toast'
+import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from '@/components/ui/table'
 
 interface Props {
   repos: RepoSummary[]
@@ -34,6 +45,17 @@ export default function RepoList({ repos, onRefresh }: Props) {
   )
 }
 
+function TagBadge({ children }: { children: React.ReactNode }) {
+  return (
+    <Badge
+      variant="outline"
+      className="font-mono text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 border-blue-200 dark:border-blue-900/30"
+    >
+      {children}
+    </Badge>
+  )
+}
+
 function RepoCard({
   repo,
   onRefresh,
@@ -43,11 +65,11 @@ function RepoCard({
   onRefresh: () => void
   onShowDetails: (tag: TagInfo) => void
 }) {
-  const { toast } = useToast()
   const [open, setOpen] = useState(false)
   const [tags, setTags] = useState<TagInfo[]>([])
   const [loadingTags, setLoadingTags] = useState(false)
   const [toDelete, setToDelete] = useState<TagInfo | null>(null)
+  const [deleteRepo, setDeleteRepo] = useState(false)
 
   async function handleExpand() {
     if (!open && tags.length === 0) {
@@ -66,52 +88,64 @@ function RepoCard({
     await deleteManifest(repo.name, tag.digest)
     setTags(ts => ts.filter(t => t.digest !== tag.digest))
     setToDelete(null)
-    toast(`Deleted ${repo.name}:${tag.tag}`)
+    toast.success(`Deleted ${repo.name}:${tag.tag}`)
+    onRefresh()
+  }
+
+  async function handleDeleteRepo() {
+    await deleteRepository(repo.name)
+    setDeleteRepo(false)
+    toast.success(`Deleted repository ${repo.name}`)
     onRefresh()
   }
 
   return (
     <>
-      <div className="bg-zinc-900 border border-zinc-800 rounded-xl overflow-hidden">
-        <button
-          onClick={handleExpand}
-          className="w-full flex items-center justify-between px-4 py-3.5 hover:bg-zinc-800/40 active:bg-zinc-800/60 transition-colors text-left"
-        >
-          <div className="flex items-center gap-3 min-w-0">
-            <svg className="w-4 h-4 text-zinc-600 shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10" />
-            </svg>
-            <span className="font-mono text-sm text-zinc-100 truncate">{repo.name}</span>
-            <span className="shrink-0 text-xs bg-zinc-800 text-zinc-500 px-2 py-0.5 rounded-full border border-zinc-700/50">
-              {repo.total} {repo.total === 1 ? 'tag' : 'tags'}
-            </span>
-          </div>
-          <svg
-            className={`w-4 h-4 text-zinc-600 shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
-            fill="none" viewBox="0 0 24 24" stroke="currentColor"
+      <div className="bg-card text-card-foreground border rounded-xl overflow-hidden group/card">
+        <div className="w-full flex items-center hover:bg-muted/50 transition-colors">
+          <button
+            onClick={handleExpand}
+            className="flex-1 flex items-center justify-between px-4 py-3.5 min-w-0 text-left"
           >
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-          </svg>
-        </button>
+            <div className="flex items-center gap-3 min-w-0">
+              <Box className="size-4 text-muted-foreground/60 shrink-0" strokeWidth={1.5} />
+              <span className="font-mono text-sm truncate">{repo.name}</span>
+              <Badge variant="secondary" className="shrink-0 rounded-full text-muted-foreground">
+                {repo.total} {repo.total === 1 ? 'tag' : 'tags'}
+              </Badge>
+            </div>
+            <ChevronDown
+              className={`size-4 text-muted-foreground/60 shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
+            />
+          </button>
+          <Button
+            variant="ghost"
+            size="icon-sm"
+            onClick={() => setDeleteRepo(true)}
+            title="Delete repository"
+            className="shrink-0 mr-3 text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors"
+          >
+            <Trash2 className="size-3.5" strokeWidth={1.5} />
+          </Button>
+        </div>
 
         {open && (
-          <div className="border-t border-zinc-800">
+          <div className="border-t">
             {loadingTags ? (
-              <p className="px-4 py-3 text-sm text-zinc-600">Loading…</p>
+              <p className="px-4 py-3 text-sm text-muted-foreground">Loading…</p>
             ) : tags.length === 0 ? (
-              <p className="px-4 py-3 text-sm text-zinc-600">No tags found</p>
+              <p className="px-4 py-3 text-sm text-muted-foreground">No tags found</p>
             ) : (
-              <table className="w-full text-sm">
-                <thead>
-                  <tr className="border-b border-zinc-800">
-                    <th className="text-left px-4 py-2 text-xs text-zinc-600 font-medium">Tag</th>
-                    <th className="text-left px-4 py-2 text-xs text-zinc-600 font-medium hidden sm:table-cell">Digest</th>
-                    <th className="text-left px-4 py-2 text-xs text-zinc-600 font-medium hidden md:table-cell">Pull</th>
-                    <th className="px-4 py-2 w-16" />
-                  </tr>
-                </thead>
-                <tbody>
+              <Table>
+                <TableHeader>
+                  <TableRow>
+                    <TableHead className="px-4 text-xs">Tag</TableHead>
+                    <TableHead className="px-4 text-xs hidden sm:table-cell">Digest</TableHead>
+                    <TableHead className="px-4 text-xs hidden md:table-cell">Pull</TableHead>
+                    <TableHead className="px-4 w-16" />
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
                   {tags.map(tag => (
                     <TagRow
                       key={tag.digest}
@@ -121,8 +155,8 @@ function RepoCard({
                       onShowDetails={() => onShowDetails(tag)}
                     />
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             )}
           </div>
         )}
@@ -130,10 +164,38 @@ function RepoCard({
 
       {toDelete && (
         <DeleteModal
-          imageName={repo.name}
-          tag={toDelete}
+          title="Delete tag"
+          resourceName={`${repo.name}:${toDelete.tag}`}
+          description={
+            <>
+              This removes the manifest for{' '}
+              <span className="font-mono text-foreground text-xs">
+                {repo.name}:{toDelete.tag}
+              </span>
+              . Unreferenced blobs are freed on the next GC run.
+            </>
+          }
+          detail={toDelete.digest}
           onConfirm={() => handleDelete(toDelete)}
           onCancel={() => setToDelete(null)}
+        />
+      )}
+
+      {deleteRepo && (
+        <DeleteModal
+          title="Delete repository"
+          resourceName={repo.name}
+          confirmLabel="Delete repository"
+          description={
+            <>
+              This removes{' '}
+              <span className="font-mono text-foreground text-xs">{repo.name}</span>{' '}
+              and all its {repo.total} {repo.total === 1 ? 'tag' : 'tags'}. Unreferenced blobs are
+              freed on the next GC run. This cannot be undone.
+            </>
+          }
+          onConfirm={handleDeleteRepo}
+          onCancel={() => setDeleteRepo(false)}
         />
       )}
     </>
@@ -151,7 +213,6 @@ function TagRow({
   onDelete: () => void
   onShowDetails: () => void
 }) {
-  const { toast } = useToast()
   const [copiedDigest, setCopiedDigest] = useState(false)
   const [copiedPull, setCopiedPull] = useState(false)
 
@@ -166,74 +227,64 @@ function TagRow({
   const copyPull = useCallback(() => {
     navigator.clipboard.writeText(pullCmd)
     setCopiedPull(true)
-    toast('Pull command copied', 'info')
+    toast.info('Pull command copied')
     setTimeout(() => setCopiedPull(false), 1500)
-  }, [pullCmd, toast])
+  }, [pullCmd])
 
   return (
-    <tr className="border-b border-zinc-800/50 last:border-0 hover:bg-zinc-800/20 group/row">
-      <td className="px-4 py-3">
-        <span className="font-mono text-blue-400 text-xs bg-blue-950/30 px-2 py-0.5 rounded-md border border-blue-900/30">
-          {tag.tag}
-        </span>
-      </td>
+    <TableRow className="group/row">
+      <TableCell className="px-4 py-3">
+        <TagBadge>{tag.tag}</TagBadge>
+      </TableCell>
 
-      <td className="px-4 py-3 hidden sm:table-cell">
+      <TableCell className="px-4 py-3 hidden sm:table-cell">
         <button
           onClick={copyDigest}
           title={tag.digest}
-          className="group/digest flex items-center gap-1.5 font-mono text-xs text-zinc-600 hover:text-zinc-300 transition-colors"
+          className="group/digest flex items-center gap-1.5 font-mono text-xs text-muted-foreground/70 hover:text-foreground transition-colors"
         >
           <span>{copiedDigest ? 'Copied!' : `${tag.digest.slice(0, 7)}…${tag.digest.slice(-6)}`}</span>
-          {!copiedDigest && (
-            <svg className="w-3 h-3 opacity-0 group-hover/digest:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-          )}
+          {copiedDigest
+            ? <Check className="size-3 text-emerald-500" />
+            : <Copy className="size-3 opacity-0 group-hover/digest:opacity-100 transition-opacity" />}
         </button>
-      </td>
+      </TableCell>
 
-      <td className="px-4 py-3 hidden md:table-cell">
+      <TableCell className="px-4 py-3 hidden md:table-cell">
         <button
           onClick={copyPull}
           title={pullCmd}
-          className="group/pull flex items-center gap-1.5 font-mono text-xs text-zinc-700 hover:text-zinc-300 transition-colors max-w-[220px] truncate"
+          className="group/pull flex items-center gap-1.5 font-mono text-xs text-muted-foreground/70 hover:text-foreground transition-colors max-w-[220px]"
         >
           <span className="truncate">{copiedPull ? 'Copied!' : pullCmd}</span>
-          {!copiedPull && (
-            <svg className="w-3 h-3 shrink-0 opacity-0 group-hover/pull:opacity-100 transition-opacity" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2}
-                d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-            </svg>
-          )}
+          {copiedPull
+            ? <Check className="size-3 shrink-0 text-emerald-500" />
+            : <Copy className="size-3 shrink-0 opacity-0 group-hover/pull:opacity-100 transition-opacity" />}
         </button>
-      </td>
+      </TableCell>
 
-      <td className="px-4 py-3 text-right">
+      <TableCell className="px-4 py-3 text-right">
         <div className="flex items-center justify-end gap-1">
-          <button
+          <Button
+            variant="ghost"
+            size="icon-xs"
             onClick={onShowDetails}
             title="View details"
-            className="text-zinc-600 hover:text-blue-400 transition-colors p-1 rounded"
+            className="text-muted-foreground/60 hover:text-blue-500 dark:hover:text-blue-400"
           >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" />
-            </svg>
-          </button>
-          <button
+            <Info strokeWidth={1.5} />
+          </Button>
+          <Button
+            variant="ghost"
+            size="icon-xs"
             onClick={onDelete}
             title="Delete tag"
-            className="text-zinc-600 hover:text-red-400 transition-colors p-1 rounded"
+            className="text-muted-foreground/60 hover:text-destructive"
           >
-            <svg className="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5}
-                d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" />
-            </svg>
-          </button>
+            <Trash2 strokeWidth={1.5} />
+          </Button>
         </div>
-      </td>
-    </tr>
+      </TableCell>
+    </TableRow>
   )
 }

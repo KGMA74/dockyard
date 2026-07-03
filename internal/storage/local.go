@@ -287,6 +287,16 @@ func (b *LocalBackend) ListTags(name string) ([]string, error) {
 	return tags, nil
 }
 
+// DeleteRepository removes a repository and all its manifests and tags.
+// Blobs stay on disk until the next GC run, like manifest deletion.
+func (b *LocalBackend) DeleteRepository(name string) error {
+	dir := filepath.Join(b.root, "repositories", filepath.FromSlash(name))
+	if _, err := os.Stat(dir); os.IsNotExist(err) {
+		return fmt.Errorf("repository %q not found", name)
+	}
+	return os.RemoveAll(dir)
+}
+
 func (b *LocalBackend) Stats() (StorageStats, error) {
 	blobs, err := b.AllBlobs()
 	if err != nil {
