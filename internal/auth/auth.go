@@ -207,3 +207,32 @@ func (m *Manager) Middleware() echo.MiddlewareFunc {
 		}
 	}
 }
+
+// MiddlewareEventStream validates a JWT the same way as Middleware, but also
+// accepts it via a ?token= query param. EventSource (used for the SSE push
+// feed) can't set an Authorization header, so it has no other way to
+// authenticate.
+func (m *Manager) MiddlewareEventStream() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			raw := strings.TrimPrefix(c.Request().Header.Get("Authorization"), "Bearer ")
+			if raw == "" {
+				raw = c.QueryParam("token")
+			}
+			if raw == "" {
+				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "missing token"})
+			}
+			m.mu.Lock()
+			_, blacklisted := m.blacklist[raw]
+			m.mu.Unlock()
+			if blacklisted {
+				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "token has been revoked"})
+			}
+			tok, err := m.parseToken(raw)
+			if err != nil || !tok.Valid {
+				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+			}
+			return next(c)
+		}
+	}
+}

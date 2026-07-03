@@ -27,6 +27,28 @@ async function req<T>(path: string, opts?: RequestInit): Promise<T> {
   return res.json() as Promise<T>
 }
 
+export interface PushEvent {
+  type: 'push'
+  name: string
+  tag?: string
+}
+
+// Subscribes to the SSE push feed. EventSource can't set an Authorization
+// header, so the token travels as a query param instead — the browser
+// reconnects automatically on drop, no manual retry logic needed here.
+export function subscribeToPushEvents(onPush: (event: PushEvent) => void): () => void {
+  const es = new EventSource(`${BASE}/events?token=${encodeURIComponent(token())}`)
+  es.onmessage = e => {
+    try {
+      const data = JSON.parse(e.data) as PushEvent
+      if (data.type === 'push') onPush(data)
+    } catch {
+      // ignore malformed payloads
+    }
+  }
+  return () => es.close()
+}
+
 export function isAuthenticated(): boolean {
   return !!localStorage.getItem(TOKEN_KEY)
 }

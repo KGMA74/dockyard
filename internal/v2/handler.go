@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"dockyard/internal/events"
 	"dockyard/internal/storage"
 )
 
@@ -20,10 +21,11 @@ import (
 // Image names containing slashes (org/image, org/sub/image) are supported via regex routing.
 type Handler struct {
 	store storage.Backend
+	hub   *events.Hub
 }
 
-func New(backend storage.Backend) *Handler {
-	return &Handler{store: backend}
+func New(backend storage.Backend, hub *events.Hub) *Handler {
+	return &Handler{store: backend, hub: hub}
 }
 
 var (
@@ -144,6 +146,11 @@ func (h *Handler) manifests(w http.ResponseWriter, r *http.Request, name, ref st
 		w.Header().Set("Docker-Content-Digest", dgst)
 		w.Header().Set("Location", "/v2/"+name+"/manifests/"+dgst)
 		w.WriteHeader(http.StatusCreated)
+		// Only tag pushes are notified — multi-arch pushes also PUT each
+		// platform manifest by digest, which would just be repeat noise.
+		if h.hub != nil && !strings.HasPrefix(ref, "sha256:") {
+			h.hub.Publish(events.Event{Type: "push", Name: name, Tag: ref})
+		}
 
 	case http.MethodDelete:
 		if err := h.store.DeleteManifest(name, ref); err != nil {

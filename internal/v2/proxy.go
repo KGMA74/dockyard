@@ -5,16 +5,20 @@ import (
 	"net/http"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"time"
+
+	"dockyard/internal/events"
 )
 
 // ProxyHandler transfère toutes les requêtes /v2/* vers une registry externe.
 // Utilisé en mode "proxy" quand REGISTRY_URL est défini.
 type ProxyHandler struct {
-	rp *httputil.ReverseProxy
+	rp  *httputil.ReverseProxy
+	hub *events.Hub
 }
 
-func NewProxy(targetURL, username, password string) (*ProxyHandler, error) {
+func NewProxy(targetURL, username, password string, hub *events.Hub) (*ProxyHandler, error) {
 	target, err := url.Parse(targetURL)
 	if err != nil {
 		return nil, err
@@ -28,7 +32,7 @@ func NewProxy(targetURL, username, password string) (*ProxyHandler, error) {
 			}
 		},
 	}
-	return &ProxyHandler{rp: rp}, nil
+	return &ProxyHandler{rp: rp, hub: hub}, nil
 }
 
 func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -37,6 +41,14 @@ func (h *ProxyHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Docker-Distribution-Api-Version", "registry/2.0")
 	h.rp.ServeHTTP(rec, r)
+
+	// Same tag-only rule as the embedded handler: skip digest-referenced PUTs
+	// (platform manifests in a multi-arch push) to avoid repeat notifications.
+	if h.hub != nil && r.Method == http.MethodPut && rec.status < 300 {
+		if m := reManifests.FindStringSubmatch(r.URL.Path); m != nil && !strings.HasPrefix(m[2], "sha256:") {
+			h.hub.Publish(events.Event{Type: "push", Name: m[1], Tag: m[2]})
+		}
+	}
 
 	slog.Info("v2 proxy",
 		"method", r.Method,

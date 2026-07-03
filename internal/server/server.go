@@ -9,6 +9,7 @@ import (
 
 	"dockyard/config"
 	"dockyard/internal/auth"
+	"dockyard/internal/events"
 	"dockyard/internal/registry"
 	"dockyard/internal/storage"
 )
@@ -26,6 +27,7 @@ type Server struct {
 	backend       storage.Backend
 	proxy         *registry.Client
 	auth          *auth.Manager
+	events        *events.Hub
 	v2AuthEnabled bool
 	v2AuthHash    string
 }
@@ -43,6 +45,7 @@ func NewServer() *http.Server {
 		port:          cfg.Port,
 		mode:          m,
 		v2AuthEnabled: cfg.V2AuthEnabled,
+		events:        events.NewHub(),
 	}
 
 	switch m {

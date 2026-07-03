@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
+import { toast } from 'sonner'
 import { Search, RefreshCw } from 'lucide-react'
-import { logout, getRepositories, getStorageStats, StorageStats, RepoSummary } from '../api'
+import { logout, getRepositories, getStorageStats, subscribeToPushEvents, StorageStats, RepoSummary } from '../api'
 import RepoList from '../components/RepoList'
 import Sidebar, { Tab } from '../components/Sidebar'
 import StorageTab from '../components/StorageTab'
@@ -50,6 +51,14 @@ export default function Dashboard({ onLogout }: Props) {
   }, [])
 
   useEffect(() => { loadData() }, [loadData])
+
+  // Live-refresh the list when an image is pushed elsewhere (docker push, CI, …)
+  useEffect(() => {
+    return subscribeToPushEvents(event => {
+      toast.success(`${event.name}${event.tag ? `:${event.tag}` : ''} was pushed`)
+      loadData()
+    })
+  }, [loadData])
 
   // "/" focuses the search field, Escape clears it
   useEffect(() => {

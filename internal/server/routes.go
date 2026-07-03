@@ -56,13 +56,14 @@ func (s *Server) RegisterRoutes() http.Handler {
 			s.proxy.BaseURL(),
 			s.proxy.Username(),
 			s.proxy.Password(),
+			s.events,
 		)
 		if err != nil {
 			panic("invalid REGISTRY_URL: " + err.Error())
 		}
 		v2h = ph
 	} else {
-		v2h = v2.New(s.backend)
+		v2h = v2.New(s.backend, s.events)
 	}
 
 	// Wrap /v2/* with basic auth when enabled
@@ -110,6 +111,11 @@ func (s *Server) RegisterRoutes() http.Handler {
 		api.POST("/gc", h.GarbageCollect)
 	}
 	api.POST("/auth/password", s.auth.ChangePassword)
+
+	// SSE feed of registry pushes. Registered outside the /api/admin group
+	// because EventSource can't set an Authorization header — it authenticates
+	// via a ?token= query param instead (see MiddlewareEventStream).
+	e.GET("/api/admin/events", admin.Events(s.events), s.auth.MiddlewareEventStream())
 
 	// ── Health ────────────────────────────────────────────────────────────────
 	e.GET("/health", func(c echo.Context) error {
