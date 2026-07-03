@@ -116,12 +116,19 @@ func (c *Client) Tags(name string) ([]string, error) {
 	return tr.Tags, nil
 }
 
+// acceptManifestTypes covers both single-platform manifests and multi-arch
+// manifest lists / OCI indexes, so upstream returns whatever it actually stores
+// under the ref instead of 404ing when the tag points at a manifest list.
+const acceptManifestTypes = "application/vnd.docker.distribution.manifest.v2+json, " +
+	"application/vnd.docker.distribution.manifest.list.v2+json, " +
+	"application/vnd.oci.image.manifest.v1+json, " +
+	"application/vnd.oci.image.index.v1+json"
+
 // Manifest fetches the manifest for a given image name and tag/digest ref.
 // The returned Manifest.Digest is populated from the Docker-Content-Digest header,
 // which is the value required for deletion (immutable, unlike tags).
 func (c *Client) Manifest(name, ref string) (*Manifest, error) {
-	const mediaType = "application/vnd.docker.distribution.manifest.v2+json"
-	resp, err := c.do(http.MethodGet, "/v2/"+name+"/manifests/"+ref, mediaType)
+	resp, err := c.do(http.MethodGet, "/v2/"+name+"/manifests/"+ref, acceptManifestTypes)
 	if err != nil {
 		return nil, err
 	}
@@ -132,6 +139,22 @@ func (c *Client) Manifest(name, ref string) (*Manifest, error) {
 	}
 	m.Digest = resp.Header.Get("Docker-Content-Digest")
 	return &m, nil
+}
+
+// RawManifest fetches a manifest's raw bytes and digest without decoding it into
+// the single-platform Manifest struct — needed so callers can inspect multi-arch
+// manifest lists / OCI indexes, which Manifest silently can't represent.
+func (c *Client) RawManifest(name, ref string) ([]byte, string, error) {
+	resp, err := c.do(http.MethodGet, "/v2/"+name+"/manifests/"+ref, acceptManifestTypes)
+	if err != nil {
+		return nil, "", err
+	}
+	defer resp.Body.Close()
+	raw, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, "", err
+	}
+	return raw, resp.Header.Get("Docker-Content-Digest"), nil
 }
 
 // Blob fetches a blob's raw content (used to read the image config for manifest details).

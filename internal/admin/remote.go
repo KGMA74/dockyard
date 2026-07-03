@@ -1,7 +1,6 @@
 package admin
 
 import (
-	"encoding/json"
 	"net/http"
 	"strings"
 
@@ -76,16 +75,15 @@ func (h *RemoteHandler) GetManifestDetails(c echo.Context) error {
 	if name == "" || reference == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "params 'name' and 'reference' required"})
 	}
-	m, err := h.client.Manifest(name, reference)
+	raw, digest, err := h.client.RawManifest(name, reference)
 	if err != nil {
 		return c.JSON(http.StatusBadGateway, map[string]string{"error": err.Error()})
 	}
-	raw, err := json.Marshal(m)
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
-	}
-	result, err := parseManifestDetails(raw, m.Digest, func(digest string) ([]byte, error) {
-		return h.client.Blob(name, digest)
+	result, err := parseManifestDetails(raw, digest, func(blobDigest string) ([]byte, error) {
+		return h.client.Blob(name, blobDigest)
+	}, func(manifestDigest string) ([]byte, error) {
+		childRaw, _, err := h.client.RawManifest(name, manifestDigest)
+		return childRaw, err
 	})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})

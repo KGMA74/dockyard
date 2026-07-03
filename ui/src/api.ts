@@ -102,6 +102,14 @@ export interface LayerInfo {
   size_human: string
 }
 
+export interface PlatformInfo {
+  architecture: string
+  os: string
+  digest: string
+  size_bytes: number
+  size_human: string
+}
+
 export interface ManifestDetails {
   digest: string
   media_type: string
@@ -112,6 +120,7 @@ export interface ManifestDetails {
   created?: string
   architecture?: string
   os?: string
+  platforms?: PlatformInfo[]
 }
 
 export async function getManifestDetails(name: string, reference: string): Promise<ManifestDetails> {

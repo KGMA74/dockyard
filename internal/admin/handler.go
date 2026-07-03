@@ -101,6 +101,9 @@ func (h *Handler) GetManifestDetails(c echo.Context) error {
 		}
 		defer rc.Close()
 		return io.ReadAll(rc)
+	}, func(manifestDigest string) ([]byte, error) {
+		childRaw, _, err := h.store.GetManifest(name, manifestDigest)
+		return childRaw, err
 	})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, err500(err))

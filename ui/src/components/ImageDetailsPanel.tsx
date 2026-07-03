@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react'
+import { Layers as LayersIcon } from 'lucide-react'
 import { getManifestDetails, ManifestDetails, TagInfo } from '../api'
+import { Badge } from '@/components/ui/badge'
 import {
   Sheet,
   SheetContent,
@@ -53,7 +55,10 @@ export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
             <>
               <div className="grid grid-cols-2 gap-3">
                 <Field label="Total size" value={details.total_size_human} />
-                <Field label="Layers" value={String(details.layers.length)} />
+                <Field
+                  label={details.platforms ? 'Unique layers' : 'Layers'}
+                  value={String(details.layers.length)}
+                />
                 {details.os && <Field label="OS" value={details.os} />}
                 {details.architecture && <Field label="Architecture" value={details.architecture} />}
                 {details.created && (
@@ -68,23 +73,49 @@ export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
                 </p>
               </div>
 
+              {details.platforms && details.platforms.length > 0 && (
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium mb-2">
+                    Platforms ({details.platforms.length})
+                  </p>
+                  <div className="space-y-1.5">
+                    {details.platforms.map(p => (
+                      <div
+                        key={p.digest}
+                        className="flex items-center justify-between gap-3 bg-muted/50 border rounded-lg px-3 py-2"
+                      >
+                        <Badge variant="secondary" className="font-mono">
+                          {p.os}/{p.architecture}
+                        </Badge>
+                        <span className="text-xs shrink-0 tabular-nums text-muted-foreground">{p.size_human}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div>
-                <p className="text-xs text-muted-foreground font-medium mb-2">
+                <p className="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-1.5">
+                  <LayersIcon className="size-3.5" />
                   Layers ({details.layers.length})
                 </p>
-                <div className="space-y-1.5">
-                  {details.layers.map((layer, i) => (
-                    <div
-                      key={layer.digest + i}
-                      className="flex items-center justify-between gap-3 bg-muted/50 border rounded-lg px-3 py-2"
-                    >
-                      <span className="font-mono text-xs text-muted-foreground truncate">
-                        {layer.digest.slice(0, 19)}…
-                      </span>
-                      <span className="text-xs shrink-0 tabular-nums">{layer.size_human}</span>
-                    </div>
-                  ))}
-                </div>
+                {details.layers.length === 0 ? (
+                  <p className="text-xs text-muted-foreground/70">No layers to show for this manifest.</p>
+                ) : (
+                  <div className="space-y-1.5">
+                    {details.layers.map((layer, i) => (
+                      <div
+                        key={layer.digest + i}
+                        className="flex items-center justify-between gap-3 bg-muted/50 border rounded-lg px-3 py-2"
+                      >
+                        <span className="font-mono text-xs text-muted-foreground truncate">
+                          {layer.digest.slice(0, 19)}…
+                        </span>
+                        <span className="text-xs shrink-0 tabular-nums">{layer.size_human}</span>
+                      </div>
+                    ))}
+                  </div>
+                )}
               </div>
             </>
           ) : null}

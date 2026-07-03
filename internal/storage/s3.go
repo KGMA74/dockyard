@@ -237,10 +237,18 @@ func (s *S3Backend) ListRepositories() ([]string, error) {
 		if obj.Err != nil {
 			continue
 		}
-		parts := strings.SplitN(strings.TrimPrefix(obj.Key, "manifests/"), "/", 2)
-		if len(parts) >= 1 && parts[0] != "" && !seen[parts[0]] {
-			seen[parts[0]] = true
-			repos = append(repos, parts[0])
+		// The key is "manifests/<name>/<reference>". <name> can itself contain
+		// slashes (org/image), but <reference> (a tag or a sha256: digest) never
+		// does — so the name is everything before the LAST slash, not the first.
+		trimmed := strings.TrimPrefix(obj.Key, "manifests/")
+		idx := strings.LastIndex(trimmed, "/")
+		if idx <= 0 {
+			continue
+		}
+		name := trimmed[:idx]
+		if !seen[name] {
+			seen[name] = true
+			repos = append(repos, name)
 		}
 	}
 	return repos, nil
