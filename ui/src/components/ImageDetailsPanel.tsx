@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Layers as LayersIcon } from 'lucide-react'
+import { Layers as LayersIcon, FolderOpen } from 'lucide-react'
 import { getManifestDetails, ManifestDetails, TagInfo } from '../api'
+import LayerBrowser from './LayerBrowser'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import {
   Sheet,
   SheetContent,
@@ -20,6 +22,7 @@ export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
   const [details, setDetails] = useState<ManifestDetails | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
+  const [browsingLayer, setBrowsingLayer] = useState<string | null>(null)
 
   useEffect(() => {
     let cancelled = false
@@ -33,95 +36,116 @@ export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
   }, [imageName, tag.digest])
 
   return (
-    <Sheet open onOpenChange={open => { if (!open) onClose() }}>
-      <SheetContent side="right" className="overflow-y-auto gap-0">
-        <SheetHeader className="border-b">
-          <SheetTitle className="font-mono text-sm truncate pr-8">{imageName}</SheetTitle>
-          <SheetDescription asChild>
-            <span>
-              <span className="inline-block mt-1 font-mono text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-900/30">
-                {tag.tag}
+    <>
+      <Sheet open onOpenChange={open => { if (!open) onClose() }}>
+        <SheetContent side="right" className="overflow-y-auto gap-0">
+          <SheetHeader className="border-b">
+            <SheetTitle className="font-mono text-sm truncate pr-8">{imageName}</SheetTitle>
+            <SheetDescription asChild>
+              <span>
+                <span className="inline-block mt-1 font-mono text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-900/30">
+                  {tag.tag}
+                </span>
               </span>
-            </span>
-          </SheetDescription>
-        </SheetHeader>
+            </SheetDescription>
+          </SheetHeader>
 
-        <div className="p-4 space-y-5">
-          {loading ? (
-            <p className="text-sm text-muted-foreground py-10 text-center">Loading…</p>
-          ) : error ? (
-            <p className="text-sm text-destructive py-10 text-center">{error}</p>
-          ) : details ? (
-            <>
-              <div className="grid grid-cols-2 gap-3">
-                <Field label="Total size" value={details.total_size_human} />
-                <Field
-                  label={details.platforms ? 'Unique layers' : 'Layers'}
-                  value={String(details.layers.length)}
-                />
-                {details.os && <Field label="OS" value={details.os} />}
-                {details.architecture && <Field label="Architecture" value={details.architecture} />}
-                {details.created && (
-                  <Field label="Created" value={new Date(details.created).toLocaleString()} wide />
-                )}
-              </div>
-
-              <div>
-                <p className="text-xs text-muted-foreground font-medium mb-2">Digest</p>
-                <p className="font-mono text-xs text-muted-foreground bg-muted/50 border rounded-lg px-3 py-2 break-all">
-                  {details.digest}
-                </p>
-              </div>
-
-              {details.platforms && details.platforms.length > 0 && (
-                <div>
-                  <p className="text-xs text-muted-foreground font-medium mb-2">
-                    Platforms ({details.platforms.length})
-                  </p>
-                  <div className="space-y-1.5">
-                    {details.platforms.map(p => (
-                      <div
-                        key={p.digest}
-                        className="flex items-center justify-between gap-3 bg-muted/50 border rounded-lg px-3 py-2"
-                      >
-                        <Badge variant="secondary" className="font-mono">
-                          {p.os}/{p.architecture}
-                        </Badge>
-                        <span className="text-xs shrink-0 tabular-nums text-muted-foreground">{p.size_human}</span>
-                      </div>
-                    ))}
-                  </div>
+          <div className="p-4 space-y-5">
+            {loading ? (
+              <p className="text-sm text-muted-foreground py-10 text-center">Loading…</p>
+            ) : error ? (
+              <p className="text-sm text-destructive py-10 text-center">{error}</p>
+            ) : details ? (
+              <>
+                <div className="grid grid-cols-2 gap-3">
+                  <Field label="Total size" value={details.total_size_human} />
+                  <Field
+                    label={details.platforms ? 'Unique layers' : 'Layers'}
+                    value={String(details.layers.length)}
+                  />
+                  {details.os && <Field label="OS" value={details.os} />}
+                  {details.architecture && <Field label="Architecture" value={details.architecture} />}
+                  {details.created && (
+                    <Field label="Created" value={new Date(details.created).toLocaleString()} wide />
+                  )}
                 </div>
-              )}
 
-              <div>
-                <p className="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-1.5">
-                  <LayersIcon className="size-3.5" />
-                  Layers ({details.layers.length})
-                </p>
-                {details.layers.length === 0 ? (
-                  <p className="text-xs text-muted-foreground/70">No layers to show for this manifest.</p>
-                ) : (
-                  <div className="space-y-1.5">
-                    {details.layers.map((layer, i) => (
-                      <div
-                        key={layer.digest + i}
-                        className="flex items-center justify-between gap-3 bg-muted/50 border rounded-lg px-3 py-2"
-                      >
-                        <span className="font-mono text-xs text-muted-foreground truncate">
-                          {layer.digest.slice(0, 19)}…
-                        </span>
-                        <span className="text-xs shrink-0 tabular-nums">{layer.size_human}</span>
-                      </div>
-                    ))}
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium mb-2">Digest</p>
+                  <p className="font-mono text-xs text-muted-foreground bg-muted/50 border rounded-lg px-3 py-2 break-all">
+                    {details.digest}
+                  </p>
+                </div>
+
+                {details.platforms && details.platforms.length > 0 && (
+                  <div>
+                    <p className="text-xs text-muted-foreground font-medium mb-2">
+                      Platforms ({details.platforms.length})
+                    </p>
+                    <div className="space-y-1.5">
+                      {details.platforms.map(p => (
+                        <div
+                          key={p.digest}
+                          className="flex items-center justify-between gap-3 bg-muted/50 border rounded-lg px-3 py-2"
+                        >
+                          <Badge variant="secondary" className="font-mono">
+                            {p.os}/{p.architecture}
+                          </Badge>
+                          <span className="text-xs shrink-0 tabular-nums text-muted-foreground">{p.size_human}</span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
                 )}
-              </div>
-            </>
-          ) : null}
-        </div>
-      </SheetContent>
-    </Sheet>
+
+                <div>
+                  <p className="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-1.5">
+                    <LayersIcon className="size-3.5" />
+                    Layers ({details.layers.length})
+                  </p>
+                  {details.layers.length === 0 ? (
+                    <p className="text-xs text-muted-foreground/70">No layers to show for this manifest.</p>
+                  ) : (
+                    <div className="space-y-1.5">
+                      {details.layers.map((layer, i) => (
+                        <div
+                          key={layer.digest + i}
+                          className="flex items-center justify-between gap-3 bg-muted/50 border rounded-lg px-3 py-2"
+                        >
+                          <span className="font-mono text-xs text-muted-foreground truncate">
+                            {layer.digest.slice(0, 19)}…
+                          </span>
+                          <div className="flex items-center gap-2 shrink-0">
+                            <span className="text-xs tabular-nums">{layer.size_human}</span>
+                            <Button
+                              variant="ghost"
+                              size="icon-xs"
+                              title="Browse layer contents"
+                              onClick={() => setBrowsingLayer(layer.digest)}
+                              className="text-muted-foreground/60 hover:text-blue-500 dark:hover:text-blue-400"
+                            >
+                              <FolderOpen strokeWidth={1.5} />
+                            </Button>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </>
+            ) : null}
+          </div>
+        </SheetContent>
+      </Sheet>
+
+      {browsingLayer && (
+        <LayerBrowser
+          imageName={imageName}
+          digest={browsingLayer}
+          onClose={() => setBrowsingLayer(null)}
+        />
+      )}
+    </>
   )
 }
 

@@ -17,7 +17,7 @@ func printBanner(cfg *config.Config) {
 	)
 
 	row := func(key, val string) string {
-		return fmt.Sprintf("%s  │%s  %s%-10s%s  %s%-32s%s %s│%s\n",
+		return fmt.Sprintf("%s  │%s  %s%-10s%s  %s%-52s%s %s│%s\n",
 			gray, reset, yellow, key, reset, white, val, reset, gray, reset)
 	}
 

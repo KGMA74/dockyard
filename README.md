@@ -6,7 +6,10 @@ A lightweight, self-hosted Docker Registry V2 server written in Go. Ships as a *
 
 ## Features
 
-- **Embedded UI** — React + Tailwind dashboard served directly by the binary
+- **Embedded UI** — React + Tailwind (shadcn/ui) dashboard served directly by the binary, with dark/light/system theme
+- **Multi-arch aware** — manifest lists (OCI indexes) are resolved per-platform, so multi-arch images show their real total size instead of 0
+- **Layer browser** — inspect the files inside any layer (path, size, symlinks) without pulling the image
+- **Repository and tag deletion** — remove a single tag or an entire repository from the UI or API
 - **Two storage backends** — local filesystem or any S3-compatible object store
 - **Two modes** — embedded registry or proxy in front of an existing registry
 - **Garbage collection** — manual trigger via UI or API, automatic daily cron at midnight UTC
@@ -250,13 +253,16 @@ All endpoints require `Authorization: Bearer <token>` (except login/logout).
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/health` | Health check + mode info |
+| `GET` | `/health` | Health check + mode + version info |
 | `POST` | `/api/admin/auth/login` | Get JWT token |
 | `POST` | `/api/admin/auth/logout` | Invalidate token |
 | `POST` | `/api/admin/auth/password` | Change password |
-| `GET` | `/api/admin/repositories` | List all repositories with tags |
-| `GET` | `/api/admin/repositories/tags?name=<image>` | List tags with digests |
+| `GET` | `/api/admin/repositories` | List all repositories with tags and last-pushed time |
+| `GET` | `/api/admin/repositories/tags?name=<image>` | List tags with digests and push time |
+| `GET` | `/api/admin/repositories/manifest?name=<image>&reference=<tag-or-digest>` | Manifest details (size, layers, platforms for multi-arch) |
+| `GET` | `/api/admin/repositories/layer?name=<image>&digest=sha256:<hash>` | List the files inside a layer |
 | `DELETE` | `/api/admin/repositories/manifests?name=<image>&digest=sha256:<hash>` | Delete a manifest |
+| `DELETE` | `/api/admin/repositories?name=<image>` | Delete a repository and all its tags |
 | `GET` | `/api/admin/storage/stats` | Storage usage (size, blob count, repo count) |
 | `GET` | `/api/admin/storage/tree` | Raw filesystem tree (local only) |
 | `POST` | `/api/admin/gc` | Garbage collect unreferenced blobs (local only) |
@@ -307,7 +313,10 @@ Un serveur Docker Registry V2 léger, écrit en Go. Livré sous forme d'un **bin
 
 ## Fonctionnalités
 
-- **UI embarquée** — dashboard React + Tailwind servi directement par le binaire
+- **UI embarquée** — dashboard React + Tailwind (shadcn/ui) servi directement par le binaire, avec thème clair/sombre/système
+- **Support multi-arch** — les manifest lists (index OCI) sont résolues par plateforme, donc les images multi-arch affichent leur vraie taille totale au lieu de 0
+- **Explorateur de layers** — inspecter les fichiers d'une layer (chemin, taille, symlinks) sans puller l'image
+- **Suppression de dépôts et de tags** — supprimer un tag ou un dépôt entier depuis l'UI ou l'API
 - **Deux backends de stockage** — filesystem local ou tout stockage objet compatible S3
 - **Deux modes** — registry embarquée ou proxy devant une registry existante
 - **Garbage collection** — déclenchement manuel via UI ou API, cron automatique quotidien à minuit UTC
@@ -551,13 +560,16 @@ Tous les endpoints nécessitent `Authorization: Bearer <token>` (sauf login/logo
 
 | Méthode | Endpoint | Description |
 |---|---|---|
-| `GET` | `/health` | Vérification d'état + infos mode |
+| `GET` | `/health` | Vérification d'état + infos mode + version |
 | `POST` | `/api/admin/auth/login` | Obtenir un token JWT |
 | `POST` | `/api/admin/auth/logout` | Invalider le token |
 | `POST` | `/api/admin/auth/password` | Changer le mot de passe |
-| `GET` | `/api/admin/repositories` | Lister tous les dépôts avec leurs tags |
-| `GET` | `/api/admin/repositories/tags?name=<image>` | Lister les tags avec leurs digests |
+| `GET` | `/api/admin/repositories` | Lister tous les dépôts avec leurs tags et la date du dernier push |
+| `GET` | `/api/admin/repositories/tags?name=<image>` | Lister les tags avec leurs digests et date de push |
+| `GET` | `/api/admin/repositories/manifest?name=<image>&reference=<tag-ou-digest>` | Détails du manifest (taille, layers, plateformes si multi-arch) |
+| `GET` | `/api/admin/repositories/layer?name=<image>&digest=sha256:<hash>` | Lister les fichiers d'une layer |
 | `DELETE` | `/api/admin/repositories/manifests?name=<image>&digest=sha256:<hash>` | Supprimer un manifest |
+| `DELETE` | `/api/admin/repositories?name=<image>` | Supprimer un dépôt et tous ses tags |
 | `GET` | `/api/admin/storage/stats` | Utilisation du stockage (taille, blobs, dépôts) |
 | `GET` | `/api/admin/storage/tree` | Arbre du filesystem (local uniquement) |
 | `POST` | `/api/admin/gc` | Supprimer les blobs non référencés (local uniquement) |

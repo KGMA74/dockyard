@@ -91,6 +91,29 @@ func (h *RemoteHandler) GetManifestDetails(c echo.Context) error {
 	return c.JSON(http.StatusOK, result)
 }
 
+// GET /api/admin/repositories/layer?name=<image>&digest=sha256:<layer-digest>
+func (h *RemoteHandler) GetLayerEntries(c echo.Context) error {
+	name := c.QueryParam("name")
+	digest := c.QueryParam("digest")
+	if name == "" || digest == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "params 'name' and 'digest' required"})
+	}
+	if entries, ok := layerEntriesCache.Get(digest); ok {
+		return c.JSON(http.StatusOK, map[string]any{"digest": digest, "entries": entries, "count": len(entries)})
+	}
+	rc, err := h.client.BlobStream(name, digest)
+	if err != nil {
+		return c.JSON(http.StatusBadGateway, map[string]string{"error": err.Error()})
+	}
+	defer rc.Close()
+	entries, err := parseLayerEntries(rc)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	layerEntriesCache.Add(digest, entries)
+	return c.JSON(http.StatusOK, map[string]any{"digest": digest, "entries": entries, "count": len(entries)})
+}
+
 // DELETE /api/admin/repositories/manifests?name=<image>&digest=sha256:<hash>
 func (h *RemoteHandler) DeleteManifest(c echo.Context) error {
 	name := c.QueryParam("name")

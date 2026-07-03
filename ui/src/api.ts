@@ -129,6 +129,19 @@ export async function getManifestDetails(name: string, reference: string): Promi
   return req(`/repositories/manifest?name=${encodeURIComponent(name)}&reference=${encodeURIComponent(reference)}`)
 }
 
+export interface LayerEntry {
+  path: string
+  type: 'file' | 'dir' | 'symlink' | 'hardlink' | 'other'
+  size?: number
+  size_human?: string
+  mode?: string
+  link_name?: string
+}
+
+export async function getLayerEntries(name: string, digest: string): Promise<{ digest: string; entries: LayerEntry[]; count: number }> {
+  return req(`/repositories/layer?name=${encodeURIComponent(name)}&digest=${encodeURIComponent(digest)}`)
+}
+
 export interface StorageStats {
   total_size_bytes: number
   total_size_human: string

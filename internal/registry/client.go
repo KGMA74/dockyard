@@ -167,6 +167,16 @@ func (c *Client) Blob(name, digest string) ([]byte, error) {
 	return io.ReadAll(resp.Body)
 }
 
+// BlobStream fetches a blob as a stream rather than buffering it fully — used
+// for layers, which can be hundreds of MB. Caller must close the returned body.
+func (c *Client) BlobStream(name, digest string) (io.ReadCloser, error) {
+	resp, err := c.do(http.MethodGet, "/v2/"+name+"/blobs/"+digest, "")
+	if err != nil {
+		return nil, err
+	}
+	return resp.Body, nil
+}
+
 func (c *Client) DeleteManifest(name, digest string) error {
 	resp, err := c.do(http.MethodDelete, "/v2/"+name+"/manifests/"+digest, "")
 	if err != nil {
