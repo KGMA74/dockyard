@@ -69,6 +69,7 @@ export interface RepoSummary {
   name: string
   tags: string[]
   total: number
+  last_pushed?: string
 }
 
 export async function getRepositories(): Promise<{ repositories: RepoSummary[]; total: number }> {
@@ -78,6 +79,7 @@ export async function getRepositories(): Promise<{ repositories: RepoSummary[]; 
 export interface TagInfo {
   tag: string
   digest: string
+  pushed_at?: string
 }
 
 export async function getTags(name: string): Promise<{ name: string; tags: TagInfo[]; total: number }> {
@@ -169,6 +171,7 @@ export interface HealthInfo {
   status: string
   mode: 'embedded' | 'proxy'
   registry?: string
+  version?: string
 }
 
 export async function getHealth(): Promise<HealthInfo> {

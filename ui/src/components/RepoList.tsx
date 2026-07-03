@@ -4,6 +4,7 @@ import { Box, ChevronDown, Copy, Check, Info, Trash2 } from 'lucide-react'
 import { getTags, deleteManifest, deleteRepository, TagInfo, RepoSummary } from '../api'
 import DeleteModal from './DeleteModal'
 import ImageDetailsPanel from './ImageDetailsPanel'
+import { relativeTime } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -113,6 +114,11 @@ function RepoCard({
               <Badge variant="secondary" className="shrink-0 rounded-full text-muted-foreground">
                 {repo.total} {repo.total === 1 ? 'tag' : 'tags'}
               </Badge>
+              {repo.last_pushed && (
+                <span className="shrink-0 text-xs text-muted-foreground/60">
+                  pushed {relativeTime(repo.last_pushed)}
+                </span>
+              )}
             </div>
             <ChevronDown
               className={`size-4 text-muted-foreground/60 shrink-0 transition-transform duration-200 ${open ? 'rotate-180' : ''}`}
@@ -142,6 +148,7 @@ function RepoCard({
                     <TableHead className="px-4 text-xs">Tag</TableHead>
                     <TableHead className="px-4 text-xs hidden sm:table-cell">Digest</TableHead>
                     <TableHead className="px-4 text-xs hidden md:table-cell">Pull</TableHead>
+                    <TableHead className="px-4 text-xs hidden lg:table-cell">Pushed</TableHead>
                     <TableHead className="px-4 w-16" />
                   </TableRow>
                 </TableHeader>
@@ -254,13 +261,19 @@ function TagRow({
         <button
           onClick={copyPull}
           title={pullCmd}
-          className="group/pull flex items-center gap-1.5 font-mono text-xs text-muted-foreground/70 hover:text-foreground transition-colors max-w-[220px]"
+          className="group/pull flex items-center gap-1.5 font-mono text-xs text-muted-foreground/70 hover:text-foreground transition-colors max-w-55"
         >
           <span className="truncate">{copiedPull ? 'Copied!' : pullCmd}</span>
           {copiedPull
             ? <Check className="size-3 shrink-0 text-emerald-500" />
             : <Copy className="size-3 shrink-0 opacity-0 group-hover/pull:opacity-100 transition-opacity" />}
         </button>
+      </TableCell>
+
+      <TableCell className="px-4 py-3 hidden lg:table-cell">
+        <span className="text-xs text-muted-foreground/70" title={tag.pushed_at}>
+          {tag.pushed_at ? relativeTime(tag.pushed_at) : '—'}
+        </span>
       </TableCell>
 
       <TableCell className="px-4 py-3 text-right">

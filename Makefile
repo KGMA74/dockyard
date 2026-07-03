@@ -1,5 +1,8 @@
 # Dockyard Registry Console
 
+VERSION := $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS := -X dockyard/internal/version.Version=$(VERSION)
+
 all: build test
 
 ## Build the React UI (output → internal/ui/dist/)
@@ -9,14 +12,14 @@ ui:
 
 ## Compile the Go binary (embeds the UI — run `make ui` first)
 build:
-	@echo "Building dockyard..."
-	@go build -o dockyard.exe ./cmd/dockyard
+	@echo "Building dockyard $(VERSION)..."
+	@go build -ldflags="$(LDFLAGS)" -o dockyard.exe ./cmd/dockyard
 
 ## Build UI then binary
 release: ui build
 
 run:
-	@go run ./cmd/dockyard
+	@go run -ldflags="$(LDFLAGS)" ./cmd/dockyard
 
 ## Start Vite dev server (proxies /api to :8080 — run `make run` in parallel)
 ui-dev:

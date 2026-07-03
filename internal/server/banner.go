@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"dockyard/config"
+	"dockyard/internal/version"
 )
 
 func printBanner(cfg *config.Config) {
@@ -35,6 +36,7 @@ func printBanner(cfg *config.Config) {
 		gray + "  Self-hosted Docker Registry V2" + reset + "\n" +
 		"\n" +
 		gray + "  ┌───────────────────────────────────────────────────────────┐" + reset + "\n" +
+		row("version", version.Version) +
 		row("mode", cfg.RegistryMode) +
 		row("storage", storageLabel(cfg)) +
 		row("port", fmt.Sprintf(":%d", cfg.Port)) +

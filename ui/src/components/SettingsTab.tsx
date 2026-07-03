@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react'
-import { User, KeyRound, Server, CircleCheck, CircleAlert } from 'lucide-react'
+import { User, KeyRound, Server, CircleCheck, CircleAlert, GitFork, BookOpen, Bug } from 'lucide-react'
 import { getHealth, getUsername, HealthInfo } from '../api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
+
+const REPO_URL = 'https://github.com/KGMA74/dockyard'
 
 interface Props {
   onChangePassword: () => void
@@ -78,6 +80,46 @@ export default function SettingsTab({ onChangePassword }: Props) {
               </Badge>
             </div>
           )}
+        </Card>
+      </div>
+
+      <div>
+        <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">
+          About
+        </h2>
+        <Card className="p-4 rounded-xl gap-3">
+          <div className="flex items-center gap-3">
+            <div className="size-9 rounded-full bg-muted flex items-center justify-center shrink-0">
+              <GitFork className="size-4 text-muted-foreground" strokeWidth={1.5} />
+            </div>
+            <div>
+              <p className="text-sm font-medium">
+                Dockyard {health?.version ? <span className="font-mono">{health.version}</span> : null}
+              </p>
+              <p className="text-xs text-muted-foreground">Self-hosted Docker Registry V2</p>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button variant="outline" size="sm" asChild>
+              <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
+                <GitFork />
+                View source
+              </a>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <a href={`${REPO_URL}#contributing`} target="_blank" rel="noopener noreferrer">
+                <BookOpen />
+                Contribute
+              </a>
+            </Button>
+            <Button variant="outline" size="sm" asChild>
+              <a href={`${REPO_URL}/issues`} target="_blank" rel="noopener noreferrer">
+                <Bug />
+                Report an issue
+              </a>
+            </Button>
+          </div>
         </Card>
       </div>
     </div>

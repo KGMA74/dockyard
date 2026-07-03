@@ -10,6 +10,7 @@ import (
 	"dockyard/internal/auth"
 	uiassets "dockyard/internal/ui"
 	"dockyard/internal/v2"
+	"dockyard/internal/version"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -110,7 +111,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	// ── Health ────────────────────────────────────────────────────────────────
 	e.GET("/health", func(c echo.Context) error {
-		body := map[string]string{"status": "ok", "mode": string(s.mode)}
+		body := map[string]string{"status": "ok", "mode": string(s.mode), "version": version.Version}
 		if s.mode == modeProxy {
 			if err := s.proxy.Ping(); err != nil {
 				body["registry"] = "unreachable: " + err.Error()

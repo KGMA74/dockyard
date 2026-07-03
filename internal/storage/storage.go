@@ -1,6 +1,9 @@
 package storage
 
-import "io"
+import (
+	"io"
+	"time"
+)
 
 // Backend is the common interface for all storage backends.
 type Backend interface {
@@ -27,6 +30,10 @@ type Backend interface {
 	ListRepositories() ([]string, error)
 	ListTags(name string) ([]string, error)
 	DeleteRepository(name string) error
+
+	// TagPushedAt returns when a tag was last (re)pointed at a manifest — i.e.
+	// the last time `docker push` wrote this tag, used to sort/display recency.
+	TagPushedAt(name, tag string) (time.Time, error)
 
 	// Stats
 	Stats() (StorageStats, error)

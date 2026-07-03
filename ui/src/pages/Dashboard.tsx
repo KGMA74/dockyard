@@ -21,7 +21,7 @@ interface Props {
   onLogout: () => void
 }
 
-type SortKey = 'name' | 'tags'
+type SortKey = 'name' | 'tags' | 'pushed'
 
 export default function Dashboard({ onLogout }: Props) {
   const [tab, setTab] = useState<Tab>('images')
@@ -75,9 +75,15 @@ export default function Dashboard({ onLogout }: Props) {
 
   const filtered = repos
     .filter(r => r.name.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => sort === 'tags'
-      ? b.total - a.total || a.name.localeCompare(b.name)
-      : a.name.localeCompare(b.name))
+    .sort((a, b) => {
+      if (sort === 'tags') return b.total - a.total || a.name.localeCompare(b.name)
+      if (sort === 'pushed') {
+        const bt = b.last_pushed ? Date.parse(b.last_pushed) : -Infinity
+        const at = a.last_pushed ? Date.parse(a.last_pushed) : -Infinity
+        return bt - at || a.name.localeCompare(b.name)
+      }
+      return a.name.localeCompare(b.name)
+    })
 
   return (
     <div className="min-h-screen bg-muted/40 dark:bg-background flex">
@@ -120,6 +126,7 @@ export default function Dashboard({ onLogout }: Props) {
                 <SelectContent>
                   <SelectItem value="name">Name A→Z</SelectItem>
                   <SelectItem value="tags">Most tags</SelectItem>
+                  <SelectItem value="pushed">Recently pushed</SelectItem>
                 </SelectContent>
               </Select>
 

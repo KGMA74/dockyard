@@ -10,6 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // LocalBackend stores blobs, manifests, and uploads on the local filesystem.
@@ -295,6 +296,14 @@ func (b *LocalBackend) DeleteRepository(name string) error {
 		return fmt.Errorf("repository %q not found", name)
 	}
 	return os.RemoveAll(dir)
+}
+
+func (b *LocalBackend) TagPushedAt(name, tag string) (time.Time, error) {
+	info, err := os.Stat(b.tagPath(name, tag))
+	if err != nil {
+		return time.Time{}, err
+	}
+	return info.ModTime(), nil
 }
 
 func (b *LocalBackend) Stats() (StorageStats, error) {

@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"dockyard/internal/storage"
 
@@ -46,14 +47,25 @@ func (h *Handler) GetRepositories(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, err500(err))
 	}
 	type repoInfo struct {
-		Name  string   `json:"name"`
-		Tags  []string `json:"tags"`
-		Total int      `json:"total"`
+		Name       string   `json:"name"`
+		Tags       []string `json:"tags"`
+		Total      int      `json:"total"`
+		LastPushed string   `json:"last_pushed,omitempty"`
 	}
 	result := make([]repoInfo, 0, len(repos))
 	for _, name := range repos {
 		tags, _ := h.store.ListTags(name)
-		result = append(result, repoInfo{Name: name, Tags: tags, Total: len(tags)})
+		var lastPushed time.Time
+		for _, tag := range tags {
+			if pushedAt, err := h.store.TagPushedAt(name, tag); err == nil && pushedAt.After(lastPushed) {
+				lastPushed = pushedAt
+			}
+		}
+		info := repoInfo{Name: name, Tags: tags, Total: len(tags)}
+		if !lastPushed.IsZero() {
+			info.LastPushed = lastPushed.UTC().Format(time.RFC3339)
+		}
+		result = append(result, info)
 	}
 	return c.JSON(http.StatusOK, map[string]any{
 		"repositories": result,
@@ -72,13 +84,18 @@ func (h *Handler) GetTags(c echo.Context) error {
 		return c.JSON(http.StatusInternalServerError, err500(err))
 	}
 	type tagInfo struct {
-		Tag    string `json:"tag"`
-		Digest string `json:"digest"`
+		Tag      string `json:"tag"`
+		Digest   string `json:"digest"`
+		PushedAt string `json:"pushed_at,omitempty"`
 	}
 	result := make([]tagInfo, 0, len(tags))
 	for _, tag := range tags {
 		_, digest, _ := h.store.GetManifest(name, tag)
-		result = append(result, tagInfo{Tag: tag, Digest: digest})
+		info := tagInfo{Tag: tag, Digest: digest}
+		if pushedAt, err := h.store.TagPushedAt(name, tag); err == nil {
+			info.PushedAt = pushedAt.UTC().Format(time.RFC3339)
+		}
+		result = append(result, info)
 	}
 	return c.JSON(http.StatusOK, map[string]any{"name": name, "tags": result, "total": len(result)})
 }

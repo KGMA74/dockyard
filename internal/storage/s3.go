@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"strings"
+	"time"
 
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
@@ -272,6 +273,15 @@ func (s *S3Backend) ListTags(name string) ([]string, error) {
 		}
 	}
 	return tags, nil
+}
+
+func (s *S3Backend) TagPushedAt(name, tag string) (time.Time, error) {
+	key := fmt.Sprintf("manifests/%s/%s", name, tag)
+	info, err := s.client.StatObject(context.Background(), s.bucket, key, minio.StatObjectOptions{})
+	if err != nil {
+		return time.Time{}, err
+	}
+	return info.LastModified, nil
 }
 
 // DeleteRepository removes every manifest and tag object under the repository.

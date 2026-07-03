@@ -11,6 +11,7 @@ RUN npm run build
 FROM --platform=$BUILDPLATFORM golang:1.26.4-alpine AS builder
 
 ARG TARGETOS TARGETARCH
+ARG VERSION=dev
 
 WORKDIR /app
 
@@ -22,7 +23,7 @@ COPY --from=ui /internal/ui/dist ./internal/ui/dist
 
 RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     go build \
-    -ldflags="-w -s" \
+    -ldflags="-w -s -X dockyard/internal/version.Version=${VERSION}" \
     -trimpath \
     -o dockyard \
     ./cmd/dockyard
