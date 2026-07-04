@@ -5,13 +5,10 @@ metadata:
   name: {{ include "dockyard.fullname" . }}
   labels:
     {{- include "dockyard.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
   annotations:
-    {{- if eq .Values.ingress.className "traefik" }}
-    traefik.ingress.kubernetes.io/router.middlewares: {{ .Release.Namespace }}-{{ include "dockyard.fullname" . }}-registry@kubernetescrd
-    {{- end }}
-    {{- with .Values.ingress.annotations }}
     {{- toYaml . | nindent 4 }}
-    {{- end }}
+  {{- end }}
 spec:
   {{- if .Values.ingress.className }}
   ingressClassName: {{ .Values.ingress.className | quote }}
