@@ -84,7 +84,7 @@ This does not delete the PVC created for local storage; remove it manually if yo
 | Name                       | Description                                                                                   | Value    |
 | ---------------------------- | -------------------------------------------------------------------------------------------------- | ---------- |
 | `ingress.enabled`             | Enable ingress                                                                                       | `false`   |
-| `ingress.className`           | `traefik` (auto-creates a Middleware for large blob uploads) or `nginx`                              | `""`       |
+| `ingress.className`           | `traefik` (streams large blob uploads out of the box) or `nginx`                              | `""`       |
 | `ingress.annotations`         | Extra ingress annotations. For `nginx`, set `proxy-body-size: "0"` and `proxy-request-buffering: "off"` to allow large blob uploads | `{}`       |
 | `ingress.hosts`               | Ingress hosts/paths                                                                                   | see values.yaml |
 | `ingress.tls`                 | Ingress TLS configuration                                                                             | `[]`       |
@@ -103,7 +103,7 @@ See [`values.yaml`](./values.yaml) for the complete list of configurable paramet
 
 ## Large blob uploads behind an ingress
 
-Pushing large images (many/large layers) through an ingress controller can fail with connection-reset errors unless request buffering is disabled. This chart handles it automatically for Traefik (`ingress.className: traefik`) by creating a `Middleware` with unlimited `maxRequestBodyBytes`. For `nginx`, add these annotations yourself:
+Pushing large images (many/large layers) through an ingress controller can fail with connection-reset errors unless request buffering is disabled. Traefik (`ingress.className: traefik`) streams both directions by default, so no extra configuration is needed — do not add a buffering `Middleware`, it fully buffers the request and response and breaks both large blob uploads and the SSE live-update feed. For `nginx`, add these annotations yourself:
 
 ```yaml
 ingress:
