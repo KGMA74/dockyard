@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	"dockyard/config"
@@ -12,6 +13,7 @@ import (
 	"dockyard/internal/events"
 	"dockyard/internal/registry"
 	"dockyard/internal/storage"
+	"dockyard/internal/store"
 )
 
 type mode string
@@ -27,6 +29,7 @@ type Server struct {
 	backend       storage.Backend
 	proxy         *registry.Client
 	auth          *auth.Manager
+	store         *store.Store
 	events        *events.Hub
 	v2AuthEnabled bool
 	v2AuthHash    string
@@ -65,6 +68,15 @@ func NewServer() *http.Server {
 		srv.backend = backend
 		scheduleGC(backend)
 	}
+
+	// The SQLite store lives alongside registry data in both modes: proxy mode
+	// also needs users/sessions/audit even though blobs stay upstream.
+	st, err := store.Open(filepath.Join(cfg.StoragePath, "dockyard.db"))
+	if err != nil {
+		slog.Error("store init failed", "err", err)
+		os.Exit(1)
+	}
+	srv.store = st
 
 	if cfg.AuthUsername == "" || cfg.AuthPassword == "" || cfg.JWTSecret == "" {
 		slog.Error("AUTH_USERNAME, AUTH_PASSWORD and JWT_SECRET must be set")
