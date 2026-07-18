@@ -25,7 +25,7 @@
 | P2.1 — Mode mirror | #14 | ✅ fait | (ce commit) | REGISTRY_MODE=mirror (internal/v2/mirror.go) : hit local, miss→fetch upstream write-through, TTL tags (MIRROR_TAG_TTL), stale si upstream down, push direct OK, hits/misses dans /health, events SSE au cache-fill |
 | P2.2 — Mirror auth upstream | #15 | ✅ fait | (ce commit) | token dance Bearer dans registry.Client (401 challenge → realm → token, cache par scope), Basic conservé ; e2e réel : docker pull alpine via mirror devant registry-1.docker.io |
 | P2.3 — Mirror hit/miss | #16 | ✅ fait | (ce commit) | compteurs déjà dans /health (P2.1) ; cartes Cache hits/misses + upstream dans StorageTab (choix : pas de nouvel endpoint admin, /health suffit) |
-| P2.4 — Tests mirror | #17 | ⬜ à faire | | |
+| P2.4 — Tests mirror | #17 | ✅ fait | `c056924` | couverts par mirror_test.go + client_test.go, ajout du scénario multi-arch enfant-par-digest |
 | P3.1 — /metrics Prometheus | #18 | ⬜ à faire | | |
 | P3.2 — /health enrichi | #19 | ⬜ à faire | | corrige Stats() S3 full-list |
 | P3.3 — Dashboard insights | #20 | ⬜ à faire | | après P3.1/P3.2 |
