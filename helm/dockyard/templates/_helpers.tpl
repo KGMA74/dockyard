@@ -72,6 +72,17 @@ Name of the PVC.
 {{- end }}
 
 {{/*
+Name of the ServiceAccount used by the Deployment.
+*/}}
+{{- define "dockyard.serviceAccountName" -}}
+{{- if .Values.serviceAccount.create }}
+{{- default (include "dockyard.fullname" .) .Values.serviceAccount.name }}
+{{- else }}
+{{- default "default" .Values.serviceAccount.name }}
+{{- end }}
+{{- end }}
+
+{{/*
 Container image reference.
 */}}
 {{- define "dockyard.image" -}}

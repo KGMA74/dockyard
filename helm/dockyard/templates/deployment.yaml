@@ -20,6 +20,7 @@ spec:
       labels:
         {{- include "dockyard.selectorLabels" . | nindent 8 }}
     spec:
+      serviceAccountName: {{ include "dockyard.serviceAccountName" . }}
       {{- with .Values.imagePullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}

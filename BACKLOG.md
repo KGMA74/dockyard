@@ -30,7 +30,7 @@
 | P3.2 — /health enrichi | #19 | ✅ fait | (ce commit) | probe storage (latence, degraded), stats cachées 30 s (les jauges Prometheus ne full-listent plus S3 à chaque scrape), free_bytes disque en local (win+unix) |
 | P3.3 — Dashboard insights | #20 | ⬜ à faire | | après P3.1/P3.2 |
 | P3.4 — OpenTelemetry | #21 | ⬜ à faire | | optionnel |
-| P3.5 — Helm ServiceMonitor | #22 | ⬜ à faire | | parallélisable |
+| P3.5 — Helm ServiceMonitor | #22 | ✅ fait | (ce commit) | serviceaccount.yaml (create/name/annotations) + servicemonitor.yaml (gated metrics.serviceMonitor.enabled, scheme https si tls) — `helm template` à valider côté user |
 | P4.1 — Pull tracking | #23 | ⬜ à faire | | |
 | P4.2 — Moteur rétention | #24 | ⬜ à faire | | après P4.1 + P1.9 |
 | P4.3 — UI rétention | #25 | ⬜ à faire | | |

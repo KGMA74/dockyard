@@ -48,6 +48,23 @@ auth:
   # (and optionally s3-access-key, s3-secret-key, registry-password).
   # When set, no Secret is created by this chart.
 
+serviceAccount:
+  # Create a dedicated ServiceAccount (no extra permissions granted).
+  create: true
+  # Override the generated name, or set create=false and name to use an
+  # existing one ("" + create=false → "default").
+  name: ""
+  annotations: {}
+
+metrics:
+  serviceMonitor:
+    # Requires the Prometheus Operator CRDs (kube-prometheus-stack).
+    # Dockyard itself serves /metrics whenever METRICS_ENABLED=true.
+    enabled: false
+    interval: 30s
+    # Extra labels for Prometheus instance selection (e.g. release: kps).
+    labels: {}
+
 tls:
   # off | static | self-signed | acme — served natively by Dockyard.
   # "static" expects existingCertSecret below; "acme" needs the pod reachable
