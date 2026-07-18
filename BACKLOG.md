@@ -26,7 +26,7 @@
 | P2.2 — Mirror auth upstream | #15 | ✅ fait | `cef9b6b` | token dance Bearer dans registry.Client (401 challenge → realm → token, cache par scope), Basic conservé ; e2e réel : docker pull alpine via mirror devant registry-1.docker.io |
 | P2.3 — Mirror hit/miss | #16 | ✅ fait | `3e12fd0` | compteurs déjà dans /health (P2.1) ; cartes Cache hits/misses + upstream dans StorageTab (choix : pas de nouvel endpoint admin, /health suffit) |
 | P2.4 — Tests mirror | #17 | ✅ fait | `c056924` | couverts par mirror_test.go + client_test.go, ajout du scénario multi-arch enfant-par-digest |
-| P3.1 — /metrics Prometheus | #18 | ⬜ à faire | | |
+| P3.1 — /metrics Prometheus | #18 | ✅ fait | (ce commit) | internal/metrics (registre par défaut, sources swappables anti-double-register), HTTP par route normalisée (garde anti-cardinalité testée), jauges storage, compteurs GC (scheduler+admin), hits/misses mirror, échecs auth ; METRICS_ENABLED=true par défaut |
 | P3.2 — /health enrichi | #19 | ⬜ à faire | | corrige Stats() S3 full-list |
 | P3.3 — Dashboard insights | #20 | ⬜ à faire | | après P3.1/P3.2 |
 | P3.4 — OpenTelemetry | #21 | ⬜ à faire | | optionnel |

@@ -26,8 +26,8 @@ const (
 )
 
 type Server struct {
-	port          int
-	mode          mode
+	port            int
+	mode            mode
 	backend         storage.Backend
 	proxy           *registry.Client
 	auth            *auth.Manager
@@ -40,6 +40,7 @@ type Server struct {
 	rateLimitLoginPerMin int
 	rateLimitGlobalRPS   int
 	mirrorTagTTL         time.Duration
+	metricsEnabled       bool
 }
 
 func NewServer() *http.Server {
@@ -61,6 +62,7 @@ func NewServer() *http.Server {
 		corsAllowedOrigins:   cfg.CORSAllowedOrigins,
 		rateLimitLoginPerMin: cfg.RateLimitLoginPerMin,
 		rateLimitGlobalRPS:   cfg.RateLimitGlobalRPS,
+		metricsEnabled:       cfg.MetricsEnabled,
 	}
 
 	switch m {

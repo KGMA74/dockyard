@@ -9,6 +9,7 @@ import (
 	"dockyard/internal/admin"
 	"dockyard/internal/audit"
 	"dockyard/internal/auth"
+	"dockyard/internal/metrics"
 	uiassets "dockyard/internal/ui"
 	"dockyard/internal/v2"
 	"dockyard/internal/version"
@@ -43,6 +44,25 @@ func (s *Server) RegisterRoutes() http.Handler {
 		},
 	}))
 	e.Use(middleware.Recover())
+
+	// Prometheus instrumentation — registered before the V2 interceptor so
+	// registry traffic is measured too (paths are normalized to a bounded
+	// label set in metrics.PathClass).
+	if s.metricsEnabled {
+		e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
+			return func(c echo.Context) error {
+				start := time.Now()
+				err := next(c)
+				metrics.ObserveRequest(
+					c.Request().Method,
+					c.Request().URL.Path,
+					c.Response().Status,
+					time.Since(start),
+				)
+				return err
+			}
+		})
+	}
 
 	// CORS is off by default: the UI is embedded and served same-origin. Set
 	// CORS_ALLOWED_ORIGINS to open the API to external browser clients.
@@ -99,6 +119,21 @@ func (s *Server) RegisterRoutes() http.Handler {
 		v2h = mirror
 	default:
 		v2h = v2.New(s.backend, s.events)
+	}
+	if s.metricsEnabled {
+		if mirror != nil {
+			metrics.SetMirrorSource(mirror.Stats)
+		}
+		if s.backend != nil {
+			backend := s.backend
+			metrics.SetStorageSource(func() (int64, int64, int64) {
+				st, err := backend.Stats()
+				if err != nil {
+					return 0, 0, 0
+				}
+				return int64(st.BlobCount), st.TotalSize, int64(st.RepoCount)
+			})
+		}
 	}
 
 	// Audit sits inside the auth wrapper so it sees the authenticated actor;
@@ -184,6 +219,11 @@ func (s *Server) RegisterRoutes() http.Handler {
 	// because EventSource can't set an Authorization header — it authenticates
 	// via a ?token= query param instead (see MiddlewareEventStream).
 	e.GET("/api/admin/events", admin.Events(s.events), s.auth.MiddlewareEventStream())
+
+	// ── Metrics ───────────────────────────────────────────────────────────────
+	if s.metricsEnabled {
+		e.GET("/metrics", echo.WrapHandler(metrics.Handler()))
+	}
 
 	// ── Health ────────────────────────────────────────────────────────────────
 	e.GET("/health", func(c echo.Context) error {

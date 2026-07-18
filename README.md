@@ -145,6 +145,11 @@ V2_AUTH_ENABLED=false
 # Self-signed note: docker clients need the registry in "insecure-registries",
 # or the cert (<storage>/tls/cert.pem) added to their trust store.
 
+# ── Observability ─────────────────────────────────────────────────────────────
+# Prometheus metrics on /metrics (unauthenticated — keep the port private or
+# disable): HTTP by normalized route, storage gauges, GC runs, mirror cache.
+# METRICS_ENABLED=true
+
 # ── Proxy mode ────────────────────────────────────────────────────────────────
 # REGISTRY_MODE=proxy
 # REGISTRY_URL=http://your-registry:5000
@@ -292,6 +297,7 @@ All endpoints require `Authorization: Bearer <token>` (except login/logout).
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/health` | Health check + mode + version info |
+| `GET` | `/metrics` | Prometheus metrics (when `METRICS_ENABLED`) |
 | `POST` | `/api/admin/auth/login` | Get access + refresh tokens |
 | `POST` | `/api/admin/auth/refresh` | Renew the access token (rotates the refresh token) |
 | `POST` | `/api/admin/auth/logout` | Revoke token + kill session (persisted) |
@@ -498,6 +504,11 @@ V2_AUTH_ENABLED=false
 # Note self-signed : les clients docker doivent mettre la registry en
 # "insecure-registries", ou ajouter <storage>/tls/cert.pem à leur trust store.
 
+# ── Observabilité ─────────────────────────────────────────────────────────────
+# Métriques Prometheus sur /metrics (non authentifié — garder le port privé ou
+# désactiver) : HTTP par route normalisée, jauges storage, runs de GC, cache mirror.
+# METRICS_ENABLED=true
+
 # ── Mode proxy ────────────────────────────────────────────────────────────────
 # REGISTRY_MODE=proxy
 # REGISTRY_URL=http://votre-registry:5000
@@ -645,6 +656,7 @@ Tous les endpoints nécessitent `Authorization: Bearer <token>` (sauf login/logo
 | Méthode | Endpoint | Description |
 |---|---|---|
 | `GET` | `/health` | Vérification d'état + infos mode + version |
+| `GET` | `/metrics` | Métriques Prometheus (si `METRICS_ENABLED`) |
 | `POST` | `/api/admin/auth/login` | Obtenir les tokens d'accès + refresh |
 | `POST` | `/api/admin/auth/refresh` | Renouveler le token d'accès (rotation du refresh) |
 | `POST` | `/api/admin/auth/logout` | Révoquer le token + tuer la session (persisté) |

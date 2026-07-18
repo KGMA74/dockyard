@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"dockyard/internal/metrics"
 	"dockyard/internal/storage"
 )
 
@@ -34,6 +35,7 @@ func scheduleGC(backend storage.Backend) {
 
 func runGC(gc gcable) {
 	slog.Info("gc: starting scheduled garbage collection")
+	start := time.Now()
 	referenced, err := gc.ReferencedBlobs()
 	if err != nil {
 		slog.Error("gc: cannot list referenced blobs", "err", err)
@@ -56,6 +58,7 @@ func runGC(gc gcable) {
 			count++
 		}
 	}
+	metrics.ObserveGC(freed, time.Since(start))
 	slog.Info("gc: done", "removed", count, "freed", gcHumanSize(freed))
 }
 

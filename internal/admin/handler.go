@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"dockyard/internal/metrics"
 	"dockyard/internal/storage"
 
 	"github.com/labstack/echo/v4"
@@ -206,6 +207,7 @@ func (h *Handler) GarbageCollect(c echo.Context) error {
 		})
 	}
 	dryRun := c.QueryParam("dryRun") == "true"
+	start := time.Now()
 	referenced, err := h.gcStore.ReferencedBlobs()
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, err500(err))
@@ -230,6 +232,9 @@ func (h *Handler) GarbageCollect(c echo.Context) error {
 			freed += size
 			removed = append(removed, digest)
 		}
+	}
+	if !dryRun {
+		metrics.ObserveGC(freed, time.Since(start))
 	}
 	return c.JSON(http.StatusOK, map[string]any{
 		"removed":     removed,

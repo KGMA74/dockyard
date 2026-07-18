@@ -67,6 +67,10 @@ type Config struct {
 	TLSKeyFile   string
 	TLSDomain    string
 	TLSACMEEmail string
+
+	// MetricsEnabled exposes Prometheus metrics on /metrics (no auth — keep
+	// the port private or disable).
+	MetricsEnabled bool
 }
 
 func Load() *Config {
@@ -108,6 +112,8 @@ func Load() *Config {
 		TLSKeyFile:   getEnv("TLS_KEY_FILE", ""),
 		TLSDomain:    getEnv("TLS_DOMAIN", ""),
 		TLSACMEEmail: getEnv("TLS_ACME_EMAIL", ""),
+
+		MetricsEnabled: getEnv("METRICS_ENABLED", "true") == "true",
 	}
 }
 
