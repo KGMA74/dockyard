@@ -33,6 +33,10 @@ type Server struct {
 	events          *events.Hub
 	v2AuthEnabled   bool
 	v2AnonymousPull bool
+
+	corsAllowedOrigins   []string
+	rateLimitLoginPerMin int
+	rateLimitGlobalRPS   int
 }
 
 func NewServer() *http.Server {
@@ -50,6 +54,10 @@ func NewServer() *http.Server {
 		v2AuthEnabled:   cfg.V2AuthEnabled,
 		v2AnonymousPull: cfg.V2AnonymousPull,
 		events:          events.NewHub(),
+
+		corsAllowedOrigins:   cfg.CORSAllowedOrigins,
+		rateLimitLoginPerMin: cfg.RateLimitLoginPerMin,
+		rateLimitGlobalRPS:   cfg.RateLimitGlobalRPS,
 	}
 
 	switch m {

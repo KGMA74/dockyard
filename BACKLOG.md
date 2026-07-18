@@ -16,7 +16,7 @@
 | P1.3 — Sessions/refresh | #5 | ✅ fait | `fd544aa` | access 15 min + refresh 30 j rotation single-use, /auth/refresh, /sessions list+revoke, blacklist persistée, JWT_SECRET_PREVIOUS, intercepteur UI |
 | P1.4 — Docker token auth /v2/token | #6 | ✅ fait | (ce commit) | /v2/token + challenge Bearer + fallback Basic, RBAC par action/repo sur /v2, **flip V2_AUTH_ENABLED=true (breaking)**, V2_ANONYMOUS_PULL ; e2e docker login/push/pull vérifié |
 | P1.5 — Audit log | #7 | ✅ fait | (ce commit) | internal/audit : mutations admin + push/delete-manifest v2 (acteur du Principal, anonymes inclus), hooks login/logout/password, GET /api/admin/audit filtrable, table dans SettingsTab |
-| P1.6 — Rate limiting + CORS | #8 | ⬜ à faire | | parallélisable |
+| P1.6 — Rate limiting + CORS | #8 | ✅ fait | (ce commit) | limiteur strict login+/v2/token (RATE_LIMIT_LOGIN_PER_MIN=10), plafond global par IP (RATE_LIMIT_GLOBAL_RPS=100), CORS off par défaut (CORS_ALLOWED_ORIGINS) |
 | P1.7 — TLS natif | #9 | ⬜ à faire | | parallélisable |
 | P1.8 — UI users + sessions | #10 | ⬜ à faire | | après P1.2/P1.3 |
 | P1.9 — GC dry-run | #11 | ⬜ à faire | | petit gain, dérisque P4.2 |
@@ -59,7 +59,7 @@
 
 ## Prochaine étape
 
-**P1.6 — Rate limiting + CORS resserré** (issue #8) : middleware Echo token-bucket par IP — strict sur `/api/admin/auth/login` + `/v2/token`, configurable (`RATE_LIMIT_*`) ailleurs ; remplacer le CORS grand ouvert de `routes.go` par `CORS_ALLOWED_ORIGINS` (défaut same-origin, l'UI est embarquée).
+**P1.7 — TLS natif** (issue #9) : `TLS_MODE=off|static|self-signed|acme` — chemins cert/clé statiques, autogen self-signed persisté sous `<StoragePath>/tls/`, ACME via lego (HTTP-01) avec cache ; values Helm pour monter des certs ; note insecure-registries pour le self-signed.
 
 ## Notes de reprise
 

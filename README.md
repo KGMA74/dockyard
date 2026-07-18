@@ -124,6 +124,15 @@ V2_AUTH_ENABLED=false
 # Allow unauthenticated pulls while pushes require login (public-read registry)
 # V2_ANONYMOUS_PULL=true
 
+# ── Hardening ─────────────────────────────────────────────────────────────────
+# Brute-force throttle on login + /v2/token, per client IP (0 disables)
+# RATE_LIMIT_LOGIN_PER_MIN=10
+# Loose per-IP requests/second cap on everything else (0 disables)
+# RATE_LIMIT_GLOBAL_RPS=100
+# CORS is OFF by default (the UI is embedded, same-origin). Open the API to
+# external browser clients with a comma-separated origin list:
+# CORS_ALLOWED_ORIGINS=https://tools.example.com
+
 # ── Proxy mode ────────────────────────────────────────────────────────────────
 # REGISTRY_MODE=proxy
 # REGISTRY_URL=http://your-registry:5000
@@ -447,6 +456,15 @@ JWT_SECRET=changez-moi-pour-une-longue-chaine-aleatoire
 V2_AUTH_ENABLED=false
 # Autoriser le pull anonyme, push authentifié (registry publique en lecture)
 # V2_ANONYMOUS_PULL=true
+
+# ── Durcissement ──────────────────────────────────────────────────────────────
+# Limitation brute-force sur login + /v2/token, par IP cliente (0 désactive)
+# RATE_LIMIT_LOGIN_PER_MIN=10
+# Plafond souple de requêtes/seconde par IP sur le reste (0 désactive)
+# RATE_LIMIT_GLOBAL_RPS=100
+# CORS désactivé par défaut (UI embarquée, même origine). Ouvrir l'API à des
+# clients navigateur externes avec une liste d'origines séparées par virgules :
+# CORS_ALLOWED_ORIGINS=https://outils.exemple.com
 
 # ── Mode proxy ────────────────────────────────────────────────────────────────
 # REGISTRY_MODE=proxy

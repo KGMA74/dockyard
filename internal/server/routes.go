@@ -15,6 +15,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
+	"golang.org/x/time/rate"
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
@@ -42,13 +43,41 @@ func (s *Server) RegisterRoutes() http.Handler {
 		},
 	}))
 	e.Use(middleware.Recover())
-	e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
-		AllowOrigins:     []string{"https://*", "http://*"},
-		AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
-		AllowHeaders:     []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
-		AllowCredentials: true,
-		MaxAge:           300,
-	}))
+
+	// CORS is off by default: the UI is embedded and served same-origin. Set
+	// CORS_ALLOWED_ORIGINS to open the API to external browser clients.
+	if len(s.corsAllowedOrigins) > 0 {
+		e.Use(middleware.CORSWithConfig(middleware.CORSConfig{
+			AllowOrigins:     s.corsAllowedOrigins,
+			AllowMethods:     []string{"GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"},
+			AllowHeaders:     []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+			AllowCredentials: true,
+			MaxAge:           300,
+		}))
+	}
+
+	// Loose per-IP rate limit on everything (docker pushes issue many requests
+	// per layer — keep this generous). Strict limiter below guards the
+	// credential endpoints against brute force.
+	if s.rateLimitGlobalRPS > 0 {
+		e.Use(middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
+			Store: middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{
+				Rate:      rate.Limit(s.rateLimitGlobalRPS),
+				Burst:     s.rateLimitGlobalRPS * 2,
+				ExpiresIn: 3 * time.Minute,
+			}),
+		}))
+	}
+	strictLimiter := func(next echo.HandlerFunc) echo.HandlerFunc { return next }
+	if s.rateLimitLoginPerMin > 0 {
+		strictLimiter = middleware.RateLimiterWithConfig(middleware.RateLimiterConfig{
+			Store: middleware.NewRateLimiterMemoryStoreWithConfig(middleware.RateLimiterMemoryStoreConfig{
+				Rate:      rate.Limit(float64(s.rateLimitLoginPerMin) / 60.0),
+				Burst:     s.rateLimitLoginPerMin,
+				ExpiresIn: 10 * time.Minute,
+			}),
+		})
+	}
 
 	// ── V2 engine — intercepted before the Echo router ────────────────────────
 	var v2h http.Handler
@@ -86,7 +115,8 @@ func (s *Server) RegisterRoutes() http.Handler {
 			if path == "/v2/token" {
 				// The token endpoint must stay outside the auth wrapper — it
 				// is where clients go to authenticate in the first place.
-				return v2Token(c)
+				// Credentials endpoint → strict brute-force limiter.
+				return strictLimiter(v2Token)(c)
 			}
 			if v2.IsV2Path(path) {
 				v2h.ServeHTTP(c.Response(), c.Request())
@@ -97,7 +127,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	})
 
 	// ── Auth ──────────────────────────────────────────────────────────────────
-	e.POST("/api/admin/auth/login", s.auth.Login)
+	e.POST("/api/admin/auth/login", s.auth.Login, strictLimiter)
 	e.POST("/api/admin/auth/logout", s.auth.Logout)
 	// Refresh authenticates with the refresh token itself, not a JWT — it must
 	// stay outside the middleware group (the access token may already be dead).

@@ -3,6 +3,7 @@ package config
 import (
 	"os"
 	"strconv"
+	"strings"
 
 	_ "github.com/joho/godotenv/autoload"
 )
@@ -40,6 +41,16 @@ type Config struct {
 	JWTSecretPrevious string
 	V2AuthEnabled     bool
 	V2AnonymousPull   bool
+
+	// CORSAllowedOrigins is empty by default: the UI is embedded and served
+	// same-origin, so no cross-origin access is needed at all.
+	CORSAllowedOrigins []string
+	// RateLimitLoginPerMin throttles login + /v2/token per client IP
+	// (brute-force protection). 0 disables.
+	RateLimitLoginPerMin int
+	// RateLimitGlobalRPS is a loose per-IP requests/second cap on everything
+	// else. 0 disables.
+	RateLimitGlobalRPS int
 }
 
 func Load() *Config {
@@ -70,7 +81,33 @@ func Load() *Config {
 		// or V2_ANONYMOUS_PULL=true for a public-read registry.
 		V2AuthEnabled:   getEnv("V2_AUTH_ENABLED", "true") == "true",
 		V2AnonymousPull: getEnv("V2_ANONYMOUS_PULL", "false") == "true",
+
+		CORSAllowedOrigins:   splitList(getEnv("CORS_ALLOWED_ORIGINS", "")),
+		RateLimitLoginPerMin: getEnvInt("RATE_LIMIT_LOGIN_PER_MIN", 10),
+		RateLimitGlobalRPS:   getEnvInt("RATE_LIMIT_GLOBAL_RPS", 100),
 	}
+}
+
+func getEnvInt(key string, fallback int) int {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return fallback
+}
+
+func splitList(raw string) []string {
+	if raw == "" {
+		return nil
+	}
+	var out []string
+	for part := range strings.SplitSeq(raw, ",") {
+		if p := strings.TrimSpace(part); p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func getEnv(key, fallback string) string {
