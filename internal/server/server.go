@@ -41,6 +41,7 @@ type Server struct {
 	rateLimitGlobalRPS   int
 	mirrorTagTTL         time.Duration
 	metricsEnabled       bool
+	stats                *statsCache
 }
 
 func NewServer() *http.Server {
@@ -98,6 +99,10 @@ func NewServer() *http.Server {
 		}
 		srv.backend = backend
 		scheduleGC(backend)
+	}
+
+	if srv.backend != nil {
+		srv.stats = newStatsCache(srv.backend, 30*time.Second)
 	}
 
 	// The SQLite store lives alongside registry data in both modes: proxy mode

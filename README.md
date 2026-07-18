@@ -296,7 +296,7 @@ All endpoints require `Authorization: Bearer <token>` (except login/logout).
 
 | Method | Endpoint | Description |
 |---|---|---|
-| `GET` | `/health` | Health check + mode + version info |
+| `GET` | `/health` | Health + mode + version, storage probe (`ok`, `latency_ms`, cached counts, `free_bytes` on local), mirror cache counters; `status: degraded` when the backend fails |
 | `GET` | `/metrics` | Prometheus metrics (when `METRICS_ENABLED`) |
 | `POST` | `/api/admin/auth/login` | Get access + refresh tokens |
 | `POST` | `/api/admin/auth/refresh` | Renew the access token (rotates the refresh token) |
@@ -655,7 +655,7 @@ Tous les endpoints nécessitent `Authorization: Bearer <token>` (sauf login/logo
 
 | Méthode | Endpoint | Description |
 |---|---|---|
-| `GET` | `/health` | Vérification d'état + infos mode + version |
+| `GET` | `/health` | État + mode + version, probe storage (`ok`, `latency_ms`, compteurs cachés, `free_bytes` en local), compteurs mirror ; `status: degraded` si le backend échoue |
 | `GET` | `/metrics` | Métriques Prometheus (si `METRICS_ENABLED`) |
 | `POST` | `/api/admin/auth/login` | Obtenir les tokens d'accès + refresh |
 | `POST` | `/api/admin/auth/refresh` | Renouveler le token d'accès (rotation du refresh) |

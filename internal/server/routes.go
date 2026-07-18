@@ -4,6 +4,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"net/http"
+	"strings"
 	"time"
 
 	"dockyard/internal/admin"
@@ -124,10 +125,10 @@ func (s *Server) RegisterRoutes() http.Handler {
 		if mirror != nil {
 			metrics.SetMirrorSource(mirror.Stats)
 		}
-		if s.backend != nil {
-			backend := s.backend
+		if s.stats != nil {
+			cache := s.stats
 			metrics.SetStorageSource(func() (int64, int64, int64) {
-				st, err := backend.Stats()
+				st, err := cache.Get()
 				if err != nil {
 					return 0, 0, 0
 				}
@@ -238,6 +239,34 @@ func (s *Server) RegisterRoutes() http.Handler {
 		if mirror != nil {
 			hits, misses := mirror.Stats()
 			body["mirror"] = map[string]uint64{"hits": hits, "misses": misses}
+		}
+		if s.backend != nil {
+			// Probe the storage backend and time it: on S3 this is a real
+			// round trip, locally a stat() — either way it proves the backend
+			// answers. The digest cannot exist, which is fine.
+			start := time.Now()
+			_, probeErr := s.backend.BlobExists("sha256:" + strings.Repeat("0", 64))
+			st := map[string]any{
+				"ok":         probeErr == nil,
+				"latency_ms": time.Since(start).Milliseconds(),
+			}
+			if probeErr != nil {
+				st["error"] = probeErr.Error()
+				body["status"] = "degraded"
+			}
+			if s.stats != nil {
+				if cached, err := s.stats.Get(); err == nil {
+					st["blobs"] = cached.BlobCount
+					st["bytes"] = cached.TotalSize
+					st["repositories"] = cached.RepoCount
+				}
+			}
+			if local, ok := s.backend.(interface{ Root() string }); ok {
+				if free := diskFreeBytes(local.Root()); free > 0 {
+					st["free_bytes"] = free
+				}
+			}
+			body["storage"] = st
 		}
 		return c.JSON(http.StatusOK, body)
 	})

@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"dockyard/internal/auth"
 	"dockyard/internal/events"
@@ -35,6 +36,7 @@ func newTestServer(t *testing.T, mutate func(*Server)) http.Handler {
 		auth:    mgr,
 		store:   st,
 		events:  events.NewHub(),
+		stats:   newStatsCache(backend, time.Minute),
 	}
 	if mutate != nil {
 		mutate(s)
