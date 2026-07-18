@@ -1,8 +1,9 @@
-import { Box, HardDrive, KeyRound, LogOut, Settings } from 'lucide-react'
+import { Box, HardDrive, KeyRound, LogOut, Settings, Users } from 'lucide-react'
+import { getRole } from '../api'
 import { ThemeSwitcher } from '../theme'
 import { Button } from '@/components/ui/button'
 
-export type Tab = 'images' | 'storage' | 'settings'
+export type Tab = 'images' | 'storage' | 'users' | 'settings'
 
 interface Props {
   tab: Tab
@@ -11,13 +12,15 @@ interface Props {
   onLogout: () => void
 }
 
-const navItems: { tab: Tab; label: string; icon: typeof Box }[] = [
+const navItems: { tab: Tab; label: string; icon: typeof Box; adminOnly?: boolean }[] = [
   { tab: 'images', label: 'Images', icon: Box },
   { tab: 'storage', label: 'Storage', icon: HardDrive },
+  { tab: 'users', label: 'Users', icon: Users, adminOnly: true },
   { tab: 'settings', label: 'Settings', icon: Settings },
 ]
 
 export default function Sidebar({ tab, onTabChange, onChangePassword, onLogout }: Props) {
+  const isAdmin = getRole() === 'admin'
   return (
     <aside className="w-56 shrink-0 h-screen sticky top-0 border-r bg-card flex flex-col">
       <div className="h-14 flex items-center gap-2.5 px-4 border-b">
@@ -26,7 +29,7 @@ export default function Sidebar({ tab, onTabChange, onChangePassword, onLogout }
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-1">
-        {navItems.map(item => (
+        {navItems.filter(item => !item.adminOnly || isAdmin).map(item => (
           <button
             key={item.tab}
             onClick={() => onTabChange(item.tab)}

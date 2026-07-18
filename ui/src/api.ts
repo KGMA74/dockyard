@@ -89,16 +89,25 @@ export function isAuthenticated(): boolean {
   return !!localStorage.getItem(TOKEN_KEY)
 }
 
-export function getUsername(): string | null {
-  const raw = token()
-  const payload = raw.split('.')[1]
+function tokenClaims(): { sub?: string; role?: string } | null {
+  const payload = token().split('.')[1]
   if (!payload) return null
   try {
     const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'))
-    return (JSON.parse(json) as { sub?: string }).sub ?? null
+    return JSON.parse(json) as { sub?: string; role?: string }
   } catch {
     return null
   }
+}
+
+export function getUsername(): string | null {
+  return tokenClaims()?.sub ?? null
+}
+
+// Tokens issued before the RBAC release have no role claim — the only account
+// back then was the admin, mirror the backend's fallback.
+export function getRole(): string {
+  return tokenClaims()?.role ?? 'admin'
 }
 
 export async function login(username: string, password: string): Promise<void> {
@@ -238,6 +247,58 @@ export async function changePassword(currentPassword: string, newPassword: strin
     method: 'POST',
     body: JSON.stringify({ current_password: currentPassword, new_password: newPassword }),
   })
+}
+
+export interface UserInfo {
+  id: number
+  username: string
+  role: 'admin' | 'pusher' | 'reader'
+  repo_patterns: string[]
+  created_at: string
+  updated_at: string
+}
+
+export async function listUsers(): Promise<{ users: UserInfo[]; count: number }> {
+  return req('/users')
+}
+
+export async function createUser(username: string, password: string, role: string, repoPatterns: string[]): Promise<UserInfo> {
+  return req('/users', {
+    method: 'POST',
+    body: JSON.stringify({ username, password, role, repo_patterns: repoPatterns }),
+  })
+}
+
+export async function updateUser(
+  username: string,
+  changes: { role?: string; repo_patterns?: string[]; password?: string },
+): Promise<UserInfo> {
+  return req(`/users/${encodeURIComponent(username)}`, {
+    method: 'PUT',
+    body: JSON.stringify(changes),
+  })
+}
+
+export async function deleteUser(username: string): Promise<void> {
+  return req(`/users/${encodeURIComponent(username)}`, { method: 'DELETE' })
+}
+
+export interface SessionInfo {
+  id: number
+  username: string
+  user_agent: string
+  ip: string
+  created_at: string
+  last_seen_at: string
+  expires_at: string
+}
+
+export async function listSessions(): Promise<{ sessions: SessionInfo[]; count: number; current_id: number }> {
+  return req('/sessions')
+}
+
+export async function revokeSession(id: number): Promise<void> {
+  return req(`/sessions/${id}`, { method: 'DELETE' })
 }
 
 export interface AuditEntry {

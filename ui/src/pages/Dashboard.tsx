@@ -6,6 +6,7 @@ import RepoList from '../components/RepoList'
 import Sidebar, { Tab } from '../components/Sidebar'
 import StorageTab from '../components/StorageTab'
 import SettingsTab from '../components/SettingsTab'
+import UsersTab from '../components/UsersTab'
 import ChangePasswordModal from '../components/ChangePasswordModal'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -175,6 +176,8 @@ export default function Dashboard({ onLogout }: Props) {
         {tab === 'storage' && (
           <StorageTab stats={stats} repos={repos} onRefresh={loadData} />
         )}
+
+        {tab === 'users' && <UsersTab />}
 
         {tab === 'settings' && (
           <SettingsTab onChangePassword={() => setShowPasswordModal(true)} />

@@ -18,7 +18,7 @@
 | P1.5 — Audit log | #7 | ✅ fait | (ce commit) | internal/audit : mutations admin + push/delete-manifest v2 (acteur du Principal, anonymes inclus), hooks login/logout/password, GET /api/admin/audit filtrable, table dans SettingsTab |
 | P1.6 — Rate limiting + CORS | #8 | ✅ fait | (ce commit) | limiteur strict login+/v2/token (RATE_LIMIT_LOGIN_PER_MIN=10), plafond global par IP (RATE_LIMIT_GLOBAL_RPS=100), CORS off par défaut (CORS_ALLOWED_ORIGINS) |
 | P1.7 — TLS natif | #9 | ✅ fait | (ce commit) | TLS_MODE=off/static/self-signed/acme (autocert TLS-ALPN, pas lego), cert self-signed persisté+réutilisé, Helm tls.* (secret monté, probes HTTPS) — `helm template` à valider côté user |
-| P1.8 — UI users + sessions | #10 | ⬜ à faire | | après P1.2/P1.3 |
+| P1.8 — UI users + sessions | #10 | ✅ fait | (ce commit) | UsersTab (CRUD, rôle inline, patterns, création), sessions avec revoke + « this session », onglet Users admin-only dans la sidebar (rôle décodé du JWT) |
 | P1.9 — GC dry-run | #11 | ✅ fait | (ce commit) | ?dryRun=true sur POST /gc (mark sans sweep), bouton Preview GC dans StorageTab, test préview==réel |
 | P1.10 — Tests intégration P1 | #12 | ⬜ à faire | | après P1.4 |
 | P2.0 — S3 multipart | #13 | ⬜ à faire | | prérequis P2.1 |
@@ -59,7 +59,7 @@
 
 ## Prochaine étape
 
-**P1.8 — UI users + sessions** (issue #10) : onglet Users (CRUD, éditeur rôle/globs, revoke de sessions) dans l'UI React — `ui/src/components/UsersTab.tsx` (nouveau), `Sidebar.tsx`, `api.ts` ; visible admin only (comme la section audit).
+**P1.10 — Tests d'intégration Epic P1** (issue #12) : flow token auth e2e façon client docker (HEAD blob → 401 challenge → GET /v2/token → push), lifecycle refresh/révocation, matrice RBAC en table test — puis la Phase 1 est complète et on passe à **P2.0 (S3 multipart)**.
 
 ## Notes de reprise
 
