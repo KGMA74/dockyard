@@ -47,12 +47,29 @@ const (
 	ActionAdmin  Action = "admin"
 )
 
+// AuditSink receives audit events. Implemented by audit.Recorder; declared
+// here to avoid an import cycle.
+type AuditSink interface {
+	Record(actor, action, repo, tag, ip, result, details string)
+}
+
 type Manager struct {
 	users    *store.Store
 	username string // bootstrap admin username (also used by /v2 basic auth)
 	// secrets[0] signs new tokens; the rest are still accepted for
 	// verification (JWT_SECRET_PREVIOUS rotation grace window).
 	secrets [][]byte
+	audit   AuditSink
+}
+
+// SetAuditSink enables audit records for logins, logouts and password
+// changes. Optional; nil disables.
+func (m *Manager) SetAuditSink(sink AuditSink) { m.audit = sink }
+
+func (m *Manager) auditRecord(actor, action, ip, result, details string) {
+	if m.audit != nil {
+		m.audit.Record(actor, action, "", "", ip, result, details)
+	}
 }
 
 // New builds the auth manager on top of the SQLite user store. On first boot
@@ -307,12 +324,14 @@ func (m *Manager) Login(c echo.Context) error {
 	}
 	u, ok := m.verify(body.Username, body.Password)
 	if !ok {
+		m.auditRecord(body.Username, "login", c.RealIP(), "failure", "invalid credentials")
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
 	}
 	resp, err := m.issueSession(c, u)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "session creation failed"})
 	}
+	m.auditRecord(u.Username, "login", c.RealIP(), "success", "")
 	return c.JSON(http.StatusOK, resp)
 }
 
@@ -371,6 +390,7 @@ func (m *Manager) Logout(c echo.Context) error {
 	if p.SessionID != 0 {
 		_ = m.users.DeleteSession(p.SessionID)
 	}
+	m.auditRecord(p.Username, "logout", c.RealIP(), "success", "")
 	return c.JSON(http.StatusOK, map[string]string{"message": "logged out"})
 }
 
@@ -437,6 +457,7 @@ func (m *Manager) ChangePassword(c echo.Context) error {
 	if err := m.users.UpdateUserPassword(p.Username, string(hash)); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to update password"})
 	}
+	m.auditRecord(p.Username, "change-password", c.RealIP(), "success", "")
 	return c.JSON(http.StatusOK, map[string]string{"message": "password updated"})
 }
 

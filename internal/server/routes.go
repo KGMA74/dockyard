@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"dockyard/internal/admin"
+	"dockyard/internal/audit"
 	"dockyard/internal/auth"
 	uiassets "dockyard/internal/ui"
 	"dockyard/internal/v2"
@@ -66,6 +67,12 @@ func (s *Server) RegisterRoutes() http.Handler {
 		v2h = v2.New(s.backend, s.events)
 	}
 
+	// Audit sits inside the auth wrapper so it sees the authenticated actor;
+	// with auth disabled every V2 actor is recorded as "anonymous".
+	auditor := audit.New(s.store)
+	s.auth.SetAuditSink(auditor)
+	v2h = auditor.V2Wrapper()(v2h)
+
 	// Docker token auth: unauthenticated /v2/* requests get a Bearer challenge
 	// pointing at /v2/token; Basic works as a fallback for plain docker login.
 	if s.v2AuthEnabled {
@@ -97,7 +104,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	e.POST("/api/admin/auth/refresh", s.auth.Refresh)
 
 	// ── Admin API ─────────────────────────────────────────────────────────────
-	api := e.Group("/api/admin", s.auth.Middleware())
+	api := e.Group("/api/admin", s.auth.Middleware(), auditor.AdminMiddleware())
 	if s.mode == modeProxy {
 		h := admin.NewRemote(s.proxy)
 		api.GET("/repositories", h.GetRepositories)
@@ -134,6 +141,9 @@ func (s *Server) RegisterRoutes() http.Handler {
 	// access tokens die within 15 minutes.
 	api.GET("/sessions", s.auth.ListSessions, auth.RequireAdmin)
 	api.DELETE("/sessions/:id", s.auth.RevokeSession, auth.RequireAdmin)
+
+	// Audit trail of sensitive actions (logins, pushes, deletions, GC).
+	api.GET("/audit", auditor.List, auth.RequireAdmin)
 
 	// SSE feed of registry pushes. Registered outside the /api/admin group
 	// because EventSource can't set an Authorization header — it authenticates

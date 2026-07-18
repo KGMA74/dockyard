@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
-import { User, KeyRound, Server, CircleCheck, CircleAlert, GitFork, BookOpen, Bug } from 'lucide-react'
-import { getHealth, getUsername, HealthInfo } from '../api'
+import { User, KeyRound, Server, CircleCheck, CircleAlert, GitFork, BookOpen, Bug, ScrollText } from 'lucide-react'
+import { getAudit, getHealth, getUsername, AuditEntry, HealthInfo } from '../api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -13,10 +13,13 @@ interface Props {
 
 export default function SettingsTab({ onChangePassword }: Props) {
   const [health, setHealth] = useState<HealthInfo | null>(null)
+  const [audit, setAudit] = useState<AuditEntry[] | null>(null)
   const username = getUsername()
 
   useEffect(() => {
     getHealth().then(setHealth).catch(() => setHealth(null))
+    // 403 for non-admin users — the section simply stays hidden.
+    getAudit(30).then(r => setAudit(r.entries)).catch(() => setAudit(null))
   }, [])
 
   const proxyUnreachable = health?.mode === 'proxy' && health.registry?.startsWith('unreachable')
@@ -82,6 +85,66 @@ export default function SettingsTab({ onChangePassword }: Props) {
           )}
         </Card>
       </div>
+
+      {audit !== null && (
+        <div>
+          <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">
+            Audit log
+          </h2>
+          <Card className="p-4 rounded-xl gap-3">
+            <div className="flex items-center gap-3">
+              <div className="size-9 rounded-full bg-muted flex items-center justify-center shrink-0">
+                <ScrollText className="size-4 text-muted-foreground" strokeWidth={1.5} />
+              </div>
+              <div>
+                <p className="text-sm font-medium">Recent sensitive actions</p>
+                <p className="text-xs text-muted-foreground">Logins, pushes, deletions, GC — last 30 events</p>
+              </div>
+            </div>
+            {audit.length === 0 ? (
+              <p className="text-xs text-muted-foreground">No events recorded yet.</p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-xs">
+                  <thead>
+                    <tr className="text-left text-muted-foreground border-b">
+                      <th className="py-1.5 pr-3 font-medium">Date</th>
+                      <th className="py-1.5 pr-3 font-medium">Actor</th>
+                      <th className="py-1.5 pr-3 font-medium">Action</th>
+                      <th className="py-1.5 pr-3 font-medium">Repository</th>
+                      <th className="py-1.5 font-medium">Result</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {audit.map(e => (
+                      <tr key={e.id} className="border-b last:border-0">
+                        <td className="py-1.5 pr-3 whitespace-nowrap text-muted-foreground">
+                          {new Date(e.at + (e.at.endsWith('Z') ? '' : 'Z')).toLocaleString()}
+                        </td>
+                        <td className="py-1.5 pr-3 font-medium">{e.actor || '—'}</td>
+                        <td className="py-1.5 pr-3 font-mono">{e.action}</td>
+                        <td className="py-1.5 pr-3 font-mono">
+                          {e.repo ? `${e.repo}${e.tag ? ':' + e.tag : ''}` : '—'}
+                        </td>
+                        <td className="py-1.5">
+                          <Badge
+                            variant="outline"
+                            className={/^(2\d\d|success)$/.test(e.result)
+                              ? 'text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+                              : 'text-destructive border-destructive/30 bg-destructive/10'}
+                          >
+                            {e.result}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </Card>
+        </div>
+      )}
 
       <div>
         <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">

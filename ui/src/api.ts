@@ -239,6 +239,22 @@ export async function changePassword(currentPassword: string, newPassword: strin
   })
 }
 
+export interface AuditEntry {
+  id: number
+  at: string
+  actor: string
+  action: string
+  repo?: string
+  tag?: string
+  source_ip?: string
+  result: string
+  details?: string
+}
+
+export async function getAudit(limit = 50): Promise<{ entries: AuditEntry[]; total: number }> {
+  return req(`/audit?limit=${limit}`)
+}
+
 export interface HealthInfo {
   status: string
   mode: 'embedded' | 'proxy'

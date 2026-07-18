@@ -273,6 +273,7 @@ All endpoints require `Authorization: Bearer <token>` (except login/logout).
 | `DELETE` | `/api/admin/users/:username` | Delete user (admin, last admin protected) |
 | `GET` | `/api/admin/sessions` | List active sessions (admin) |
 | `DELETE` | `/api/admin/sessions/:id` | Revoke a session (admin) |
+| `GET` | `/api/admin/audit?repo=&actor=&limit=&offset=` | Audit trail: logins, pushes, deletions, GC (admin) |
 | `GET` | `/api/admin/repositories` | List all repositories with tags and last-pushed time |
 | `GET` | `/api/admin/repositories/tags?name=<image>` | List tags with digests and push time |
 | `GET` | `/api/admin/repositories/manifest?name=<image>&reference=<tag-or-digest>` | Manifest details (size, layers, platforms for multi-arch) |
@@ -596,6 +597,7 @@ Tous les endpoints nécessitent `Authorization: Bearer <token>` (sauf login/logo
 | `DELETE` | `/api/admin/users/:username` | Supprimer un utilisateur (admin, dernier admin protégé) |
 | `GET` | `/api/admin/sessions` | Lister les sessions actives (admin) |
 | `DELETE` | `/api/admin/sessions/:id` | Révoquer une session (admin) |
+| `GET` | `/api/admin/audit?repo=&actor=&limit=&offset=` | Journal d'audit : logins, pushes, suppressions, GC (admin) |
 | `GET` | `/api/admin/repositories` | Lister tous les dépôts avec leurs tags et la date du dernier push |
 | `GET` | `/api/admin/repositories/tags?name=<image>` | Lister les tags avec leurs digests et date de push |
 | `GET` | `/api/admin/repositories/manifest?name=<image>&reference=<tag-ou-digest>` | Détails du manifest (taille, layers, plateformes si multi-arch) |

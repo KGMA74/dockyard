@@ -1,6 +1,7 @@
 package auth
 
 import (
+	"context"
 	"fmt"
 	"net/http"
 	"regexp"
@@ -29,6 +30,19 @@ const (
 
 	anonymousUser = "anonymous"
 )
+
+type ctxKey struct{}
+
+// WithPrincipal / PrincipalFromRequest carry the authenticated identity across
+// plain net/http handlers (the V2 engine is not echo-based).
+func WithPrincipal(r *http.Request, p Principal) *http.Request {
+	return r.WithContext(context.WithValue(r.Context(), ctxKey{}, p))
+}
+
+func PrincipalFromRequest(r *http.Request) (Principal, bool) {
+	p, ok := r.Context().Value(ctxKey{}).(Principal)
+	return p, ok
+}
 
 var (
 	reV2Manifests = regexp.MustCompile(`^/v2/(.+)/manifests/[^/]+$`)
@@ -141,7 +155,7 @@ func (m *Manager) V2Middleware(anonymousPull bool) func(http.Handler) http.Handl
 
 			if !authenticated {
 				if anonymousPull && action == ActionPull {
-					next.ServeHTTP(w, r)
+					next.ServeHTTP(w, WithPrincipal(r, Principal{Username: anonymousUser, Role: store.RoleReader}))
 					return
 				}
 				m.challenge(w, r, repo, action, "authentication required")
@@ -152,7 +166,7 @@ func (m *Manager) V2Middleware(anonymousPull bool) func(http.Handler) http.Handl
 					fmt.Sprintf("%s access to %s denied for role %s", action, repo, p.Role))
 				return
 			}
-			next.ServeHTTP(w, r)
+			next.ServeHTTP(w, WithPrincipal(r, p))
 		})
 	}
 }
