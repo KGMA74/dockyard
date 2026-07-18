@@ -20,7 +20,7 @@
 | P1.7 — TLS natif | #9 | ✅ fait | (ce commit) | TLS_MODE=off/static/self-signed/acme (autocert TLS-ALPN, pas lego), cert self-signed persisté+réutilisé, Helm tls.* (secret monté, probes HTTPS) — `helm template` à valider côté user |
 | P1.8 — UI users + sessions | #10 | ✅ fait | (ce commit) | UsersTab (CRUD, rôle inline, patterns, création), sessions avec revoke + « this session », onglet Users admin-only dans la sidebar (rôle décodé du JWT) |
 | P1.9 — GC dry-run | #11 | ✅ fait | (ce commit) | ?dryRun=true sur POST /gc (mark sans sweep), bouton Preview GC dans StorageTab, test préview==réel |
-| P1.10 — Tests intégration P1 | #12 | ⬜ à faire | | après P1.4 |
+| P1.10 — Tests intégration P1 | #12 | ✅ fait | (ce commit) | flow docker complet via la vraie stack (401 challenge → token → push → pull), RBAC reader via API réelle, révocation de session → refresh mort |
 | P2.0 — S3 multipart | #13 | ⬜ à faire | | prérequis P2.1 |
 | P2.1 — Mode mirror | #14 | ⬜ à faire | | après P2.0 + P1.4 |
 | P2.2 — Mirror auth upstream | #15 | ⬜ à faire | | |
@@ -59,7 +59,7 @@
 
 ## Prochaine étape
 
-**P1.10 — Tests d'intégration Epic P1** (issue #12) : flow token auth e2e façon client docker (HEAD blob → 401 challenge → GET /v2/token → push), lifecycle refresh/révocation, matrice RBAC en table test — puis la Phase 1 est complète et on passe à **P2.0 (S3 multipart)**.
+**🎉 Phase 1 (Fondations sécurité) COMPLÈTE.** Suite : **P2.0 — S3 multipart upload** (issue #13) : remplacer `AppendUpload` de `internal/storage/s3.go` (relecture totale en mémoire) par des sessions multipart — prérequis du mode mirror (P2.1). Vérifier la mémoire O(chunk) et faire passer le contrat de backend (T.2, activable sur MinIO via DOCKYARD_TEST_S3_*).
 
 ## Notes de reprise
 
