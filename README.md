@@ -116,6 +116,7 @@ S3_SECURE=false                 # true if TLS is enabled on S3
 AUTH_USERNAME=admin
 AUTH_PASSWORD=changeme123       # initial password (first startup only)
 JWT_SECRET=change-this-to-a-long-random-secret
+# JWT_SECRET_PREVIOUS=          # old secret during a rotation grace window
 
 # Basic auth on /v2/* (false = open in dev · true = required in prod)
 V2_AUTH_ENABLED=false
@@ -180,14 +181,19 @@ Compatible with any S3-compatible service: **RustFS**, **MinIO**, **AWS S3** (om
 curl -X POST http://localhost:8080/api/admin/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"changeme123"}'
-# → { "token": "eyJhbGci..." }
+# → { "token": "eyJhbGci...", "refresh_token": "9f2c...", "role": "admin", "expires_in": 900 }
 
-# Use the token
+# Use the access token
 curl http://localhost:8080/api/admin/repositories \
   -H "Authorization: Bearer eyJhbGci..."
+
+# Renew it (refresh tokens are single-use and rotated on every call)
+curl -X POST http://localhost:8080/api/admin/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refresh_token":"9f2c..."}'
 ```
 
-Tokens are valid for **24 hours**. Logout invalidates the token immediately.
+Access tokens are valid for **15 minutes**; the refresh token keeps the session alive for **30 days**. Logout revokes the access token (persisted in SQLite — it survives restarts) and kills the session.
 
 ```bash
 # Change password
@@ -197,9 +203,13 @@ curl -X POST http://localhost:8080/api/admin/auth/password \
   -d '{"current_password":"changeme123","new_password":"newpassword"}'
 ```
 
-The new password is saved as a bcrypt hash in `data/registry/auth/password.bcrypt` and persists across restarts. `AUTH_PASSWORD` is only used on first startup (when no hash file exists).
+### Users & roles
 
-> Change `JWT_SECRET` to a long random string in production — all tokens are invalidated if this value changes.
+Accounts live in SQLite (`<storage>/dockyard.db`) with three roles: **admin** (everything), **pusher** (pull + push), **reader** (read-only). Optional `repo_patterns` globs restrict a user to matching repositories (`team-a/*` — `*` also crosses `/`). User and session management (`/api/admin/users`, `/api/admin/sessions`) is admin-only; deleting mutations (`DELETE`, `/gc`) require the admin role.
+
+On the first boot after upgrading, the legacy single admin is migrated automatically — a password previously changed at runtime (stored in `auth/password.bcrypt`) is preserved. `AUTH_PASSWORD` is only used when the users table is empty.
+
+> Rotate `JWT_SECRET` without logging everyone out: set the new value in `JWT_SECRET`, put the old one in `JWT_SECRET_PREVIOUS` during a grace window, then remove it.
 
 ### Registry V2 (`/v2/*`) — Basic Auth
 
@@ -254,9 +264,16 @@ All endpoints require `Authorization: Bearer <token>` (except login/logout).
 | Method | Endpoint | Description |
 |---|---|---|
 | `GET` | `/health` | Health check + mode + version info |
-| `POST` | `/api/admin/auth/login` | Get JWT token |
-| `POST` | `/api/admin/auth/logout` | Invalidate token |
-| `POST` | `/api/admin/auth/password` | Change password |
+| `POST` | `/api/admin/auth/login` | Get access + refresh tokens |
+| `POST` | `/api/admin/auth/refresh` | Renew the access token (rotates the refresh token) |
+| `POST` | `/api/admin/auth/logout` | Revoke token + kill session (persisted) |
+| `POST` | `/api/admin/auth/password` | Change own password |
+| `GET` | `/api/admin/users` | List users (admin) |
+| `POST` | `/api/admin/users` | Create user `{username, password, role, repo_patterns}` (admin) |
+| `PUT` | `/api/admin/users/:username` | Update role/patterns/password (admin) |
+| `DELETE` | `/api/admin/users/:username` | Delete user (admin, last admin protected) |
+| `GET` | `/api/admin/sessions` | List active sessions (admin) |
+| `DELETE` | `/api/admin/sessions/:id` | Revoke a session (admin) |
 | `GET` | `/api/admin/repositories` | List all repositories with tags and last-pushed time |
 | `GET` | `/api/admin/repositories/tags?name=<image>` | List tags with digests and push time |
 | `GET` | `/api/admin/repositories/manifest?name=<image>&reference=<tag-or-digest>` | Manifest details (size, layers, platforms for multi-arch) |
@@ -423,6 +440,7 @@ S3_SECURE=false                 # true si TLS activé sur S3
 AUTH_USERNAME=admin
 AUTH_PASSWORD=changeme123       # mot de passe initial (premier démarrage uniquement)
 JWT_SECRET=changez-moi-pour-une-longue-chaine-aleatoire
+# JWT_SECRET_PREVIOUS=          # ancien secret pendant une fenêtre de rotation
 
 # Basic auth sur /v2/* (false = ouvert en dev · true = obligatoire en prod)
 V2_AUTH_ENABLED=false
@@ -487,14 +505,19 @@ Compatible avec tout service S3 : **RustFS**, **MinIO**, **AWS S3** (omettre `S3
 curl -X POST http://localhost:8080/api/admin/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"admin","password":"changeme123"}'
-# → { "token": "eyJhbGci..." }
+# → { "token": "eyJhbGci...", "refresh_token": "9f2c...", "role": "admin", "expires_in": 900 }
 
-# Utiliser le token
+# Utiliser le token d'accès
 curl http://localhost:8080/api/admin/repositories \
   -H "Authorization: Bearer eyJhbGci..."
+
+# Le renouveler (les refresh tokens sont à usage unique, rotation à chaque appel)
+curl -X POST http://localhost:8080/api/admin/auth/refresh \
+  -H "Content-Type: application/json" \
+  -d '{"refresh_token":"9f2c..."}'
 ```
 
-Les tokens sont valides **24 heures**. La déconnexion invalide le token immédiatement.
+Les tokens d'accès sont valides **15 minutes** ; le refresh token maintient la session **30 jours**. La déconnexion révoque le token d'accès (persisté en SQLite — survit aux redémarrages) et tue la session.
 
 ```bash
 # Changer le mot de passe
@@ -504,9 +527,13 @@ curl -X POST http://localhost:8080/api/admin/auth/password \
   -d '{"current_password":"changeme123","new_password":"nouveaumotdepasse"}'
 ```
 
-Le nouveau mot de passe est sauvegardé sous forme de hash bcrypt dans `data/registry/auth/password.bcrypt` et persiste entre les redémarrages. `AUTH_PASSWORD` n'est utilisé qu'au premier démarrage (quand le fichier hash n'existe pas encore).
+### Utilisateurs & rôles
 
-> Changez `JWT_SECRET` pour une longue chaîne aléatoire en production — tous les tokens sont invalidés si cette valeur change.
+Les comptes vivent en SQLite (`<storage>/dockyard.db`) avec trois rôles : **admin** (tout), **pusher** (pull + push), **reader** (lecture seule). Des globs `repo_patterns` optionnels restreignent un utilisateur aux repositories correspondants (`team-a/*` — `*` traverse aussi les `/`). La gestion des utilisateurs et des sessions (`/api/admin/users`, `/api/admin/sessions`) est réservée aux admins ; les mutations destructrices (`DELETE`, `/gc`) exigent le rôle admin.
+
+Au premier démarrage après mise à jour, l'admin unique historique est migré automatiquement — un mot de passe changé à chaud (stocké dans `auth/password.bcrypt`) est conservé. `AUTH_PASSWORD` n'est utilisé que si la table users est vide.
+
+> Faites tourner `JWT_SECRET` sans déconnecter tout le monde : mettez la nouvelle valeur dans `JWT_SECRET`, l'ancienne dans `JWT_SECRET_PREVIOUS` pendant une fenêtre de grâce, puis retirez-la.
 
 ### Registry V2 (`/v2/*`) — Basic Auth
 
@@ -561,9 +588,16 @@ Tous les endpoints nécessitent `Authorization: Bearer <token>` (sauf login/logo
 | Méthode | Endpoint | Description |
 |---|---|---|
 | `GET` | `/health` | Vérification d'état + infos mode + version |
-| `POST` | `/api/admin/auth/login` | Obtenir un token JWT |
-| `POST` | `/api/admin/auth/logout` | Invalider le token |
-| `POST` | `/api/admin/auth/password` | Changer le mot de passe |
+| `POST` | `/api/admin/auth/login` | Obtenir les tokens d'accès + refresh |
+| `POST` | `/api/admin/auth/refresh` | Renouveler le token d'accès (rotation du refresh) |
+| `POST` | `/api/admin/auth/logout` | Révoquer le token + tuer la session (persisté) |
+| `POST` | `/api/admin/auth/password` | Changer son mot de passe |
+| `GET` | `/api/admin/users` | Lister les utilisateurs (admin) |
+| `POST` | `/api/admin/users` | Créer un utilisateur `{username, password, role, repo_patterns}` (admin) |
+| `PUT` | `/api/admin/users/:username` | Modifier rôle/patterns/mot de passe (admin) |
+| `DELETE` | `/api/admin/users/:username` | Supprimer un utilisateur (admin, dernier admin protégé) |
+| `GET` | `/api/admin/sessions` | Lister les sessions actives (admin) |
+| `DELETE` | `/api/admin/sessions/:id` | Révoquer une session (admin) |
 | `GET` | `/api/admin/repositories` | Lister tous les dépôts avec leurs tags et la date du dernier push |
 | `GET` | `/api/admin/repositories/tags?name=<image>` | Lister les tags avec leurs digests et date de push |
 | `GET` | `/api/admin/repositories/manifest?name=<image>&reference=<tag-ou-digest>` | Détails du manifest (taille, layers, plateformes si multi-arch) |

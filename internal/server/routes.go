@@ -84,6 +84,9 @@ func (s *Server) RegisterRoutes() http.Handler {
 	// ── Auth ──────────────────────────────────────────────────────────────────
 	e.POST("/api/admin/auth/login", s.auth.Login)
 	e.POST("/api/admin/auth/logout", s.auth.Logout)
+	// Refresh authenticates with the refresh token itself, not a JWT — it must
+	// stay outside the middleware group (the access token may already be dead).
+	e.POST("/api/admin/auth/refresh", s.auth.Refresh)
 
 	// ── Admin API ─────────────────────────────────────────────────────────────
 	api := e.Group("/api/admin", s.auth.Middleware())
@@ -118,6 +121,11 @@ func (s *Server) RegisterRoutes() http.Handler {
 	api.POST("/users", uh.Create, auth.RequireAdmin)
 	api.PUT("/users/:username", uh.Update, auth.RequireAdmin)
 	api.DELETE("/users/:username", uh.Delete, auth.RequireAdmin)
+
+	// Session management — revoking kills the refresh token; outstanding
+	// access tokens die within 15 minutes.
+	api.GET("/sessions", s.auth.ListSessions, auth.RequireAdmin)
+	api.DELETE("/sessions/:id", s.auth.RevokeSession, auth.RequireAdmin)
 
 	// SSE feed of registry pushes. Registered outside the /api/admin group
 	// because EventSource can't set an Authorization header — it authenticates

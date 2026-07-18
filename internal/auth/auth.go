@@ -1,12 +1,15 @@
 package auth
 
 import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"net/http"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
-	"sync"
 	"time"
 
 	"dockyard/internal/store"
@@ -16,14 +19,22 @@ import (
 	"golang.org/x/crypto/bcrypt"
 )
 
-// principalKey is the echo context key holding the authenticated Principal.
-const principalKey = "auth.principal"
+const (
+	// principalKey is the echo context key holding the authenticated Principal.
+	principalKey = "auth.principal"
+
+	// accessTTL is deliberately short: revoking a session only cuts refresh,
+	// outstanding access tokens die on their own within this window.
+	accessTTL  = 15 * time.Minute
+	refreshTTL = 30 * 24 * time.Hour
+)
 
 // Principal is the authenticated identity extracted from a verified JWT.
 type Principal struct {
 	Username     string
 	Role         string
 	RepoPatterns []string
+	SessionID    int64
 }
 
 // Action is a permission checked by Authorize.
@@ -37,23 +48,25 @@ const (
 )
 
 type Manager struct {
-	users     *store.Store
-	username  string // bootstrap admin username (also used by /v2 basic auth)
-	secret    []byte
-	blacklist map[string]time.Time // token → expiration
-	mu        sync.Mutex
+	users    *store.Store
+	username string // bootstrap admin username (also used by /v2 basic auth)
+	// secrets[0] signs new tokens; the rest are still accepted for
+	// verification (JWT_SECRET_PREVIOUS rotation grace window).
+	secrets [][]byte
 }
 
 // New builds the auth manager on top of the SQLite user store. On first boot
 // with an empty users table, the legacy single admin is migrated: the bcrypt
 // hash persisted at <dataDir>/auth/password.bcrypt wins over initialPassword,
 // so a password changed at runtime survives the upgrade.
-func New(username, initialPassword, jwtSecret, dataDir string, users *store.Store) (*Manager, error) {
+func New(username, initialPassword, jwtSecret, previousSecret, dataDir string, users *store.Store) (*Manager, error) {
 	m := &Manager{
-		users:     users,
-		username:  username,
-		secret:    []byte(jwtSecret),
-		blacklist: make(map[string]time.Time),
+		users:    users,
+		username: username,
+		secrets:  [][]byte{[]byte(jwtSecret)},
+	}
+	if previousSecret != "" {
+		m.secrets = append(m.secrets, []byte(previousSecret))
 	}
 	count, err := users.CountUsers()
 	if err != nil {
@@ -83,19 +96,12 @@ func legacyOrInitialHash(hashFile, initialPassword string) (string, error) {
 	return string(hash), nil
 }
 
-// cleanupLoop supprime de la blacklist les tokens naturellement expirés.
+// cleanupLoop prunes expired sessions and spent token revocations.
 func (m *Manager) cleanupLoop() {
 	ticker := time.NewTicker(time.Hour)
 	defer ticker.Stop()
 	for range ticker.C {
-		now := time.Now()
-		m.mu.Lock()
-		for tok, exp := range m.blacklist {
-			if now.After(exp) {
-				delete(m.blacklist, tok)
-			}
-		}
-		m.mu.Unlock()
+		_ = m.users.PruneExpired()
 	}
 }
 
@@ -110,32 +116,56 @@ func (m *Manager) verify(username, password string) (*store.User, bool) {
 	return u, true
 }
 
-func (m *Manager) token(u *store.User) (string, error) {
+func (m *Manager) token(u *store.User, sessionID int64) (string, error) {
 	claims := jwt.MapClaims{
 		"sub":   u.Username,
 		"role":  u.Role,
 		"repos": u.RepoPatterns,
-		"exp":   time.Now().Add(24 * time.Hour).Unix(),
+		"sid":   strconv.FormatInt(sessionID, 10),
+		"exp":   time.Now().Add(accessTTL).Unix(),
 		"iat":   time.Now().Unix(),
 	}
-	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(m.secret)
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(m.secrets[0])
 }
 
+// parseToken accepts tokens signed with the current secret or, during a
+// rotation grace window, the previous one.
 func (m *Manager) parseToken(raw string) (*jwt.Token, error) {
-	return jwt.Parse(raw, func(t *jwt.Token) (any, error) {
-		if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, errors.New("unexpected signing method")
+	var lastErr error
+	for _, secret := range m.secrets {
+		tok, err := jwt.Parse(raw, func(t *jwt.Token) (any, error) {
+			if _, ok := t.Method.(*jwt.SigningMethodHMAC); !ok {
+				return nil, errors.New("unexpected signing method")
+			}
+			return secret, nil
+		})
+		if err == nil && tok.Valid {
+			return tok, nil
 		}
-		return m.secret, nil
-	})
+		lastErr = err
+	}
+	if lastErr == nil {
+		lastErr = errors.New("invalid token")
+	}
+	return nil, lastErr
 }
 
-// validate checks blacklist + signature and returns the token's Principal.
+func hashToken(raw string) string {
+	h := sha256.Sum256([]byte(raw))
+	return hex.EncodeToString(h[:])
+}
+
+func newRefreshToken() (string, error) {
+	b := make([]byte, 32)
+	if _, err := rand.Read(b); err != nil {
+		return "", err
+	}
+	return hex.EncodeToString(b), nil
+}
+
+// validate checks revocation + signature and returns the token's Principal.
 func (m *Manager) validate(raw string) (Principal, error) {
-	m.mu.Lock()
-	_, blacklisted := m.blacklist[raw]
-	m.mu.Unlock()
-	if blacklisted {
+	if revoked, err := m.users.IsTokenRevoked(hashToken(raw)); err == nil && revoked {
 		return Principal{}, errors.New("token has been revoked")
 	}
 	tok, err := m.parseToken(raw)
@@ -151,8 +181,11 @@ func (m *Manager) validate(raw string) (Principal, error) {
 	p.Role, _ = claims["role"].(string)
 	if p.Role == "" {
 		// Token issued before the RBAC migration — the only account then was
-		// the admin, keep it working until it expires (24h at most).
+		// the admin, keep it working until it expires.
 		p.Role = store.RoleAdmin
+	}
+	if sid, ok := claims["sid"].(string); ok {
+		p.SessionID, _ = strconv.ParseInt(sid, 10, 64)
 	}
 	if rawRepos, ok := claims["repos"].([]any); ok {
 		for _, r := range rawRepos {
@@ -237,6 +270,32 @@ func RequireAdmin(next echo.HandlerFunc) echo.HandlerFunc {
 	}
 }
 
+// issueSession creates a session and returns the login/refresh response body.
+func (m *Manager) issueSession(c echo.Context, u *store.User) (map[string]any, error) {
+	refresh, err := newRefreshToken()
+	if err != nil {
+		return nil, err
+	}
+	sid, err := m.users.CreateSession(
+		u.ID, hashToken(refresh),
+		c.Request().UserAgent(), c.RealIP(),
+		time.Now().Add(refreshTTL),
+	)
+	if err != nil {
+		return nil, err
+	}
+	access, err := m.token(u, sid)
+	if err != nil {
+		return nil, err
+	}
+	return map[string]any{
+		"token":         access,
+		"refresh_token": refresh,
+		"role":          u.Role,
+		"expires_in":    int(accessTTL.Seconds()),
+	}, nil
+}
+
 // Login — POST /api/admin/auth/login
 func (m *Manager) Login(c echo.Context) error {
 	var body struct {
@@ -250,28 +309,105 @@ func (m *Manager) Login(c echo.Context) error {
 	if !ok {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
 	}
-	tok, err := m.token(u)
+	resp, err := m.issueSession(c, u)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "session creation failed"})
+	}
+	return c.JSON(http.StatusOK, resp)
+}
+
+// Refresh — POST /api/admin/auth/refresh. Authenticated by the refresh token
+// itself; rotates it (single use) and returns a fresh access token.
+func (m *Manager) Refresh(c echo.Context) error {
+	var body struct {
+		RefreshToken string `json:"refresh_token"`
+	}
+	if err := c.Bind(&body); err != nil || body.RefreshToken == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "refresh_token required"})
+	}
+	sess, u, err := m.users.SessionByRefreshHash(hashToken(body.RefreshToken))
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid or expired refresh token"})
+	}
+	refresh, err := newRefreshToken()
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "token generation failed"})
 	}
-	return c.JSON(http.StatusOK, map[string]string{"token": tok, "role": u.Role})
+	if err := m.users.RotateSessionRefresh(sess.ID, hashToken(refresh), time.Now().Add(refreshTTL)); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "session rotation failed"})
+	}
+	access, err := m.token(u, sess.ID)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "token generation failed"})
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"token":         access,
+		"refresh_token": refresh,
+		"role":          u.Role,
+		"expires_in":    int(accessTTL.Seconds()),
+	})
 }
 
-// Logout — POST /api/admin/auth/logout (JWT requis)
+// Logout — POST /api/admin/auth/logout (JWT requis). Revokes the access token
+// (persisted, survives restarts) and kills its session so the refresh token
+// dies with it.
 func (m *Manager) Logout(c echo.Context) error {
 	raw := strings.TrimPrefix(c.Request().Header.Get("Authorization"), "Bearer ")
+	p, err := m.validate(raw)
+	if err != nil {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid token"})
+	}
 	tok, err := m.parseToken(raw)
-	if err != nil || !tok.Valid {
+	if err != nil {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid token"})
 	}
 	exp, err := tok.Claims.GetExpirationTime()
-	if err != nil {
+	if err != nil || exp == nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "cannot read token expiry"})
 	}
-	m.mu.Lock()
-	m.blacklist[raw] = exp.Time
-	m.mu.Unlock()
+	if err := m.users.RevokeToken(hashToken(raw), exp.Time); err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "revocation failed"})
+	}
+	if p.SessionID != 0 {
+		_ = m.users.DeleteSession(p.SessionID)
+	}
 	return c.JSON(http.StatusOK, map[string]string{"message": "logged out"})
+}
+
+// ListSessions — GET /api/admin/sessions (admin only)
+func (m *Manager) ListSessions(c echo.Context) error {
+	sessions, err := m.users.ListSessions()
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	if sessions == nil {
+		sessions = []*store.Session{}
+	}
+	current := int64(0)
+	if p, ok := CurrentPrincipal(c); ok {
+		current = p.SessionID
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"sessions":   sessions,
+		"count":      len(sessions),
+		"current_id": current,
+	})
+}
+
+// RevokeSession — DELETE /api/admin/sessions/:id (admin only). Kills the
+// refresh token; outstanding access tokens expire within accessTTL.
+func (m *Manager) RevokeSession(c echo.Context) error {
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid session id"})
+	}
+	if err := m.users.DeleteSession(id); err != nil {
+		if errors.Is(err, store.ErrSessionNotFound) {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "session not found"})
+		}
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"message": "session revoked"})
 }
 
 // ChangePassword — POST /api/admin/auth/password (JWT requis). Changes the
@@ -342,7 +478,7 @@ func BasicAuthMiddleware(username, passwordHash string) func(http.Handler) http.
 	}
 }
 
-// Middleware vérifie le JWT, rejette les tokens blacklistés et installe le
+// Middleware vérifie le JWT, rejette les tokens révoqués et installe le
 // Principal dans le contexte.
 func (m *Manager) Middleware() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {

@@ -1,11 +1,44 @@
 const BASE = '/api/admin'
 const TOKEN_KEY = 'dockyard_token'
+const REFRESH_KEY = 'dockyard_refresh'
 
 function token(): string {
   return localStorage.getItem(TOKEN_KEY) ?? ''
 }
 
-async function req<T>(path: string, opts?: RequestInit): Promise<T> {
+// Access tokens only live 15 minutes; a 401 triggers one silent refresh and a
+// retry before giving up. The shared promise keeps concurrent 401s from
+// spending the (single-use) refresh token more than once.
+let refreshing: Promise<boolean> | null = null
+
+function tryRefresh(): Promise<boolean> {
+  refreshing ??= (async () => {
+    const refreshToken = localStorage.getItem(REFRESH_KEY)
+    if (!refreshToken) return false
+    const res = await fetch(BASE + '/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    })
+    if (!res.ok) return false
+    const data = (await res.json()) as { token: string; refresh_token: string }
+    localStorage.setItem(TOKEN_KEY, data.token)
+    localStorage.setItem(REFRESH_KEY, data.refresh_token)
+    return true
+  })()
+    .catch(() => false)
+    .finally(() => {
+      refreshing = null
+    })
+  return refreshing
+}
+
+function clearSession(): void {
+  localStorage.removeItem(TOKEN_KEY)
+  localStorage.removeItem(REFRESH_KEY)
+}
+
+async function req<T>(path: string, opts?: RequestInit, retried = false): Promise<T> {
   const res = await fetch(BASE + path, {
     ...opts,
     headers: {
@@ -15,7 +48,10 @@ async function req<T>(path: string, opts?: RequestInit): Promise<T> {
     },
   })
   if (res.status === 401) {
-    localStorage.removeItem(TOKEN_KEY)
+    if (!retried && (await tryRefresh())) {
+      return req(path, opts, true)
+    }
+    clearSession()
     window.location.reload()
     throw new Error('Unauthorized')
   }
@@ -75,8 +111,9 @@ export async function login(username: string, password: string): Promise<void> {
     const body = await res.json().catch(() => ({}))
     throw new Error((body as { error?: string }).error ?? 'Login failed')
   }
-  const data = (await res.json()) as { token: string }
+  const data = (await res.json()) as { token: string; refresh_token?: string }
   localStorage.setItem(TOKEN_KEY, data.token)
+  if (data.refresh_token) localStorage.setItem(REFRESH_KEY, data.refresh_token)
 }
 
 export async function logout(): Promise<void> {
@@ -84,7 +121,7 @@ export async function logout(): Promise<void> {
     method: 'POST',
     headers: { Authorization: `Bearer ${token()}` },
   }).catch(() => {})
-  localStorage.removeItem(TOKEN_KEY)
+  clearSession()
 }
 
 export interface RepoSummary {

@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -29,7 +30,7 @@ func newManagerIn(t *testing.T, dir string) *Manager {
 		t.Fatalf("store.Open: %v", err)
 	}
 	t.Cleanup(func() { _ = st.Close() })
-	m, err := New(testUser, testPassword, testSecret, dir, st)
+	m, err := New(testUser, testPassword, testSecret, "", dir, st)
 	if err != nil {
 		t.Fatalf("auth.New: %v", err)
 	}
@@ -41,7 +42,14 @@ func newManager(t *testing.T) *Manager {
 	return newManagerIn(t, t.TempDir())
 }
 
-func doLogin(t *testing.T, m *Manager, username, password string) (*httptest.ResponseRecorder, string) {
+type authResp struct {
+	Token        string `json:"token"`
+	RefreshToken string `json:"refresh_token"`
+	Role         string `json:"role"`
+	ExpiresIn    int    `json:"expires_in"`
+}
+
+func doLoginFull(t *testing.T, m *Manager, username, password string) (*httptest.ResponseRecorder, authResp) {
 	t.Helper()
 	e := echo.New()
 	body := `{"username":"` + username + `","password":"` + password + `"}`
@@ -51,15 +59,34 @@ func doLogin(t *testing.T, m *Manager, username, password string) (*httptest.Res
 	if err := m.Login(e.NewContext(req, rec)); err != nil {
 		t.Fatalf("Login handler: %v", err)
 	}
-	var token string
+	var resp authResp
 	if rec.Code == http.StatusOK {
-		var resp struct {
-			Token string `json:"token"`
-		}
 		decodeJSON(t, rec, &resp)
-		token = resp.Token
 	}
-	return rec, token
+	return rec, resp
+}
+
+func doLogin(t *testing.T, m *Manager, username, password string) (*httptest.ResponseRecorder, string) {
+	t.Helper()
+	rec, resp := doLoginFull(t, m, username, password)
+	return rec, resp.Token
+}
+
+func doRefresh(t *testing.T, m *Manager, refreshToken string) (*httptest.ResponseRecorder, authResp) {
+	t.Helper()
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/auth/refresh",
+		strings.NewReader(`{"refresh_token":"`+refreshToken+`"}`))
+	req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
+	rec := httptest.NewRecorder()
+	if err := m.Refresh(e.NewContext(req, rec)); err != nil {
+		t.Fatalf("Refresh handler: %v", err)
+	}
+	var resp authResp
+	if rec.Code == http.StatusOK {
+		decodeJSON(t, rec, &resp)
+	}
+	return rec, resp
 }
 
 func decodeJSON(t *testing.T, rec *httptest.ResponseRecorder, v any) {
@@ -304,5 +331,152 @@ func TestRequireAdmin(t *testing.T) {
 	}
 	if got := call(nil); got != http.StatusForbidden {
 		t.Errorf("no principal: status = %d, want 403", got)
+	}
+}
+
+func TestRefreshRotatesToken(t *testing.T) {
+	m := newManager(t)
+	rec, login := doLoginFull(t, m, testUser, testPassword)
+	if rec.Code != http.StatusOK || login.RefreshToken == "" {
+		t.Fatalf("login = %d, refresh_token empty=%v", rec.Code, login.RefreshToken == "")
+	}
+
+	rec, refreshed := doRefresh(t, m, login.RefreshToken)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("refresh status = %d, want 200 (%s)", rec.Code, rec.Body.String())
+	}
+	if refreshed.Token == "" || refreshed.RefreshToken == "" {
+		t.Fatal("refresh response missing tokens")
+	}
+	if refreshed.RefreshToken == login.RefreshToken {
+		t.Error("refresh token was not rotated")
+	}
+	if got := callProtected(t, m, "Bearer "+refreshed.Token); got != http.StatusOK {
+		t.Errorf("refreshed access token rejected: %d", got)
+	}
+	// Single use: the original refresh token must now be dead.
+	if rec, _ := doRefresh(t, m, login.RefreshToken); rec.Code != http.StatusUnauthorized {
+		t.Errorf("spent refresh token still accepted: %d", rec.Code)
+	}
+	if rec, _ := doRefresh(t, m, "completely-bogus"); rec.Code != http.StatusUnauthorized {
+		t.Errorf("bogus refresh token accepted: %d", rec.Code)
+	}
+}
+
+// TestLogoutSurvivesRestart: the revocation must come from SQLite, not memory.
+func TestLogoutSurvivesRestart(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "dockyard.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	m1, err := New(testUser, testPassword, testSecret, "", dir, st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, token := doLogin(t, m1, testUser, testPassword)
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodPost, "/api/admin/auth/logout", nil)
+	req.Header.Set("Authorization", "Bearer "+token)
+	rec := httptest.NewRecorder()
+	if err := m1.Logout(e.NewContext(req, rec)); err != nil || rec.Code != http.StatusOK {
+		t.Fatalf("logout = %d, %v", rec.Code, err)
+	}
+
+	// "Restart": a brand-new manager on the same store.
+	m2, err := New(testUser, testPassword, testSecret, "", dir, st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := callProtected(t, m2, "Bearer "+token); got != http.StatusUnauthorized {
+		t.Errorf("revoked token accepted after restart: %d", got)
+	}
+}
+
+func TestSecretRotationGraceWindow(t *testing.T) {
+	dir := t.TempDir()
+	st, err := store.Open(filepath.Join(dir, "dockyard.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+
+	old, err := New(testUser, testPassword, "old-secret", "", dir, st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, oldToken := doLogin(t, old, testUser, testPassword)
+
+	// Rotated deployment: new secret, previous one in the grace window.
+	rotated, err := New(testUser, testPassword, "new-secret", "old-secret", dir, st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := callProtected(t, rotated, "Bearer "+oldToken); got != http.StatusOK {
+		t.Errorf("old-secret token rejected during grace window: %d", got)
+	}
+
+	// Grace window over: previous secret dropped.
+	final, err := New(testUser, testPassword, "new-secret", "", dir, st)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := callProtected(t, final, "Bearer "+oldToken); got != http.StatusUnauthorized {
+		t.Errorf("old-secret token accepted after grace window: %d", got)
+	}
+	_, newToken := doLogin(t, rotated, testUser, testPassword)
+	if got := callProtected(t, final, "Bearer "+newToken); got != http.StatusOK {
+		t.Errorf("new-secret token rejected: %d", got)
+	}
+}
+
+func TestSessionListAndRevoke(t *testing.T) {
+	m := newManager(t)
+	_, s1 := doLoginFull(t, m, testUser, testPassword)
+	_, s2 := doLoginFull(t, m, testUser, testPassword)
+
+	e := echo.New()
+	req := httptest.NewRequest(http.MethodGet, "/api/admin/sessions", nil)
+	rec := httptest.NewRecorder()
+	c := e.NewContext(req, rec)
+	c.Set(principalKey, Principal{Username: testUser, Role: store.RoleAdmin})
+	if err := m.ListSessions(c); err != nil || rec.Code != http.StatusOK {
+		t.Fatalf("ListSessions = %d, %v", rec.Code, err)
+	}
+	var list struct {
+		Sessions []struct {
+			ID       int64  `json:"id"`
+			Username string `json:"username"`
+		} `json:"sessions"`
+		Count int `json:"count"`
+	}
+	decodeJSON(t, rec, &list)
+	if list.Count != 2 {
+		t.Fatalf("session count = %d, want 2", list.Count)
+	}
+
+	// Revoke the first session; its refresh token must stop working while the
+	// second session keeps refreshing fine.
+	req = httptest.NewRequest(http.MethodDelete, "/api/admin/sessions/1", nil)
+	rec = httptest.NewRecorder()
+	c = e.NewContext(req, rec)
+	c.SetParamNames("id")
+	c.SetParamValues(strconv.FormatInt(list.Sessions[len(list.Sessions)-1].ID, 10))
+	if err := m.RevokeSession(c); err != nil || rec.Code != http.StatusOK {
+		t.Fatalf("RevokeSession = %d, %v", rec.Code, err)
+	}
+
+	// One of the two refresh tokens is now dead; count the survivors.
+	alive := 0
+	for _, s := range []authResp{s1, s2} {
+		if rec, _ := doRefresh(t, m, s.RefreshToken); rec.Code == http.StatusOK {
+			alive++
+		}
+	}
+	if alive != 1 {
+		t.Errorf("alive refresh tokens after revoke = %d, want 1", alive)
 	}
 }
