@@ -23,7 +23,7 @@
 | P1.10 — Tests intégration P1 | #12 | ✅ fait | (ce commit) | flow docker complet via la vraie stack (401 challenge → token → push → pull), RBAC reader via API réelle, révocation de session → refresh mort |
 | P2.0 — S3 multipart | #13 | ✅ fait | (ce commit) | uploads en parts (uploads/<uuid>/parts/<n>), commit streamé O(16MiB) avec vérif digest (avant : aucune !), PutBlob vérifie aussi, Stats ne compte que blobs/ ; contrat + docker push e2e validés sur MinIO réel |
 | P2.1 — Mode mirror | #14 | ✅ fait | (ce commit) | REGISTRY_MODE=mirror (internal/v2/mirror.go) : hit local, miss→fetch upstream write-through, TTL tags (MIRROR_TAG_TTL), stale si upstream down, push direct OK, hits/misses dans /health, events SSE au cache-fill |
-| P2.2 — Mirror auth upstream | #15 | ⬜ à faire | | |
+| P2.2 — Mirror auth upstream | #15 | ✅ fait | (ce commit) | token dance Bearer dans registry.Client (401 challenge → realm → token, cache par scope), Basic conservé ; e2e réel : docker pull alpine via mirror devant registry-1.docker.io |
 | P2.3 — Mirror hit/miss | #16 | ⬜ à faire | | |
 | P2.4 — Tests mirror | #17 | ⬜ à faire | | |
 | P3.1 — /metrics Prometheus | #18 | ⬜ à faire | | |

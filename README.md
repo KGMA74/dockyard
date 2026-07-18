@@ -153,8 +153,11 @@ V2_AUTH_ENABLED=false
 
 # ── Mirror mode (pull-through cache) ─────────────────────────────────────────
 # REGISTRY_MODE=mirror
-# REGISTRY_URL=http://upstream-registry:5000   # upstream to cache
+# REGISTRY_URL=https://registry-1.docker.io    # upstream to cache (Docker Hub,
+#                                              # ghcr, quay — token auth handled)
+# REGISTRY_USERNAME= / REGISTRY_PASSWORD=      # upstream creds (higher rate limits)
 # MIRROR_TAG_TTL=5m                            # tag revalidation interval
+# Example: docker pull host:8080/library/alpine:latest caches from Docker Hub.
 ```
 
 ---
@@ -503,8 +506,11 @@ V2_AUTH_ENABLED=false
 
 # ── Mode mirror (cache pull-through) ─────────────────────────────────────────
 # REGISTRY_MODE=mirror
-# REGISTRY_URL=http://registry-upstream:5000   # upstream à mettre en cache
+# REGISTRY_URL=https://registry-1.docker.io    # upstream à mettre en cache (Docker
+#                                              # Hub, ghcr, quay — token auth gérée)
+# REGISTRY_USERNAME= / REGISTRY_PASSWORD=      # creds upstream (meilleurs rate limits)
 # MIRROR_TAG_TTL=5m                            # intervalle de revalidation des tags
+# Exemple : docker pull host:8080/library/alpine:latest met Docker Hub en cache.
 ```
 
 ---
