@@ -319,9 +319,10 @@ export async function getAudit(limit = 50): Promise<{ entries: AuditEntry[]; tot
 
 export interface HealthInfo {
   status: string
-  mode: 'embedded' | 'proxy'
+  mode: 'embedded' | 'proxy' | 'mirror'
   registry?: string
   version?: string
+  mirror?: { hits: number; misses: number }
 }
 
 export async function getHealth(): Promise<HealthInfo> {

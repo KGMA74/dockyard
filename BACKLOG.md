@@ -24,7 +24,7 @@
 | P2.0 — S3 multipart | #13 | ✅ fait | (ce commit) | uploads en parts (uploads/<uuid>/parts/<n>), commit streamé O(16MiB) avec vérif digest (avant : aucune !), PutBlob vérifie aussi, Stats ne compte que blobs/ ; contrat + docker push e2e validés sur MinIO réel |
 | P2.1 — Mode mirror | #14 | ✅ fait | (ce commit) | REGISTRY_MODE=mirror (internal/v2/mirror.go) : hit local, miss→fetch upstream write-through, TTL tags (MIRROR_TAG_TTL), stale si upstream down, push direct OK, hits/misses dans /health, events SSE au cache-fill |
 | P2.2 — Mirror auth upstream | #15 | ✅ fait | (ce commit) | token dance Bearer dans registry.Client (401 challenge → realm → token, cache par scope), Basic conservé ; e2e réel : docker pull alpine via mirror devant registry-1.docker.io |
-| P2.3 — Mirror hit/miss | #16 | ⬜ à faire | | |
+| P2.3 — Mirror hit/miss | #16 | ✅ fait | (ce commit) | compteurs déjà dans /health (P2.1) ; cartes Cache hits/misses + upstream dans StorageTab (choix : pas de nouvel endpoint admin, /health suffit) |
 | P2.4 — Tests mirror | #17 | ⬜ à faire | | |
 | P3.1 — /metrics Prometheus | #18 | ⬜ à faire | | |
 | P3.2 — /health enrichi | #19 | ⬜ à faire | | corrige Stats() S3 full-list |
@@ -59,7 +59,7 @@
 
 ## Prochaine étape
 
-**P2.2 — Mirror : auth upstream (token dance Docker Hub) + fallback stale** (issue #15) : le client `internal/registry/client.go` ne fait que du Basic — ajouter la négociation token (401 Bearer challenge → realm → token) pour Docker Hub/ghcr ; le fallback stale-from-cache est déjà en place (P2.1). Test réel possible : mirror devant registry-1.docker.io. Astuce MinIO locale : `docker run --rm -d -p 19000:9000 -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin minio/minio server /data` + `$env:S3_SECURE="false"` (le .env force true).
+**P2.4 — Tests d'intégration mirror** (issue #17) : déjà largement couverts par `internal/v2/mirror_test.go` (miss→fill→hit, TTL, stale, push direct) et `internal/registry/client_test.go` (token dance) — vérifier s'il manque un scénario (multi-arch par digest ?) puis fermer. Ensuite **Phase 3 : P3.1 /metrics Prometheus** (issue #18). Astuce MinIO locale : `docker run --rm -d -p 19000:9000 -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin minio/minio server /data` + `$env:S3_SECURE="false"` (le .env force true).
 
 ## Notes de reprise
 

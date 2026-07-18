@@ -1,7 +1,7 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
-import { Trash2, Database, Boxes, Layers, Tags, Eye } from 'lucide-react'
-import { runGC, RepoSummary, StorageStats } from '../api'
+import { Trash2, Database, Boxes, Layers, Tags, Eye, Zap } from 'lucide-react'
+import { getHealth, runGC, HealthInfo, RepoSummary, StorageStats } from '../api'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 
@@ -13,6 +13,11 @@ interface Props {
 
 export default function StorageTab({ stats, repos, onRefresh }: Props) {
   const [running, setRunning] = useState(false)
+  const [health, setHealth] = useState<HealthInfo | null>(null)
+
+  useEffect(() => {
+    getHealth().then(setHealth).catch(() => setHealth(null))
+  }, [])
 
   async function handleGC(dryRun: boolean) {
     setRunning(true)
@@ -54,6 +59,23 @@ export default function StorageTab({ stats, repos, onRefresh }: Props) {
           <StatCard icon={Tags} label="Tags" value={String(totalTags)} sub={`avg ${avgTags}/repo`} />
         </div>
       </div>
+
+      {health?.mirror && (
+        <div>
+          <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">
+            Pull-through cache
+          </h3>
+          <div className="grid grid-cols-2 gap-3">
+            <StatCard icon={Zap} label="Cache hits" value={String(health.mirror.hits)} />
+            <StatCard
+              icon={Zap}
+              label="Cache misses"
+              value={String(health.mirror.misses)}
+              sub={health.registry ? `upstream: ${health.registry.replace(/^https?:\/\//, '')}` : undefined}
+            />
+          </div>
+        </div>
+      )}
 
       {stats.storage_path && (
         <div>
