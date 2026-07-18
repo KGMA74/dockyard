@@ -61,7 +61,7 @@ func (s *S3Backend) GetBlob(digest string) (io.ReadCloser, int64, error) {
 	}
 	info, err := obj.Stat()
 	if err != nil {
-		obj.Close()
+		_ = obj.Close()
 		return nil, 0, err
 	}
 	return obj, info.Size, nil
@@ -104,7 +104,7 @@ func (s *S3Backend) AppendUpload(uuid string, content io.Reader) error {
 	if err != nil {
 		return err
 	}
-	defer existing.Close()
+	defer func() { _ = existing.Close() }()
 
 	existingData, err := io.ReadAll(existing)
 	if err != nil {
@@ -178,7 +178,7 @@ func (s *S3Backend) GetManifest(name, reference string) ([]byte, string, error) 
 	if err != nil {
 		return nil, "", err
 	}
-	defer obj.Close()
+	defer func() { _ = obj.Close() }()
 
 	data, err := io.ReadAll(obj)
 	if err != nil {
@@ -208,7 +208,7 @@ func (s *S3Backend) DeleteManifest(name, digest string) error {
 		}
 		h := sha256.Sum256(data)
 		if fmt.Sprintf("sha256:%x", h) == digest {
-			s.client.RemoveObject(ctx, s.bucket, obj.Key, minio.RemoveObjectOptions{})
+			_ = s.client.RemoveObject(ctx, s.bucket, obj.Key, minio.RemoveObjectOptions{})
 		}
 	}
 	return nil
@@ -298,7 +298,7 @@ func (s *S3Backend) DeleteRepository(name string) error {
 			continue
 		}
 		found = true
-		s.client.RemoveObject(ctx, s.bucket, obj.Key, minio.RemoveObjectOptions{})
+		_ = s.client.RemoveObject(ctx, s.bucket, obj.Key, minio.RemoveObjectOptions{})
 	}
 	if !found {
 		return fmt.Errorf("repository %q not found", name)
@@ -356,7 +356,7 @@ func (s *S3Backend) ReferencedBlobs() (map[string]struct{}, error) {
 			continue
 		}
 		data, err := io.ReadAll(reader)
-		reader.Close()
+		_ = reader.Close()
 		if err != nil {
 			continue
 		}

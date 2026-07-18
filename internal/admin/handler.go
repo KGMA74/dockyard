@@ -116,7 +116,7 @@ func (h *Handler) GetManifestDetails(c echo.Context) error {
 		if err != nil {
 			return nil, err
 		}
-		defer rc.Close()
+		defer func() { _ = rc.Close() }()
 		return io.ReadAll(rc)
 	}, func(manifestDigest string) ([]byte, error) {
 		childRaw, _, err := h.store.GetManifest(name, manifestDigest)
@@ -142,7 +142,7 @@ func (h *Handler) GetLayerEntries(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusNotFound, err500(err))
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	entries, err := parseLayerEntries(rc)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, err500(err))
@@ -245,7 +245,7 @@ func (h *Handler) StorageTree(c echo.Context) error {
 	}
 	root := h.treeStore.Root()
 	var entries []entry
-	filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
+	_ = filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil || d.IsDir() {
 			return nil
 		}

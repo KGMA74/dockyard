@@ -75,7 +75,7 @@ func (c *Client) do(method, path, accept string) (*http.Response, error) {
 		return nil, err
 	}
 	if resp.StatusCode >= 400 {
-		resp.Body.Close()
+		_ = resp.Body.Close()
 		return nil, fmt.Errorf("registry error: %s %s → %d", method, path, resp.StatusCode)
 	}
 	return resp, nil
@@ -86,7 +86,7 @@ func (c *Client) Ping() error {
 	if err != nil {
 		return err
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	return nil
 }
 
@@ -95,7 +95,7 @@ func (c *Client) Catalog() ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var cr catalogResponse
 	if err := json.NewDecoder(resp.Body).Decode(&cr); err != nil {
 		return nil, err
@@ -108,7 +108,7 @@ func (c *Client) Tags(name string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var tr tagsResponse
 	if err := json.NewDecoder(resp.Body).Decode(&tr); err != nil {
 		return nil, err
@@ -132,7 +132,7 @@ func (c *Client) Manifest(name, ref string) (*Manifest, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	var m Manifest
 	if err := json.NewDecoder(resp.Body).Decode(&m); err != nil {
 		return nil, err
@@ -149,7 +149,7 @@ func (c *Client) RawManifest(name, ref string) ([]byte, string, error) {
 	if err != nil {
 		return nil, "", err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	raw, err := io.ReadAll(resp.Body)
 	if err != nil {
 		return nil, "", err
@@ -163,7 +163,7 @@ func (c *Client) Blob(name, digest string) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	return io.ReadAll(resp.Body)
 }
 
@@ -182,6 +182,6 @@ func (c *Client) DeleteManifest(name, digest string) error {
 	if err != nil {
 		return err
 	}
-	resp.Body.Close()
+	_ = resp.Body.Close()
 	return nil
 }

@@ -29,6 +29,11 @@ test:
 	@echo "Testing..."
 	@go test ./... -v
 
+## Run go vet + golangci-lint (installs golangci-lint if missing)
+lint:
+	@go vet ./...
+	@golangci-lint run || (echo "golangci-lint not found — install: go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest" && exit 1)
+
 clean:
 	@echo "Cleaning..."
 	@rm -f dockyard.exe
@@ -46,4 +51,4 @@ watch:
 		Write-Output 'Watching...'; \
 	}"
 
-.PHONY: all build release run ui ui-dev test clean watch
+.PHONY: all build release run ui ui-dev test lint clean watch

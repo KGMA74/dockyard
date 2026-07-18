@@ -149,7 +149,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	e.GET("/*", func(c echo.Context) error {
 		path := c.Param("*")
 		if f, err := staticFS.Open(path); err == nil {
-			f.Close()
+			_ = f.Close()
 			fileServer.ServeHTTP(c.Response(), c.Request())
 			return nil
 		}

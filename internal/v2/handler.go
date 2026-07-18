@@ -128,7 +128,7 @@ func (h *Handler) manifests(w http.ResponseWriter, r *http.Request, name, ref st
 			return
 		}
 		w.WriteHeader(http.StatusOK)
-		w.Write(content)
+		_, _ = w.Write(content)
 
 	case http.MethodPut:
 		body, err := io.ReadAll(r.Body)
@@ -176,7 +176,7 @@ func (h *Handler) getBlob(w http.ResponseWriter, r *http.Request, name, digest s
 		registryError(w, http.StatusInternalServerError, "UNKNOWN", err.Error())
 		return
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	w.Header().Set("Docker-Content-Digest", digest)
 	w.Header().Set("Content-Length", fmt.Sprintf("%d", size))
 	w.Header().Set("Content-Type", "application/octet-stream")
@@ -185,7 +185,7 @@ func (h *Handler) getBlob(w http.ResponseWriter, r *http.Request, name, digest s
 		return
 	}
 	w.WriteHeader(http.StatusOK)
-	io.Copy(w, rc)
+	_, _ = io.Copy(w, rc)
 }
 
 func (h *Handler) initUpload(w http.ResponseWriter, r *http.Request, name string) {
@@ -236,7 +236,10 @@ func (h *Handler) patchOrCommitUpload(w http.ResponseWriter, r *http.Request, na
 			return
 		}
 		if r.ContentLength > 0 {
-			h.store.AppendUpload(id, r.Body)
+			if err := h.store.AppendUpload(id, r.Body); err != nil {
+				registryError(w, http.StatusNotFound, "BLOB_UPLOAD_UNKNOWN", err.Error())
+				return
+			}
 		}
 		if err := h.store.CommitUpload(id, digest); err != nil {
 			registryError(w, http.StatusBadRequest, "DIGEST_INVALID", err.Error())
@@ -266,7 +269,7 @@ func mediaType(content []byte) string {
 func registryError(w http.ResponseWriter, status int, code, message string) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(status)
-	json.NewEncoder(w).Encode(map[string]any{
+	_ = json.NewEncoder(w).Encode(map[string]any{
 		"errors": []map[string]string{{"code": code, "message": message}},
 	})
 }
@@ -274,7 +277,7 @@ func registryError(w http.ResponseWriter, status int, code, message string) {
 func jsonOK(w http.ResponseWriter, v any) {
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(v)
+	_ = json.NewEncoder(w).Encode(v)
 }
 
 // IsV2Path reports whether a path belongs to the V2 protocol (used by the middleware).

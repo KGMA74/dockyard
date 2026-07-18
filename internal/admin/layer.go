@@ -50,7 +50,7 @@ func parseLayerEntries(r io.Reader) ([]layerEntry, error) {
 		if err != nil {
 			return nil, fmt.Errorf("gzip: %w", err)
 		}
-		defer gzr.Close()
+		defer func() { _ = gzr.Close() }()
 		tr = tar.NewReader(gzr)
 	} else {
 		tr = tar.NewReader(br)

@@ -105,7 +105,7 @@ func (h *RemoteHandler) GetLayerEntries(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadGateway, map[string]string{"error": err.Error()})
 	}
-	defer rc.Close()
+	defer func() { _ = rc.Close() }()
 	entries, err := parseLayerEntries(rc)
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})

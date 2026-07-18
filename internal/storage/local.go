@@ -70,14 +70,14 @@ func (b *LocalBackend) PutBlob(digest string, content io.Reader, _ int64) error 
 	if err != nil {
 		return err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	h := sha256.New()
 	if _, err = io.Copy(io.MultiWriter(f, h), content); err != nil {
-		os.Remove(path)
+		_ = os.Remove(path)
 		return err
 	}
 	if got := "sha256:" + hex.EncodeToString(h.Sum(nil)); got != digest {
-		os.Remove(path)
+		_ = os.Remove(path)
 		return fmt.Errorf("digest mismatch: expected %s got %s", digest, got)
 	}
 	return nil
@@ -90,7 +90,7 @@ func (b *LocalBackend) GetBlob(digest string) (io.ReadCloser, int64, error) {
 	}
 	info, err := f.Stat()
 	if err != nil {
-		f.Close()
+		_ = f.Close()
 		return nil, 0, err
 	}
 	return f, info.Size(), nil
@@ -131,7 +131,7 @@ func (b *LocalBackend) AppendUpload(uuid string, content io.Reader) error {
 	if err != nil {
 		return fmt.Errorf("upload %s not found", uuid)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	_, err = io.Copy(f, content)
 	return err
 }
@@ -144,12 +144,12 @@ func (b *LocalBackend) CommitUpload(uuid, digest string) error {
 	}
 	h := sha256.New()
 	if _, err = io.Copy(h, f); err != nil {
-		f.Close()
+		_ = f.Close()
 		return err
 	}
-	f.Close()
+	_ = f.Close()
 	if got := "sha256:" + hex.EncodeToString(h.Sum(nil)); got != digest {
-		os.RemoveAll(filepath.Join(b.root, "uploads", uuid))
+		_ = os.RemoveAll(filepath.Join(b.root, "uploads", uuid))
 		return fmt.Errorf("digest mismatch: expected %s got %s", digest, got)
 	}
 	dst := b.blobPath(digest)
@@ -221,7 +221,7 @@ func (b *LocalBackend) DeleteManifest(name, digest string) error {
 	for _, e := range entries {
 		raw, err := os.ReadFile(filepath.Join(tagsDir, e.Name()))
 		if err == nil && string(raw) == digest {
-			os.Remove(filepath.Join(tagsDir, e.Name()))
+			_ = os.Remove(filepath.Join(tagsDir, e.Name()))
 		}
 	}
 
@@ -230,7 +230,7 @@ func (b *LocalBackend) DeleteManifest(name, digest string) error {
 	// for a "tags" directory, and an empty one would otherwise still match).
 	manifestsDir := filepath.Join(b.root, "repositories", filepath.FromSlash(name), "manifests")
 	if remaining, err := os.ReadDir(manifestsDir); err == nil && len(remaining) == 0 {
-		os.RemoveAll(filepath.Join(b.root, "repositories", filepath.FromSlash(name)))
+		_ = os.RemoveAll(filepath.Join(b.root, "repositories", filepath.FromSlash(name)))
 	}
 	return nil
 }
