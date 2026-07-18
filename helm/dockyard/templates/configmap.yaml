@@ -18,3 +18,10 @@ data:
   V2_ANONYMOUS_PULL: {{ .Values.auth.v2AnonymousPull | default false | toString | quote }}
   REGISTRY_URL: {{ .Values.registry.proxy.url | quote }}
   REGISTRY_USERNAME: {{ .Values.registry.proxy.username | quote }}
+  TLS_MODE: {{ (.Values.tls).mode | default "off" | quote }}
+  TLS_DOMAIN: {{ (.Values.tls).domain | default "" | quote }}
+  TLS_ACME_EMAIL: {{ (.Values.tls).acmeEmail | default "" | quote }}
+  {{- if (.Values.tls).existingCertSecret }}
+  TLS_CERT_FILE: "/etc/dockyard-tls/tls.crt"
+  TLS_KEY_FILE: "/etc/dockyard-tls/tls.key"
+  {{- end }}

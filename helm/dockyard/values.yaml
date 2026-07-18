@@ -47,6 +47,17 @@ auth:
   # Name of an existing Secret that already contains jwt-secret and auth-password
   # (and optionally s3-access-key, s3-secret-key, registry-password).
   # When set, no Secret is created by this chart.
+
+tls:
+  # off | static | self-signed | acme — served natively by Dockyard.
+  # "static" expects existingCertSecret below; "acme" needs the pod reachable
+  # from the internet on :443 (TLS-ALPN challenge) and domain set.
+  mode: "off"
+  domain: ""
+  acmeEmail: ""
+  # kubernetes.io/tls Secret (tls.crt / tls.key) mounted read-only; implies
+  # TLS_CERT_FILE/TLS_KEY_FILE when mode=static.
+  existingCertSecret: ""
   existingSecret: ""
 
 service:

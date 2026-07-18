@@ -14,6 +14,7 @@ import (
 	"dockyard/internal/registry"
 	"dockyard/internal/storage"
 	"dockyard/internal/store"
+	"dockyard/internal/tlsutil"
 )
 
 type mode string
@@ -98,10 +99,27 @@ func NewServer() *http.Server {
 	}
 	srv.auth = authMgr
 
+	tlsConfig, err := tlsutil.Config(tlsutil.Options{
+		Mode:      cfg.TLSMode,
+		CertFile:  cfg.TLSCertFile,
+		KeyFile:   cfg.TLSKeyFile,
+		Domain:    cfg.TLSDomain,
+		ACMEEmail: cfg.TLSACMEEmail,
+		Dir:       filepath.Join(cfg.StoragePath, "tls"),
+	})
+	if err != nil {
+		slog.Error("tls init failed", "err", err)
+		os.Exit(1)
+	}
+	if tlsConfig != nil {
+		slog.Info("tls enabled", "mode", cfg.TLSMode)
+	}
+
 	return &http.Server{
 		Addr:              fmt.Sprintf(":%d", srv.port),
 		Handler:           srv.RegisterRoutes(),
 		IdleTimeout:       10 * time.Minute,
 		ReadHeaderTimeout: 30 * time.Second,
+		TLSConfig:         tlsConfig,
 	}
 }

@@ -45,32 +45,57 @@ spec:
                 name: {{ include "dockyard.fullname" . }}
             - secretRef:
                 name: {{ include "dockyard.secretName" . }}
+          {{- $tlsOn := ne ((.Values.tls).mode | default "off") "off" }}
           livenessProbe:
             httpGet:
               path: /health
               port: http
+              {{- if $tlsOn }}
+              scheme: HTTPS
+              {{- end }}
             initialDelaySeconds: 5
             periodSeconds: 10
           readinessProbe:
             httpGet:
               path: /health
               port: http
+              {{- if $tlsOn }}
+              scheme: HTTPS
+              {{- end }}
             initialDelaySeconds: 3
             periodSeconds: 5
           {{- with .Values.resources }}
           resources:
             {{- toYaml . | nindent 12 }}
           {{- end }}
-          {{- if and (eq .Values.registry.storage.backend "local") .Values.persistence.enabled }}
+          {{- $localPVC := and (eq .Values.registry.storage.backend "local") .Values.persistence.enabled }}
+          {{- $tlsSecret := (.Values.tls).existingCertSecret }}
+          {{- if or $localPVC $tlsSecret }}
           volumeMounts:
+            {{- if $localPVC }}
             - name: registry-data
               mountPath: {{ .Values.registry.storage.path }}
+            {{- end }}
+            {{- if $tlsSecret }}
+            - name: tls-cert
+              mountPath: /etc/dockyard-tls
+              readOnly: true
+            {{- end }}
           {{- end }}
-      {{- if and (eq .Values.registry.storage.backend "local") .Values.persistence.enabled }}
+      {{- $localPVC := and (eq .Values.registry.storage.backend "local") .Values.persistence.enabled }}
+      {{- $tlsSecret := (.Values.tls).existingCertSecret }}
+      {{- if or $localPVC $tlsSecret }}
       volumes:
+        {{- if $localPVC }}
         - name: registry-data
           persistentVolumeClaim:
             claimName: {{ include "dockyard.pvcName" . }}
+        {{- end }}
+        {{- if $tlsSecret }}
+        - name: tls-cert
+          secret:
+            secretName: {{ $tlsSecret }}
+        {{- end }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:

@@ -17,7 +17,7 @@
 | P1.4 — Docker token auth /v2/token | #6 | ✅ fait | (ce commit) | /v2/token + challenge Bearer + fallback Basic, RBAC par action/repo sur /v2, **flip V2_AUTH_ENABLED=true (breaking)**, V2_ANONYMOUS_PULL ; e2e docker login/push/pull vérifié |
 | P1.5 — Audit log | #7 | ✅ fait | (ce commit) | internal/audit : mutations admin + push/delete-manifest v2 (acteur du Principal, anonymes inclus), hooks login/logout/password, GET /api/admin/audit filtrable, table dans SettingsTab |
 | P1.6 — Rate limiting + CORS | #8 | ✅ fait | (ce commit) | limiteur strict login+/v2/token (RATE_LIMIT_LOGIN_PER_MIN=10), plafond global par IP (RATE_LIMIT_GLOBAL_RPS=100), CORS off par défaut (CORS_ALLOWED_ORIGINS) |
-| P1.7 — TLS natif | #9 | ⬜ à faire | | parallélisable |
+| P1.7 — TLS natif | #9 | ✅ fait | (ce commit) | TLS_MODE=off/static/self-signed/acme (autocert TLS-ALPN, pas lego), cert self-signed persisté+réutilisé, Helm tls.* (secret monté, probes HTTPS) — `helm template` à valider côté user |
 | P1.8 — UI users + sessions | #10 | ⬜ à faire | | après P1.2/P1.3 |
 | P1.9 — GC dry-run | #11 | ⬜ à faire | | petit gain, dérisque P4.2 |
 | P1.10 — Tests intégration P1 | #12 | ⬜ à faire | | après P1.4 |
@@ -59,7 +59,7 @@
 
 ## Prochaine étape
 
-**P1.7 — TLS natif** (issue #9) : `TLS_MODE=off|static|self-signed|acme` — chemins cert/clé statiques, autogen self-signed persisté sous `<StoragePath>/tls/`, ACME via lego (HTTP-01) avec cache ; values Helm pour monter des certs ; note insecure-registries pour le self-signed.
+**P1.8 — UI users + sessions** (issue #10) : onglet Users (CRUD, éditeur rôle/globs, revoke de sessions) dans l'UI React — `ui/src/components/UsersTab.tsx` (nouveau), `Sidebar.tsx`, `api.ts` ; visible admin only (comme la section audit).
 
 ## Notes de reprise
 

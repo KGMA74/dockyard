@@ -38,7 +38,15 @@ func main() {
 	done := make(chan bool, 1)
 	go gracefulShutdown(srv, done)
 
-	if err := srv.ListenAndServe(); err != nil && err != http.ErrServerClosed {
+	// TLSConfig is set by the server when TLS_MODE is not off; cert and key
+	// come from the config itself (static files, self-signed or ACME).
+	var err error
+	if srv.TLSConfig != nil {
+		err = srv.ListenAndServeTLS("", "")
+	} else {
+		err = srv.ListenAndServe()
+	}
+	if err != nil && err != http.ErrServerClosed {
 		slog.Error("http server error", "err", err)
 		os.Exit(1)
 	}
