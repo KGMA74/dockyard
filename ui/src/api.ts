@@ -226,10 +226,11 @@ export interface GCResult {
   freed_human: string
   freed_bytes: number
   removed: string[]
+  dry_run?: boolean
 }
 
-export async function runGC(): Promise<GCResult> {
-  return req('/gc', { method: 'POST' })
+export async function runGC(dryRun = false): Promise<GCResult> {
+  return req(`/gc${dryRun ? '?dryRun=true' : ''}`, { method: 'POST' })
 }
 
 export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {

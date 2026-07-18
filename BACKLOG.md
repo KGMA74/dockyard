@@ -19,7 +19,7 @@
 | P1.6 — Rate limiting + CORS | #8 | ✅ fait | (ce commit) | limiteur strict login+/v2/token (RATE_LIMIT_LOGIN_PER_MIN=10), plafond global par IP (RATE_LIMIT_GLOBAL_RPS=100), CORS off par défaut (CORS_ALLOWED_ORIGINS) |
 | P1.7 — TLS natif | #9 | ✅ fait | (ce commit) | TLS_MODE=off/static/self-signed/acme (autocert TLS-ALPN, pas lego), cert self-signed persisté+réutilisé, Helm tls.* (secret monté, probes HTTPS) — `helm template` à valider côté user |
 | P1.8 — UI users + sessions | #10 | ⬜ à faire | | après P1.2/P1.3 |
-| P1.9 — GC dry-run | #11 | ⬜ à faire | | petit gain, dérisque P4.2 |
+| P1.9 — GC dry-run | #11 | ✅ fait | (ce commit) | ?dryRun=true sur POST /gc (mark sans sweep), bouton Preview GC dans StorageTab, test préview==réel |
 | P1.10 — Tests intégration P1 | #12 | ⬜ à faire | | après P1.4 |
 | P2.0 — S3 multipart | #13 | ⬜ à faire | | prérequis P2.1 |
 | P2.1 — Mode mirror | #14 | ⬜ à faire | | après P2.0 + P1.4 |

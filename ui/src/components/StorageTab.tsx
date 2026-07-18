@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { toast } from 'sonner'
-import { Trash2, Database, Boxes, Layers, Tags } from 'lucide-react'
+import { Trash2, Database, Boxes, Layers, Tags, Eye } from 'lucide-react'
 import { runGC, RepoSummary, StorageStats } from '../api'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -14,12 +14,20 @@ interface Props {
 export default function StorageTab({ stats, repos, onRefresh }: Props) {
   const [running, setRunning] = useState(false)
 
-  async function handleGC() {
+  async function handleGC(dryRun: boolean) {
     setRunning(true)
     try {
-      const result = await runGC()
-      toast.success(`GC done — removed ${result.count} blob(s), freed ${result.freed_human}`)
-      onRefresh()
+      const result = await runGC(dryRun)
+      if (dryRun) {
+        toast.info(
+          result.count === 0
+            ? 'Nothing to collect — no unreferenced blob'
+            : `Preview — ${result.count} blob(s) would be removed, freeing ${result.freed_human}`,
+        )
+      } else {
+        toast.success(`GC done — removed ${result.count} blob(s), freed ${result.freed_human}`)
+        onRefresh()
+      }
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'GC failed')
     } finally {
@@ -70,16 +78,26 @@ export default function StorageTab({ stats, repos, onRefresh }: Props) {
           {unavailable ? (
             <p className="text-xs text-muted-foreground/70">Not available in proxy mode</p>
           ) : (
-            <Button
-              variant="secondary"
-              size="sm"
-              onClick={handleGC}
-              disabled={running}
-              className="self-start mt-1"
-            >
-              <Trash2 />
-              {running ? 'Running…' : 'Run garbage collection'}
-            </Button>
+            <div className="flex gap-2 mt-1">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => handleGC(true)}
+                disabled={running}
+              >
+                <Eye />
+                Preview GC
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
+                onClick={() => handleGC(false)}
+                disabled={running}
+              >
+                <Trash2 />
+                {running ? 'Running…' : 'Run garbage collection'}
+              </Button>
+            </div>
           )}
         </Card>
       </div>

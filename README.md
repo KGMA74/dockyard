@@ -302,7 +302,7 @@ All endpoints require `Authorization: Bearer <token>` (except login/logout).
 | `DELETE` | `/api/admin/repositories?name=<image>` | Delete a repository and all its tags |
 | `GET` | `/api/admin/storage/stats` | Storage usage (size, blob count, repo count) |
 | `GET` | `/api/admin/storage/tree` | Raw filesystem tree (local only) |
-| `POST` | `/api/admin/gc` | Garbage collect unreferenced blobs (local only) |
+| `POST` | `/api/admin/gc` | Garbage collect unreferenced blobs — `?dryRun=true` previews without deleting |
 
 ---
 
@@ -646,7 +646,7 @@ Tous les endpoints nécessitent `Authorization: Bearer <token>` (sauf login/logo
 | `DELETE` | `/api/admin/repositories?name=<image>` | Supprimer un dépôt et tous ses tags |
 | `GET` | `/api/admin/storage/stats` | Utilisation du stockage (taille, blobs, dépôts) |
 | `GET` | `/api/admin/storage/tree` | Arbre du filesystem (local uniquement) |
-| `POST` | `/api/admin/gc` | Supprimer les blobs non référencés (local uniquement) |
+| `POST` | `/api/admin/gc` | Supprimer les blobs non référencés — `?dryRun=true` prévisualise sans supprimer |
 
 ---
 

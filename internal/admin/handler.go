@@ -197,13 +197,15 @@ func (h *Handler) StorageStats(c echo.Context) error {
 	return c.JSON(http.StatusOK, result)
 }
 
-// POST /api/admin/gc — removes blobs not referenced by any manifest
+// POST /api/admin/gc — removes blobs not referenced by any manifest.
+// With ?dryRun=true, only reports what would be removed (mark phase, no sweep).
 func (h *Handler) GarbageCollect(c echo.Context) error {
 	if h.gcStore == nil {
 		return c.JSON(http.StatusNotImplemented, map[string]string{
 			"error": "garbage collection is only available with the local storage backend",
 		})
 	}
+	dryRun := c.QueryParam("dryRun") == "true"
 	referenced, err := h.gcStore.ReferencedBlobs()
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, err500(err))
@@ -219,6 +221,11 @@ func (h *Handler) GarbageCollect(c echo.Context) error {
 			continue
 		}
 		size, _ := h.gcStore.BlobSize(digest)
+		if dryRun {
+			freed += size
+			removed = append(removed, digest)
+			continue
+		}
 		if err := h.gcStore.RemoveBlob(digest); err == nil {
 			freed += size
 			removed = append(removed, digest)
@@ -229,6 +236,7 @@ func (h *Handler) GarbageCollect(c echo.Context) error {
 		"count":       len(removed),
 		"freed_bytes": freed,
 		"freed_human": humanSize(freed),
+		"dry_run":     dryRun,
 	})
 }
 
