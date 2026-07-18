@@ -118,8 +118,11 @@ AUTH_PASSWORD=changeme123       # initial password (first startup only)
 JWT_SECRET=change-this-to-a-long-random-secret
 # JWT_SECRET_PREVIOUS=          # old secret during a rotation grace window
 
-# Basic auth on /v2/* (false = open in dev · true = required in prod)
+# Auth on /v2/* — default is now true (Docker token auth + Basic fallback).
+# Set to false for an open registry (dev only).
 V2_AUTH_ENABLED=false
+# Allow unauthenticated pulls while pushes require login (public-read registry)
+# V2_ANONYMOUS_PULL=true
 
 # ── Proxy mode ────────────────────────────────────────────────────────────────
 # REGISTRY_MODE=proxy
@@ -211,18 +214,14 @@ On the first boot after upgrading, the legacy single admin is migrated automatic
 
 > Rotate `JWT_SECRET` without logging everyone out: set the new value in `JWT_SECRET`, put the old one in `JWT_SECRET_PREVIOUS` during a grace window, then remove it.
 
-### Registry V2 (`/v2/*`) — Basic Auth
+### Registry V2 (`/v2/*`) — Docker token auth
 
-Open by default (`V2_AUTH_ENABLED=false`). Enable for preprod/production:
+> **Breaking change:** `/v2/*` now requires authentication **by default** (`V2_AUTH_ENABLED=true`). Set it to `false` to restore the old open registry, or `V2_ANONYMOUS_PULL=true` for a public-read registry (anonymous pulls, authenticated pushes).
 
-```env
-V2_AUTH_ENABLED=true
-```
-
-Uses the same credentials as the admin panel (`AUTH_USERNAME` / `AUTH_PASSWORD`).
+Unauthenticated requests receive a `WWW-Authenticate: Bearer realm=".../v2/token"` challenge; `docker login` trades credentials for a short-lived JWT at `/v2/token` (Basic auth also works as a fallback). Any account from the users table can log in — roles apply: readers can pull but not push, pushers can push only to repositories matching their `repo_patterns`, deletes require admin.
 
 ```bash
-# Login from Docker CLI
+# Login from Docker CLI (any user account)
 docker login localhost:8080 -u admin -p changeme123
 
 # Kubernetes imagePullSecret
@@ -442,8 +441,11 @@ AUTH_PASSWORD=changeme123       # mot de passe initial (premier démarrage uniqu
 JWT_SECRET=changez-moi-pour-une-longue-chaine-aleatoire
 # JWT_SECRET_PREVIOUS=          # ancien secret pendant une fenêtre de rotation
 
-# Basic auth sur /v2/* (false = ouvert en dev · true = obligatoire en prod)
+# Auth sur /v2/* — désormais true par défaut (token auth Docker + fallback Basic).
+# Mettre à false pour une registry ouverte (dev uniquement).
 V2_AUTH_ENABLED=false
+# Autoriser le pull anonyme, push authentifié (registry publique en lecture)
+# V2_ANONYMOUS_PULL=true
 
 # ── Mode proxy ────────────────────────────────────────────────────────────────
 # REGISTRY_MODE=proxy
@@ -535,18 +537,14 @@ Au premier démarrage après mise à jour, l'admin unique historique est migré 
 
 > Faites tourner `JWT_SECRET` sans déconnecter tout le monde : mettez la nouvelle valeur dans `JWT_SECRET`, l'ancienne dans `JWT_SECRET_PREVIOUS` pendant une fenêtre de grâce, puis retirez-la.
 
-### Registry V2 (`/v2/*`) — Basic Auth
+### Registry V2 (`/v2/*`) — Token auth Docker
 
-Ouvert par défaut (`V2_AUTH_ENABLED=false`). Activer pour la préprod/production :
+> **Breaking change :** `/v2/*` exige désormais une authentification **par défaut** (`V2_AUTH_ENABLED=true`). Mettre `false` pour retrouver la registry ouverte, ou `V2_ANONYMOUS_PULL=true` pour une registry publique en lecture (pull anonyme, push authentifié).
 
-```env
-V2_AUTH_ENABLED=true
-```
-
-Utilise les mêmes identifiants que le panel admin (`AUTH_USERNAME` / `AUTH_PASSWORD`).
+Les requêtes non authentifiées reçoivent un challenge `WWW-Authenticate: Bearer realm=".../v2/token"` ; `docker login` échange les identifiants contre un JWT court à `/v2/token` (le Basic auth fonctionne aussi en fallback). Tout compte de la table users peut se connecter — les rôles s'appliquent : un reader pull mais ne push pas, un pusher ne push que vers les repositories couverts par ses `repo_patterns`, les suppressions exigent admin.
 
 ```bash
-# Connexion depuis le CLI Docker
+# Connexion depuis le CLI Docker (n'importe quel compte)
 docker login localhost:8080 -u admin -p changeme123
 
 # imagePullSecret Kubernetes

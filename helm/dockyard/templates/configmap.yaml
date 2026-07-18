@@ -15,5 +15,6 @@ data:
   S3_SECURE: {{ .Values.registry.s3.secure | quote }}
   AUTH_USERNAME: {{ .Values.auth.username | quote }}
   V2_AUTH_ENABLED: {{ .Values.auth.v2Enabled | toString | quote }}
+  V2_ANONYMOUS_PULL: {{ .Values.auth.v2AnonymousPull | default false | toString | quote }}
   REGISTRY_URL: {{ .Values.registry.proxy.url | quote }}
   REGISTRY_USERNAME: {{ .Values.registry.proxy.username | quote }}

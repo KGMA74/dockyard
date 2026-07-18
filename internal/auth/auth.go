@@ -442,42 +442,6 @@ func (m *Manager) ChangePassword(c echo.Context) error {
 
 func (m *Manager) Username() string { return m.username }
 
-// PasswordHash returns the bootstrap admin's bcrypt hash (used by the /v2
-// basic-auth wrapper until Docker token auth lands).
-func (m *Manager) PasswordHash() (string, error) {
-	u, err := m.users.GetUser(m.username)
-	if err != nil {
-		return "", err
-	}
-	return u.PasswordHash, nil
-}
-
-// BasicAuthMiddleware protects /v2/* routes with HTTP Basic Auth + bcrypt.
-// Enabled only when V2_AUTH_ENABLED=true; otherwise /v2/* is open.
-func BasicAuthMiddleware(username, passwordHash string) func(http.Handler) http.Handler {
-	return func(next http.Handler) http.Handler {
-		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			user, pass, ok := r.BasicAuth()
-			if !ok {
-				w.Header().Set("WWW-Authenticate", `Basic realm="Dockyard Registry"`)
-				w.Header().Set("Content-Type", "application/json")
-				w.WriteHeader(http.StatusUnauthorized)
-				_, _ = w.Write([]byte(`{"errors":[{"code":"UNAUTHORIZED","message":"authentication required"}]}`))
-				return
-			}
-			if user != username {
-				w.WriteHeader(http.StatusUnauthorized)
-				return
-			}
-			if err := bcrypt.CompareHashAndPassword([]byte(passwordHash), []byte(pass)); err != nil {
-				w.WriteHeader(http.StatusUnauthorized)
-				return
-			}
-			next.ServeHTTP(w, r)
-		})
-	}
-}
-
 // Middleware vérifie le JWT, rejette les tokens révoqués et installe le
 // Principal dans le contexte.
 func (m *Manager) Middleware() echo.MiddlewareFunc {

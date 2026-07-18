@@ -13,8 +13,8 @@
 | T.2 — Harness de tests | #2 | ✅ fait | `ec98276` | storagetest.RunBackendContract (S3 gated par DOCKYARD_TEST_S3_ENDPOINT), tests auth/v2/GC ; bug Windows PutBlob corrigé |
 | P1.1 — Scaffold SQLite | #3 | ✅ fait | `8472178` | internal/store, modernc.org/sqlite, migrations go:embed, dockyard.db dans les 2 modes |
 | P1.2 — RBAC multi-users | #4 | ✅ fait | `b9f1e01` | rôles admin/pusher/reader + globs, CRUD /users, Authorize(), RequireAdmin sur DELETE+gc, migration admin legacy |
-| P1.3 — Sessions/refresh | #5 | ✅ fait | (ce commit) | access 15 min + refresh 30 j rotation single-use, /auth/refresh, /sessions list+revoke, blacklist persistée, JWT_SECRET_PREVIOUS, intercepteur UI |
-| P1.4 — Docker token auth /v2/token | #6 | ⬜ à faire | | après P1.2+P1.3 ; flip V2_AUTH_ENABLED=true (breaking), V2_ANONYMOUS_PULL |
+| P1.3 — Sessions/refresh | #5 | ✅ fait | `fd544aa` | access 15 min + refresh 30 j rotation single-use, /auth/refresh, /sessions list+revoke, blacklist persistée, JWT_SECRET_PREVIOUS, intercepteur UI |
+| P1.4 — Docker token auth /v2/token | #6 | ✅ fait | (ce commit) | /v2/token + challenge Bearer + fallback Basic, RBAC par action/repo sur /v2, **flip V2_AUTH_ENABLED=true (breaking)**, V2_ANONYMOUS_PULL ; e2e docker login/push/pull vérifié |
 | P1.5 — Audit log | #7 | ⬜ à faire | | après P1.2 (acteurs) |
 | P1.6 — Rate limiting + CORS | #8 | ⬜ à faire | | parallélisable |
 | P1.7 — TLS natif | #9 | ⬜ à faire | | parallélisable |
@@ -59,7 +59,7 @@
 
 ## Prochaine étape
 
-**P1.4 — Docker token auth `/v2/token`** (issue #6) : endpoint token honorant `scope=repository:<name>:pull,push` adossé au signeur JWT existant (réutiliser `auth.Authorize` de P1.2), challenge `WWW-Authenticate: Bearer` dans `internal/v2/handler.go` + `proxy.go`, fallback Basic, **flip du défaut `V2_AUTH_ENABLED=true`** (note breaking README + Helm) et nouveau `V2_ANONYMOUS_PULL`.
+**P1.5 — Audit log** (issue #7) : `internal/audit/` — middleware écrivant dans `audit_log` (acteur depuis le Principal, action, repo/tag, IP, résultat) pour les mutations `/api/admin/*`, PUT/DELETE `/v2/*`, logins et runs de GC ; `GET /api/admin/audit` paginé + filtres repo/date ; table UI simple. Les acteurs `/v2` viennent du Principal du V2Middleware (P1.4).
 
 ## Notes de reprise
 

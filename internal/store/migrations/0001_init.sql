@@ -1,3 +1,4 @@
+-- database: :memory:
 -- Initial schema: users, sessions, revoked_tokens, audit_log.
 -- Timestamps are stored as UTC RFC3339 text.
 

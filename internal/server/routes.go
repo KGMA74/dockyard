@@ -66,14 +66,22 @@ func (s *Server) RegisterRoutes() http.Handler {
 		v2h = v2.New(s.backend, s.events)
 	}
 
-	// Wrap /v2/* with basic auth when enabled
-	if s.v2AuthEnabled && s.v2AuthHash != "" {
-		v2h = auth.BasicAuthMiddleware(s.auth.Username(), s.v2AuthHash)(v2h)
+	// Docker token auth: unauthenticated /v2/* requests get a Bearer challenge
+	// pointing at /v2/token; Basic works as a fallback for plain docker login.
+	if s.v2AuthEnabled {
+		v2h = s.auth.V2Middleware(s.v2AnonymousPull)(v2h)
 	}
+	v2Token := s.auth.V2Token(s.v2AnonymousPull)
 
 	e.Use(func(next echo.HandlerFunc) echo.HandlerFunc {
 		return func(c echo.Context) error {
-			if v2.IsV2Path(c.Request().URL.Path) {
+			path := c.Request().URL.Path
+			if path == "/v2/token" {
+				// The token endpoint must stay outside the auth wrapper — it
+				// is where clients go to authenticate in the first place.
+				return v2Token(c)
+			}
+			if v2.IsV2Path(path) {
 				v2h.ServeHTTP(c.Response(), c.Request())
 				return nil
 			}

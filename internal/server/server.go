@@ -26,13 +26,13 @@ const (
 type Server struct {
 	port          int
 	mode          mode
-	backend       storage.Backend
-	proxy         *registry.Client
-	auth          *auth.Manager
-	store         *store.Store
-	events        *events.Hub
-	v2AuthEnabled bool
-	v2AuthHash    string
+	backend         storage.Backend
+	proxy           *registry.Client
+	auth            *auth.Manager
+	store           *store.Store
+	events          *events.Hub
+	v2AuthEnabled   bool
+	v2AnonymousPull bool
 }
 
 func NewServer() *http.Server {
@@ -45,10 +45,11 @@ func NewServer() *http.Server {
 	}
 
 	srv := &Server{
-		port:          cfg.Port,
-		mode:          m,
-		v2AuthEnabled: cfg.V2AuthEnabled,
-		events:        events.NewHub(),
+		port:            cfg.Port,
+		mode:            m,
+		v2AuthEnabled:   cfg.V2AuthEnabled,
+		v2AnonymousPull: cfg.V2AnonymousPull,
+		events:          events.NewHub(),
 	}
 
 	switch m {
@@ -88,15 +89,6 @@ func NewServer() *http.Server {
 		os.Exit(1)
 	}
 	srv.auth = authMgr
-
-	if cfg.V2AuthEnabled {
-		hash, err := authMgr.PasswordHash()
-		if err != nil {
-			slog.Error("V2_AUTH_ENABLED=true but cannot read password hash", "err", err)
-			os.Exit(1)
-		}
-		srv.v2AuthHash = hash
-	}
 
 	return &http.Server{
 		Addr:              fmt.Sprintf(":%d", srv.port),

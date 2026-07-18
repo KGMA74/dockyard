@@ -39,6 +39,7 @@ type Config struct {
 	JWTSecret         string
 	JWTSecretPrevious string
 	V2AuthEnabled     bool
+	V2AnonymousPull   bool
 }
 
 func Load() *Config {
@@ -64,7 +65,11 @@ func Load() *Config {
 		// the old one; tokens signed with either verify until the grace window
 		// ends (remove JWT_SECRET_PREVIOUS afterwards).
 		JWTSecretPrevious: getEnv("JWT_SECRET_PREVIOUS", ""),
-		V2AuthEnabled:     getEnv("V2_AUTH_ENABLED", "false") == "true",
+		// BREAKING (since the RBAC release): /v2/* now requires auth by
+		// default. Set V2_AUTH_ENABLED=false to restore the old open registry,
+		// or V2_ANONYMOUS_PULL=true for a public-read registry.
+		V2AuthEnabled:   getEnv("V2_AUTH_ENABLED", "true") == "true",
+		V2AnonymousPull: getEnv("V2_ANONYMOUS_PULL", "false") == "true",
 	}
 }
 

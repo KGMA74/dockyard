@@ -34,8 +34,13 @@ registry:
 auth:
   username: admin
   password: "changeme"
-  # Enable HTTP Basic auth on /v2/* endpoints
-  v2Enabled: false
+  # Auth on /v2/* endpoints (Docker token auth + Basic fallback).
+  # BREAKING: the application default flipped to true with the RBAC release —
+  # this chart pins it explicitly. Set to false for an open registry.
+  v2Enabled: true
+  # Allow unauthenticated pulls while pushes still require login
+  # (public-read registry). Only relevant when v2Enabled is true.
+  v2AnonymousPull: false
   # JWT secret: auto-generated on first install, preserved across upgrades.
   # Set explicitly to override auto-generation.
   jwtSecret: ""
