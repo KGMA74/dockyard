@@ -21,7 +21,7 @@
 | P1.8 — UI users + sessions | #10 | ✅ fait | (ce commit) | UsersTab (CRUD, rôle inline, patterns, création), sessions avec revoke + « this session », onglet Users admin-only dans la sidebar (rôle décodé du JWT) |
 | P1.9 — GC dry-run | #11 | ✅ fait | (ce commit) | ?dryRun=true sur POST /gc (mark sans sweep), bouton Preview GC dans StorageTab, test préview==réel |
 | P1.10 — Tests intégration P1 | #12 | ✅ fait | (ce commit) | flow docker complet via la vraie stack (401 challenge → token → push → pull), RBAC reader via API réelle, révocation de session → refresh mort |
-| P2.0 — S3 multipart | #13 | ⬜ à faire | | prérequis P2.1 |
+| P2.0 — S3 multipart | #13 | ✅ fait | (ce commit) | uploads en parts (uploads/<uuid>/parts/<n>), commit streamé O(16MiB) avec vérif digest (avant : aucune !), PutBlob vérifie aussi, Stats ne compte que blobs/ ; contrat + docker push e2e validés sur MinIO réel |
 | P2.1 — Mode mirror | #14 | ⬜ à faire | | après P2.0 + P1.4 |
 | P2.2 — Mirror auth upstream | #15 | ⬜ à faire | | |
 | P2.3 — Mirror hit/miss | #16 | ⬜ à faire | | |
@@ -59,7 +59,7 @@
 
 ## Prochaine étape
 
-**🎉 Phase 1 (Fondations sécurité) COMPLÈTE.** Suite : **P2.0 — S3 multipart upload** (issue #13) : remplacer `AppendUpload` de `internal/storage/s3.go` (relecture totale en mémoire) par des sessions multipart — prérequis du mode mirror (P2.1). Vérifier la mémoire O(chunk) et faire passer le contrat de backend (T.2, activable sur MinIO via DOCKYARD_TEST_S3_*).
+**P2.1 — Mode mirror (pull-through cache)** (issue #14) : nouveau `REGISTRY_MODE=mirror` dans `internal/v2/mirror.go` — hit local servi, miss → fetch upstream (manifest par tag/digest, blobs streamés vers le storage puis le client), write-through, TTL tag→digest (`MIRROR_TAG_TTL` 5 min), events SSE au cache-fill. Client upstream partagé avec `internal/registry/client.go`. Astuce validation locale : MinIO docker (`docker run --rm -d -p 19000:9000 -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin minio/minio server /data`) + `$env:S3_SECURE="false"` (le .env force true).
 
 ## Notes de reprise
 

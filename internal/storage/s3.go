@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"sort"
 	"strings"
 	"time"
 
@@ -44,13 +45,22 @@ func NewS3(endpoint, accessKey, secretKey, bucket, region string, secure bool) (
 }
 
 func (s *S3Backend) PutBlob(digest string, content io.Reader, size int64) error {
+	ctx := context.Background()
 	key := fmt.Sprintf("blobs/%s", digest)
+	h := sha256.New()
 	_, err := s.client.PutObject(
-		context.Background(),
-		s.bucket, key, content, size,
-		minio.PutObjectOptions{ContentType: "application/octet-stream"},
+		ctx,
+		s.bucket, key, io.TeeReader(content, h), size,
+		minio.PutObjectOptions{ContentType: "application/octet-stream", PartSize: uploadPartSize},
 	)
-	return err
+	if err != nil {
+		return err
+	}
+	if got := fmt.Sprintf("sha256:%x", h.Sum(nil)); got != digest {
+		_ = s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{})
+		return fmt.Errorf("digest mismatch: expected %s got %s", digest, got)
+	}
+	return nil
 }
 
 func (s *S3Backend) GetBlob(digest string) (io.ReadCloser, int64, error) {
@@ -84,73 +94,142 @@ func (s *S3Backend) DeleteBlob(digest string) error {
 	return s.client.RemoveObject(context.Background(), s.bucket, key, minio.RemoveObjectOptions{})
 }
 
+// Chunked uploads are stored as one object per appended chunk under
+// uploads/<uuid>/parts/<n>; the commit streams the parts into the final blob.
+// Memory stays O(upload part size) end to end — the previous implementation
+// re-read and re-uploaded the whole object on every append.
+
+const uploadPartSize = 16 << 20 // minio-go buffer per streamed part
+
+func (s *S3Backend) uploadMarkerKey(uuid string) string {
+	return fmt.Sprintf("uploads/%s/.init", uuid)
+}
+
+func (s *S3Backend) uploadPartsPrefix(uuid string) string {
+	return fmt.Sprintf("uploads/%s/parts/", uuid)
+}
+
 func (s *S3Backend) InitUpload(uuid string) error {
-	key := fmt.Sprintf("uploads/%s", uuid)
 	_, err := s.client.PutObject(
 		context.Background(),
-		s.bucket, key,
-		bytes.NewReader([]byte{}), 0,
+		s.bucket, s.uploadMarkerKey(uuid),
+		bytes.NewReader(nil), 0,
 		minio.PutObjectOptions{},
 	)
 	return err
 }
 
-// AppendUpload reads existing upload data, appends new content, and re-writes it.
-// For large uploads, consider using S3 multipart uploads instead.
+// listUploadParts returns the upload's part objects in append order (keys are
+// zero-padded so lexicographic listing order is chronological).
+func (s *S3Backend) listUploadParts(uuid string) ([]minio.ObjectInfo, error) {
+	var parts []minio.ObjectInfo
+	for obj := range s.client.ListObjects(context.Background(), s.bucket, minio.ListObjectsOptions{
+		Prefix:    s.uploadPartsPrefix(uuid),
+		Recursive: true,
+	}) {
+		if obj.Err != nil {
+			return nil, obj.Err
+		}
+		parts = append(parts, obj)
+	}
+	sort.Slice(parts, func(i, j int) bool { return parts[i].Key < parts[j].Key })
+	return parts, nil
+}
+
+func (s *S3Backend) statUpload(uuid string) ([]minio.ObjectInfo, error) {
+	if _, err := s.client.StatObject(context.Background(), s.bucket, s.uploadMarkerKey(uuid), minio.StatObjectOptions{}); err != nil {
+		return nil, fmt.Errorf("upload %s not found", uuid)
+	}
+	return s.listUploadParts(uuid)
+}
+
+// AppendUpload streams the chunk into its own part object — no read-back of
+// previously uploaded data.
 func (s *S3Backend) AppendUpload(uuid string, content io.Reader) error {
-	key := fmt.Sprintf("uploads/%s", uuid)
-
-	existing, err := s.client.GetObject(context.Background(), s.bucket, key, minio.GetObjectOptions{})
+	parts, err := s.statUpload(uuid)
 	if err != nil {
 		return err
 	}
-	defer func() { _ = existing.Close() }()
-
-	existingData, err := io.ReadAll(existing)
-	if err != nil {
-		return err
-	}
-
-	newData, err := io.ReadAll(content)
-	if err != nil {
-		return err
-	}
-
-	combined := append(existingData, newData...)
+	key := fmt.Sprintf("%s%08d", s.uploadPartsPrefix(uuid), len(parts)+1)
 	_, err = s.client.PutObject(
 		context.Background(),
 		s.bucket, key,
-		bytes.NewReader(combined), int64(len(combined)),
-		minio.PutObjectOptions{},
+		content, -1,
+		minio.PutObjectOptions{PartSize: uploadPartSize},
 	)
 	return err
 }
 
+// CommitUpload streams the concatenated parts into the final blob while
+// hashing them, verifies the digest, then drops the upload session.
 func (s *S3Backend) CommitUpload(uuid, digest string) error {
-	srcKey := fmt.Sprintf("uploads/%s", uuid)
-	dstKey := fmt.Sprintf("blobs/%s", digest)
-
-	src := minio.CopySrcOptions{Bucket: s.bucket, Object: srcKey}
-	dst := minio.CopyDestOptions{Bucket: s.bucket, Object: dstKey}
-	if _, err := s.client.CopyObject(context.Background(), dst, src); err != nil {
+	ctx := context.Background()
+	parts, err := s.statUpload(uuid)
+	if err != nil {
 		return err
 	}
 
-	return s.client.RemoveObject(context.Background(), s.bucket, srcKey, minio.RemoveObjectOptions{})
+	readers := make([]io.Reader, 0, len(parts))
+	closers := make([]io.Closer, 0, len(parts))
+	defer func() {
+		for _, c := range closers {
+			_ = c.Close()
+		}
+	}()
+	var total int64
+	for _, p := range parts {
+		obj, err := s.client.GetObject(ctx, s.bucket, p.Key, minio.GetObjectOptions{})
+		if err != nil {
+			return err
+		}
+		readers = append(readers, obj)
+		closers = append(closers, obj)
+		total += p.Size
+	}
+
+	dstKey := fmt.Sprintf("blobs/%s", digest)
+	h := sha256.New()
+	_, err = s.client.PutObject(
+		ctx,
+		s.bucket, dstKey,
+		io.TeeReader(io.MultiReader(readers...), h), total,
+		minio.PutObjectOptions{PartSize: uploadPartSize},
+	)
+	if err != nil {
+		return err
+	}
+	if got := fmt.Sprintf("sha256:%x", h.Sum(nil)); got != digest {
+		_ = s.client.RemoveObject(ctx, s.bucket, dstKey, minio.RemoveObjectOptions{})
+		return fmt.Errorf("digest mismatch: expected %s got %s", digest, got)
+	}
+	return s.DeleteUpload(uuid)
 }
 
+// DeleteUpload removes the marker and every part of the session.
 func (s *S3Backend) DeleteUpload(uuid string) error {
-	key := fmt.Sprintf("uploads/%s", uuid)
-	return s.client.RemoveObject(context.Background(), s.bucket, key, minio.RemoveObjectOptions{})
+	ctx := context.Background()
+	for obj := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
+		Prefix:    fmt.Sprintf("uploads/%s/", uuid),
+		Recursive: true,
+	}) {
+		if obj.Err != nil {
+			continue
+		}
+		_ = s.client.RemoveObject(ctx, s.bucket, obj.Key, minio.RemoveObjectOptions{})
+	}
+	return nil
 }
 
 func (s *S3Backend) GetUploadSize(uuid string) (int64, error) {
-	key := fmt.Sprintf("uploads/%s", uuid)
-	info, err := s.client.StatObject(context.Background(), s.bucket, key, minio.StatObjectOptions{})
+	parts, err := s.statUpload(uuid)
 	if err != nil {
 		return 0, err
 	}
-	return info.Size, nil
+	var total int64
+	for _, p := range parts {
+		total += p.Size
+	}
+	return total, nil
 }
 
 func (s *S3Backend) PutManifest(name, reference, digest string, content []byte) error {
@@ -392,16 +471,17 @@ func (s *S3Backend) Stats() (StorageStats, error) {
 	ctx := context.Background()
 	var stats StorageStats
 
+	// Only blobs count toward storage stats — manifests are tiny and upload
+	// sessions are transient (this also matches LocalBackend's behavior).
 	for obj := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
+		Prefix:    "blobs/",
 		Recursive: true,
 	}) {
 		if obj.Err != nil {
 			continue
 		}
 		stats.TotalSize += obj.Size
-		if strings.HasPrefix(obj.Key, "blobs/") {
-			stats.BlobCount++
-		}
+		stats.BlobCount++
 	}
 
 	repos, err := s.ListRepositories()
