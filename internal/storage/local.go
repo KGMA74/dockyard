@@ -70,11 +70,17 @@ func (b *LocalBackend) PutBlob(digest string, content io.Reader, _ int64) error 
 	if err != nil {
 		return err
 	}
-	defer func() { _ = f.Close() }()
 	h := sha256.New()
-	if _, err = io.Copy(io.MultiWriter(f, h), content); err != nil {
+	_, err = io.Copy(io.MultiWriter(f, h), content)
+	// Close before any removal: Windows cannot delete an open file.
+	closeErr := f.Close()
+	if err != nil {
 		_ = os.Remove(path)
 		return err
+	}
+	if closeErr != nil {
+		_ = os.Remove(path)
+		return closeErr
 	}
 	if got := "sha256:" + hex.EncodeToString(h.Sum(nil)); got != digest {
 		_ = os.Remove(path)
