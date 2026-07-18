@@ -152,6 +152,49 @@ func TestMirrorServesStaleWhenUpstreamDown(t *testing.T) {
 	}
 }
 
+// TestMirrorFetchesChildManifestByDigest mimics a multi-arch pull: docker
+// first gets the index by tag, then requests the platform manifest by digest.
+func TestMirrorFetchesChildManifestByDigest(t *testing.T) {
+	child := storagetest.ManifestFor(storagetest.Digest([]byte("amd64-cfg")))
+	childDgst := storagetest.Digest(child)
+	index := []byte(`{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[{"digest":"` + childDgst + `"}]}`)
+
+	mux := http.NewServeMux()
+	mux.HandleFunc("/v2/lib/multi/manifests/latest", func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Docker-Content-Digest", storagetest.Digest(index))
+		_, _ = w.Write(index)
+	})
+	mux.HandleFunc("/v2/lib/multi/manifests/"+childDgst, func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Docker-Content-Digest", childDgst)
+		_, _ = w.Write(child)
+	})
+	upstream := httptest.NewServer(mux)
+	t.Cleanup(upstream.Close)
+
+	backend, err := storage.NewLocal(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	m := NewMirror(backend, events.NewHub(), registry.NewClient(upstream.URL, "", ""), time.Hour)
+	srv := httptest.NewServer(m)
+	t.Cleanup(srv.Close)
+
+	status, body := get(t, srv.URL+"/v2/lib/multi/manifests/latest")
+	if status != http.StatusOK || !bytes.Equal(body, index) {
+		t.Fatalf("index pull = %d", status)
+	}
+	status, body = get(t, srv.URL+"/v2/lib/multi/manifests/"+childDgst)
+	if status != http.StatusOK || !bytes.Equal(body, child) {
+		t.Fatalf("child-by-digest pull = %d", status)
+	}
+
+	// Cached: the child now exists locally.
+	upstream.Close()
+	if status, _ = get(t, srv.URL+"/v2/lib/multi/manifests/"+childDgst); status != http.StatusOK {
+		t.Errorf("child not cached: %d", status)
+	}
+}
+
 func TestMirrorIsAlsoAPushTarget(t *testing.T) {
 	srv, _, _ := newMirrorFixture(t, time.Hour)
 	content := []byte("pushed-directly")
