@@ -4,11 +4,16 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"dockyard/internal/store"
+
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
+	"golang.org/x/crypto/bcrypt"
 )
 
 const (
@@ -17,13 +22,23 @@ const (
 	testSecret   = "test-jwt-secret"
 )
 
-func newManager(t *testing.T) *Manager {
+func newManagerIn(t *testing.T, dir string) *Manager {
 	t.Helper()
-	m, err := New(testUser, testPassword, testSecret, t.TempDir())
+	st, err := store.Open(filepath.Join(dir, "dockyard.db"))
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = st.Close() })
+	m, err := New(testUser, testPassword, testSecret, dir, st)
 	if err != nil {
 		t.Fatalf("auth.New: %v", err)
 	}
 	return m
+}
+
+func newManager(t *testing.T) *Manager {
+	t.Helper()
+	return newManagerIn(t, t.TempDir())
 }
 
 func doLogin(t *testing.T, m *Manager, username, password string) (*httptest.ResponseRecorder, string) {
@@ -156,7 +171,9 @@ func TestChangePassword(t *testing.T) {
 		req := httptest.NewRequest(http.MethodPost, "/api/admin/auth/password", strings.NewReader(body))
 		req.Header.Set(echo.HeaderContentType, echo.MIMEApplicationJSON)
 		rec := httptest.NewRecorder()
-		if err := m.ChangePassword(e.NewContext(req, rec)); err != nil {
+		c := e.NewContext(req, rec)
+		c.Set(principalKey, Principal{Username: testUser, Role: store.RoleAdmin})
+		if err := m.ChangePassword(c); err != nil {
 			t.Fatalf("ChangePassword: %v", err)
 		}
 		return rec.Code
@@ -176,5 +193,116 @@ func TestChangePassword(t *testing.T) {
 	}
 	if rec, _ := doLogin(t, m, testUser, "new-password-123"); rec.Code != http.StatusOK {
 		t.Errorf("new password rejected after change: status = %d", rec.Code)
+	}
+}
+
+// TestLegacyPasswordMigration: on first boot with an empty users table, the
+// bcrypt hash persisted by the pre-RBAC code must win over the env password.
+func TestLegacyPasswordMigration(t *testing.T) {
+	dir := t.TempDir()
+	hash, err := bcrypt.GenerateFromPassword([]byte("runtime-changed-pass"), bcrypt.DefaultCost)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "auth"), 0700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "auth", "password.bcrypt"), hash, 0600); err != nil {
+		t.Fatal(err)
+	}
+
+	m := newManagerIn(t, dir) // initialPassword is testPassword, must be ignored
+	if rec, _ := doLogin(t, m, testUser, "runtime-changed-pass"); rec.Code != http.StatusOK {
+		t.Errorf("legacy file password rejected: status = %d", rec.Code)
+	}
+	if rec, _ := doLogin(t, m, testUser, testPassword); rec.Code != http.StatusUnauthorized {
+		t.Errorf("env password accepted despite legacy file: status = %d", rec.Code)
+	}
+}
+
+func TestLoginIncludesRoleClaim(t *testing.T) {
+	m := newManager(t)
+	_, token := doLogin(t, m, testUser, testPassword)
+	p, err := m.validate(token)
+	if err != nil {
+		t.Fatalf("validate: %v", err)
+	}
+	if p.Username != testUser || p.Role != store.RoleAdmin {
+		t.Errorf("principal = %+v, want admin/%s", p, testUser)
+	}
+}
+
+func TestAuthorize(t *testing.T) {
+	cases := []struct {
+		role   string
+		action Action
+		want   bool
+	}{
+		{store.RoleAdmin, ActionPull, true},
+		{store.RoleAdmin, ActionPush, true},
+		{store.RoleAdmin, ActionDelete, true},
+		{store.RoleAdmin, ActionAdmin, true},
+		{store.RolePusher, ActionPull, true},
+		{store.RolePusher, ActionPush, true},
+		{store.RolePusher, ActionDelete, false},
+		{store.RolePusher, ActionAdmin, false},
+		{store.RoleReader, ActionPull, true},
+		{store.RoleReader, ActionPush, false},
+		{store.RoleReader, ActionDelete, false},
+		{store.RoleReader, ActionAdmin, false},
+	}
+	for _, tc := range cases {
+		p := Principal{Username: "u", Role: tc.role}
+		if got := Authorize(p, tc.action, "any/repo"); got != tc.want {
+			t.Errorf("Authorize(%s, %s) = %v, want %v", tc.role, tc.action, got, tc.want)
+		}
+	}
+}
+
+func TestAuthorizeRepoPatterns(t *testing.T) {
+	p := Principal{Username: "u", Role: store.RolePusher, RepoPatterns: []string{"team-a/*", "shared"}}
+	for repo, want := range map[string]bool{
+		"team-a/app":        true,
+		"team-a/sub/deeper": true, // '*' crosses slashes
+		"shared":            true,
+		"team-b/app":        false,
+		"team-a":            false,
+	} {
+		if got := Authorize(p, ActionPush, repo); got != want {
+			t.Errorf("Authorize(push, %q) = %v, want %v", repo, got, want)
+		}
+	}
+	// No patterns → unrestricted.
+	if !Authorize(Principal{Role: store.RolePusher}, ActionPush, "anything/at/all") {
+		t.Error("empty patterns should not restrict")
+	}
+}
+
+func TestRequireAdmin(t *testing.T) {
+	e := echo.New()
+	call := func(p *Principal) int {
+		req := httptest.NewRequest(http.MethodDelete, "/api/admin/repositories", nil)
+		rec := httptest.NewRecorder()
+		c := e.NewContext(req, rec)
+		if p != nil {
+			c.Set(principalKey, *p)
+		}
+		next := func(c echo.Context) error { return c.NoContent(http.StatusOK) }
+		if err := RequireAdmin(next)(c); err != nil {
+			t.Fatalf("RequireAdmin: %v", err)
+		}
+		return rec.Code
+	}
+	if got := call(&Principal{Username: "root", Role: store.RoleAdmin}); got != http.StatusOK {
+		t.Errorf("admin: status = %d, want 200", got)
+	}
+	if got := call(&Principal{Username: "bob", Role: store.RoleReader}); got != http.StatusForbidden {
+		t.Errorf("reader: status = %d, want 403", got)
+	}
+	if got := call(&Principal{Username: "carl", Role: store.RolePusher}); got != http.StatusForbidden {
+		t.Errorf("pusher: status = %d, want 403", got)
+	}
+	if got := call(nil); got != http.StatusForbidden {
+		t.Errorf("no principal: status = %d, want 403", got)
 	}
 }

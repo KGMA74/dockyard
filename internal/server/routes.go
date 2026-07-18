@@ -93,8 +93,8 @@ func (s *Server) RegisterRoutes() http.Handler {
 		api.GET("/repositories/tags", h.GetTags)
 		api.GET("/repositories/manifest", h.GetManifestDetails)
 		api.GET("/repositories/layer", h.GetLayerEntries)
-		api.DELETE("/repositories/manifests", h.DeleteManifest)
-		api.DELETE("/repositories", h.DeleteRepository)
+		api.DELETE("/repositories/manifests", h.DeleteManifest, auth.RequireAdmin)
+		api.DELETE("/repositories", h.DeleteRepository, auth.RequireAdmin)
 		api.GET("/storage/stats", admin.NotSupported)
 		api.GET("/storage/tree", admin.NotSupported)
 		api.POST("/gc", admin.NotSupported)
@@ -104,13 +104,20 @@ func (s *Server) RegisterRoutes() http.Handler {
 		api.GET("/repositories/tags", h.GetTags)
 		api.GET("/repositories/manifest", h.GetManifestDetails)
 		api.GET("/repositories/layer", h.GetLayerEntries)
-		api.DELETE("/repositories/manifests", h.DeleteManifest)
-		api.DELETE("/repositories", h.DeleteRepository)
+		api.DELETE("/repositories/manifests", h.DeleteManifest, auth.RequireAdmin)
+		api.DELETE("/repositories", h.DeleteRepository, auth.RequireAdmin)
 		api.GET("/storage/stats", h.StorageStats)
 		api.GET("/storage/tree", h.StorageTree)
-		api.POST("/gc", h.GarbageCollect)
+		api.POST("/gc", h.GarbageCollect, auth.RequireAdmin)
 	}
 	api.POST("/auth/password", s.auth.ChangePassword)
+
+	// User management — SQLite-backed, available in both modes, admin only.
+	uh := admin.NewUsers(s.store)
+	api.GET("/users", uh.List, auth.RequireAdmin)
+	api.POST("/users", uh.Create, auth.RequireAdmin)
+	api.PUT("/users/:username", uh.Update, auth.RequireAdmin)
+	api.DELETE("/users/:username", uh.Delete, auth.RequireAdmin)
 
 	// SSE feed of registry pushes. Registered outside the /api/admin group
 	// because EventSource can't set an Authorization header — it authenticates

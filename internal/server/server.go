@@ -82,7 +82,7 @@ func NewServer() *http.Server {
 		slog.Error("AUTH_USERNAME, AUTH_PASSWORD and JWT_SECRET must be set")
 		os.Exit(1)
 	}
-	authMgr, err := auth.New(cfg.AuthUsername, cfg.AuthPassword, cfg.JWTSecret, cfg.StoragePath)
+	authMgr, err := auth.New(cfg.AuthUsername, cfg.AuthPassword, cfg.JWTSecret, cfg.StoragePath, st)
 	if err != nil {
 		slog.Error("auth init failed", "err", err)
 		os.Exit(1)
