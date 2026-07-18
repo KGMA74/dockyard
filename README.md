@@ -25,6 +25,7 @@ A lightweight, self-hosted Docker Registry V2 server written in Go. Ships as a *
 |---|---|
 | `embedded` | Dockyard **is** the registry — stores blobs and manifests itself |
 | `proxy` | Dockyard sits in front of an existing registry and exposes the admin UI/API |
+| `mirror` | Pull-through cache: serves from local storage, fetches misses from `REGISTRY_URL` (write-through). Tags are revalidated upstream after `MIRROR_TAG_TTL` (default 5m); blobs are immutable and never re-fetched; if the upstream is down, cached content keeps being served. Also accepts direct pushes. |
 
 ---
 
@@ -149,6 +150,11 @@ V2_AUTH_ENABLED=false
 # REGISTRY_URL=http://your-registry:5000
 # REGISTRY_USERNAME=
 # REGISTRY_PASSWORD=
+
+# ── Mirror mode (pull-through cache) ─────────────────────────────────────────
+# REGISTRY_MODE=mirror
+# REGISTRY_URL=http://upstream-registry:5000   # upstream to cache
+# MIRROR_TAG_TTL=5m                            # tag revalidation interval
 ```
 
 ---
@@ -368,6 +374,7 @@ Un serveur Docker Registry V2 léger, écrit en Go. Livré sous forme d'un **bin
 | Mode | Description |
 |---|---|
 | `embedded` | Dockyard **est** la registry — stocke blobs et manifests lui-même |
+| `mirror` | Cache pull-through : sert depuis le stockage local, va chercher les manquants sur `REGISTRY_URL` (write-through). Tags revalidés après `MIRROR_TAG_TTL` (5 min par défaut) ; blobs immuables jamais re-téléchargés ; si l'upstream tombe, le contenu en cache continue d'être servi. Accepte aussi les push directs. |
 | `proxy` | Dockyard se place devant une registry existante et expose l'UI/API admin |
 
 ---
@@ -493,6 +500,11 @@ V2_AUTH_ENABLED=false
 # REGISTRY_URL=http://votre-registry:5000
 # REGISTRY_USERNAME=
 # REGISTRY_PASSWORD=
+
+# ── Mode mirror (cache pull-through) ─────────────────────────────────────────
+# REGISTRY_MODE=mirror
+# REGISTRY_URL=http://registry-upstream:5000   # upstream à mettre en cache
+# MIRROR_TAG_TTL=5m                            # intervalle de revalidation des tags
 ```
 
 ---

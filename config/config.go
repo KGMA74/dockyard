@@ -4,6 +4,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	_ "github.com/joho/godotenv/autoload"
 )
@@ -25,6 +26,11 @@ type Config struct {
 	RegistryURL      string
 	RegistryUsername string
 	RegistryPassword string
+
+	// MirrorTagTTL: in mirror mode, how long a tag→digest resolution stays
+	// trusted before being revalidated upstream (blobs are immutable and
+	// never re-fetched).
+	MirrorTagTTL time.Duration
 
 	StorageBackend StorageBackend
 
@@ -72,6 +78,7 @@ func Load() *Config {
 		RegistryURL:      getEnv("REGISTRY_URL", ""),
 		RegistryUsername: getEnv("REGISTRY_USERNAME", ""),
 		RegistryPassword: getEnv("REGISTRY_PASSWORD", ""),
+		MirrorTagTTL:     getEnvDuration("MIRROR_TAG_TTL", 5*time.Minute),
 		StorageBackend:   StorageBackend(getEnv("REGISTRY_STORAGE_BACKEND", "local")),
 		S3Endpoint:       getEnv("S3_ENDPOINT", ""),
 		S3AccessKey:      getEnv("S3_ACCESS_KEY", ""),
@@ -102,6 +109,15 @@ func Load() *Config {
 		TLSDomain:    getEnv("TLS_DOMAIN", ""),
 		TLSACMEEmail: getEnv("TLS_ACME_EMAIL", ""),
 	}
+}
+
+func getEnvDuration(key string, fallback time.Duration) time.Duration {
+	if v := os.Getenv(key); v != "" {
+		if d, err := time.ParseDuration(v); err == nil {
+			return d
+		}
+	}
+	return fallback
 }
 
 func getEnvInt(key string, fallback int) int {

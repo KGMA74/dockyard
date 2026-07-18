@@ -22,6 +22,7 @@ type mode string
 const (
 	modeEmbedded mode = "embedded"
 	modeProxy    mode = "proxy"
+	modeMirror   mode = "mirror"
 )
 
 type Server struct {
@@ -38,6 +39,7 @@ type Server struct {
 	corsAllowedOrigins   []string
 	rateLimitLoginPerMin int
 	rateLimitGlobalRPS   int
+	mirrorTagTTL         time.Duration
 }
 
 func NewServer() *http.Server {
@@ -68,6 +70,23 @@ func NewServer() *http.Server {
 			os.Exit(1)
 		}
 		srv.proxy = registry.NewClient(cfg.RegistryURL, cfg.RegistryUsername, cfg.RegistryPassword)
+
+	case modeMirror:
+		// Pull-through cache: local storage like embedded + an upstream
+		// client for cache misses.
+		if cfg.RegistryURL == "" {
+			slog.Error("REGISTRY_MODE=mirror requires REGISTRY_URL (the upstream registry)")
+			os.Exit(1)
+		}
+		srv.proxy = registry.NewClient(cfg.RegistryURL, cfg.RegistryUsername, cfg.RegistryPassword)
+		srv.mirrorTagTTL = cfg.MirrorTagTTL
+		backend, err := storage.NewBackend(cfg)
+		if err != nil {
+			slog.Error("storage init failed", "err", err)
+			os.Exit(1)
+		}
+		srv.backend = backend
+		scheduleGC(backend)
 
 	default:
 		backend, err := storage.NewBackend(cfg)

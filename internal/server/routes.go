@@ -81,7 +81,9 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	// ── V2 engine — intercepted before the Echo router ────────────────────────
 	var v2h http.Handler
-	if s.mode == modeProxy {
+	var mirror *v2.Mirror
+	switch s.mode {
+	case modeProxy:
 		ph, err := v2.NewProxy(
 			s.proxy.BaseURL(),
 			s.proxy.Username(),
@@ -92,7 +94,10 @@ func (s *Server) RegisterRoutes() http.Handler {
 			panic("invalid REGISTRY_URL: " + err.Error())
 		}
 		v2h = ph
-	} else {
+	case modeMirror:
+		mirror = v2.NewMirror(s.backend, s.events, s.proxy, s.mirrorTagTTL)
+		v2h = mirror
+	default:
 		v2h = v2.New(s.backend, s.events)
 	}
 
@@ -182,13 +187,17 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	// ── Health ────────────────────────────────────────────────────────────────
 	e.GET("/health", func(c echo.Context) error {
-		body := map[string]string{"status": "ok", "mode": string(s.mode), "version": version.Version}
-		if s.mode == modeProxy {
+		body := map[string]any{"status": "ok", "mode": string(s.mode), "version": version.Version}
+		if s.proxy != nil { // proxy and mirror modes have an upstream
 			if err := s.proxy.Ping(); err != nil {
 				body["registry"] = "unreachable: " + err.Error()
 			} else {
 				body["registry"] = s.proxy.BaseURL()
 			}
+		}
+		if mirror != nil {
+			hits, misses := mirror.Stats()
+			body["mirror"] = map[string]uint64{"hits": hits, "misses": misses}
 		}
 		return c.JSON(http.StatusOK, body)
 	})
