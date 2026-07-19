@@ -11,6 +11,7 @@ import (
 	"dockyard/internal/audit"
 	"dockyard/internal/auth"
 	"dockyard/internal/metrics"
+	"dockyard/internal/retention"
 	"dockyard/internal/store"
 	uiassets "dockyard/internal/ui"
 	"dockyard/internal/v2"
@@ -219,6 +220,15 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	// Audit trail of sensitive actions (logins, pushes, deletions, GC).
 	api.GET("/audit", auditor.List, auth.RequireAdmin)
+
+	// Retention policies — embedded/mirror only (needs local storage).
+	if s.backend != nil {
+		rh := retention.NewHandler(retention.New(s.store, s.backend), s.store)
+		api.GET("/retention", rh.List, auth.RequireAdmin)
+		api.POST("/retention", rh.Create, auth.RequireAdmin)
+		api.DELETE("/retention/:id", rh.Delete, auth.RequireAdmin)
+		api.POST("/retention/run", rh.Run, auth.RequireAdmin)
+	}
 
 	// SSE feed of registry pushes. Registered outside the /api/admin group
 	// because EventSource can't set an Authorization header — it authenticates

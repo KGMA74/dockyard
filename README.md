@@ -309,6 +309,9 @@ All endpoints require `Authorization: Bearer <token>` (except login/logout).
 | `GET` | `/api/admin/sessions` | List active sessions (admin) |
 | `DELETE` | `/api/admin/sessions/:id` | Revoke a session (admin) |
 | `GET` | `/api/admin/audit?repo=&actor=&limit=&offset=` | Audit trail: logins, pushes, deletions, GC (admin) |
+| `GET`/`POST` | `/api/admin/retention` | List / create retention policies `{repo_pattern, keep_n, unpulled_days, keep_patterns, protected_tags}` (admin) |
+| `DELETE` | `/api/admin/retention/:id` | Delete a retention policy (admin) |
+| `POST` | `/api/admin/retention/run?dryRun=true` | Preview or apply the retention plan (admin) — also runs daily before the GC |
 | `GET` | `/api/admin/repositories` | List all repositories with tags and last-pushed time |
 | `GET` | `/api/admin/repositories/tags?name=<image>` | List tags with digests and push time |
 | `GET` | `/api/admin/repositories/manifest?name=<image>&reference=<tag-or-digest>` | Manifest details (size, layers, platforms for multi-arch) |
@@ -668,6 +671,9 @@ Tous les endpoints nécessitent `Authorization: Bearer <token>` (sauf login/logo
 | `GET` | `/api/admin/sessions` | Lister les sessions actives (admin) |
 | `DELETE` | `/api/admin/sessions/:id` | Révoquer une session (admin) |
 | `GET` | `/api/admin/audit?repo=&actor=&limit=&offset=` | Journal d'audit : logins, pushes, suppressions, GC (admin) |
+| `GET`/`POST` | `/api/admin/retention` | Lister / créer des politiques de rétention `{repo_pattern, keep_n, unpulled_days, keep_patterns, protected_tags}` (admin) |
+| `DELETE` | `/api/admin/retention/:id` | Supprimer une politique (admin) |
+| `POST` | `/api/admin/retention/run?dryRun=true` | Prévisualiser ou appliquer le plan de rétention (admin) — tourne aussi chaque nuit avant le GC |
 | `GET` | `/api/admin/repositories` | Lister tous les dépôts avec leurs tags et la date du dernier push |
 | `GET` | `/api/admin/repositories/tags?name=<image>` | Lister les tags avec leurs digests et date de push |
 | `GET` | `/api/admin/repositories/manifest?name=<image>&reference=<tag-ou-digest>` | Détails du manifest (taille, layers, plateformes si multi-arch) |

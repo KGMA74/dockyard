@@ -12,6 +12,7 @@ import (
 	"dockyard/internal/auth"
 	"dockyard/internal/events"
 	"dockyard/internal/registry"
+	"dockyard/internal/retention"
 	"dockyard/internal/storage"
 	"dockyard/internal/store"
 	"dockyard/internal/tlsutil"
@@ -89,7 +90,6 @@ func NewServer() *http.Server {
 			os.Exit(1)
 		}
 		srv.backend = backend
-		scheduleGC(backend)
 
 	default:
 		backend, err := storage.NewBackend(cfg)
@@ -98,7 +98,6 @@ func NewServer() *http.Server {
 			os.Exit(1)
 		}
 		srv.backend = backend
-		scheduleGC(backend)
 	}
 
 	if srv.backend != nil {
@@ -113,6 +112,12 @@ func NewServer() *http.Server {
 		os.Exit(1)
 	}
 	srv.store = st
+
+	// Daily maintenance (retention then GC) needs both the backend and the
+	// policy store, hence scheduled after both exist.
+	if srv.backend != nil {
+		scheduleMaintenance(srv.backend, retention.New(st, srv.backend))
+	}
 
 	if cfg.AuthUsername == "" || cfg.AuthPassword == "" || cfg.JWTSecret == "" {
 		slog.Error("AUTH_USERNAME, AUTH_PASSWORD and JWT_SECRET must be set")

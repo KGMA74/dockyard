@@ -17,17 +17,21 @@ type gcable interface {
 	RemoveBlob(digest string) error
 }
 
-// scheduleGC runs garbage collection every day at midnight UTC.
-// No-op if the backend does not implement GC (e.g. proxy mode).
-func scheduleGC(backend storage.Backend) {
+// scheduleMaintenance runs retention then garbage collection every day at
+// midnight UTC — retention first, so the blobs it orphans are reclaimed in
+// the same pass. No-op if the backend does not implement GC (proxy mode).
+func scheduleMaintenance(backend storage.Backend, retention interface{ Run() }) {
 	gc, ok := backend.(gcable)
 	if !ok {
 		return
 	}
-	slog.Info("gc: scheduled daily at midnight UTC")
+	slog.Info("maintenance: retention + gc scheduled daily at midnight UTC")
 	go func() {
 		for {
 			time.Sleep(timeUntilMidnightUTC())
+			if retention != nil {
+				retention.Run()
+			}
 			runGC(gc)
 		}
 	}()

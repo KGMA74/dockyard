@@ -32,7 +32,7 @@
 | P3.4 — OpenTelemetry | #21 | ⬜ à faire | | optionnel |
 | P3.5 — Helm ServiceMonitor | #22 | ✅ fait | (ce commit) | serviceaccount.yaml (create/name/annotations) + servicemonitor.yaml (gated metrics.serviceMonitor.enabled, scheme https si tls) — `helm template` à valider côté user |
 | P4.1 — Pull tracking | #23 | ✅ fait | (ce commit) | migration 0002 last_pulls (repo, reference, last_pulled_at, pull_count), PullTracker async (batch 3 s/256, drop si saturé), hook OnPull sur GET manifest (embedded + mirror) |
-| P4.2 — Moteur rétention | #24 | ⬜ à faire | | après P4.1 + P1.9 |
+| P4.2 — Moteur rétention | #24 | ✅ fait | (ce commit) | internal/retention : keep-N, unpulled_days (pulls > push), keep_patterns globs, protected_tags, garde digest partagé (skip + raison), CRUD + /retention/run?dryRun, planifié avant le GC quotidien |
 | P4.3 — UI rétention | #25 | ⬜ à faire | | |
 | P4.4 — Webhooks | #26 | ⬜ à faire | | après P1.5 (acteur dans payload) |
 | P4.5 — UI webhooks | #27 | ⬜ à faire | | |
