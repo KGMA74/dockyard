@@ -13,6 +13,7 @@ A lightweight, self-hosted Docker Registry V2 server written in Go. Ships as a *
 - **Two storage backends** — local filesystem or any S3-compatible object store
 - **Two modes** — embedded registry or proxy in front of an existing registry
 - **Garbage collection** — manual trigger via UI or API, automatic daily cron at midnight UTC
+- **Vulnerability scanning** — trigger a Trivy scan on any pushed image via the admin API (`SCAN_ENABLED` + `TRIVY_SERVER_URL`), results stored with severity counts and the full report
 - **JWT auth** on the admin API, optional Basic Auth on `/v2/*`
 - **Structured JSON logging** via `log/slog`
 - **Single Docker image** — multi-stage build, final image from `scratch`
@@ -149,6 +150,19 @@ V2_AUTH_ENABLED=false
 # Prometheus metrics on /metrics (unauthenticated — keep the port private or
 # disable): HTTP by normalized route, storage gauges, GC runs, mirror cache.
 # METRICS_ENABLED=true
+
+# ── Vulnerability scanning (Trivy) ────────────────────────────────────────────
+# Off by default. Dockyard shells out to the `trivy` binary bundled in its own
+# image (--server mode) against an operator-managed `trivy server --listen`
+# instance, which hosts the vulnerability DB. Dockyard does not run Trivy
+# itself. Trigger a scan via POST /api/admin/scans {"name","reference"}.
+# SCAN_ENABLED=true
+# TRIVY_SERVER_URL=http://trivy:4954
+# TRIVY_BIN_PATH=/trivy                # path to the trivy binary in the image
+# SCAN_TIMEOUT=5m                      # per-scan subprocess timeout
+# SCAN_MAX_REPORT_BYTES=20971520       # cap on the raw trivy JSON report (20 MiB)
+# SCAN_DEDUP_WINDOW=1h                 # reuse a recent successful scan for the same digest
+# TRIVY_INSECURE_REGISTRY=true         # trivy pulls from Dockyard over plain HTTP on localhost
 
 # ── Proxy mode ────────────────────────────────────────────────────────────────
 # REGISTRY_MODE=proxy
@@ -400,6 +414,7 @@ Un serveur Docker Registry V2 léger, écrit en Go. Livré sous forme d'un **bin
 - **Deux backends de stockage** — filesystem local ou tout stockage objet compatible S3
 - **Deux modes** — registry embarquée ou proxy devant une registry existante
 - **Garbage collection** — déclenchement manuel via UI ou API, cron automatique quotidien à minuit UTC
+- **Scan de vulnérabilités** — déclencher un scan Trivy sur une image poussée via l'API admin (`SCAN_ENABLED` + `TRIVY_SERVER_URL`), résultats stockés avec comptes par sévérité et rapport complet
 - **Auth JWT** sur l'API admin, Basic Auth optionnelle sur `/v2/*`
 - **Logs structurés JSON** via `log/slog`
 - **Image Docker unique** — build multi-stage, image finale depuis `scratch`
@@ -536,6 +551,20 @@ V2_AUTH_ENABLED=false
 # Métriques Prometheus sur /metrics (non authentifié — garder le port privé ou
 # désactiver) : HTTP par route normalisée, jauges storage, runs de GC, cache mirror.
 # METRICS_ENABLED=true
+
+# ── Scan de vulnérabilités (Trivy) ────────────────────────────────────────────
+# Désactivé par défaut. Dockyard appelle en subprocess le binaire `trivy`
+# embarqué dans sa propre image (mode --server) contre un `trivy server
+# --listen` géré par l'opérateur, qui héberge la base de vulnérabilités.
+# Dockyard ne fait pas tourner Trivy lui-même. Déclencher un scan via
+# POST /api/admin/scans {"name","reference"}.
+# SCAN_ENABLED=true
+# TRIVY_SERVER_URL=http://trivy:4954
+# TRIVY_BIN_PATH=/trivy                # chemin du binaire trivy dans l'image
+# SCAN_TIMEOUT=5m                      # timeout du subprocess par scan
+# SCAN_MAX_REPORT_BYTES=20971520       # cap sur le rapport JSON brut (20 Mio)
+# SCAN_DEDUP_WINDOW=1h                 # réutilise un scan récent réussi pour le même digest
+# TRIVY_INSECURE_REGISTRY=true         # trivy pull depuis Dockyard en HTTP simple sur localhost
 
 # ── Mode proxy ────────────────────────────────────────────────────────────────
 # REGISTRY_MODE=proxy

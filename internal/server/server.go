@@ -36,6 +36,8 @@ type Server struct {
 	events          *events.Hub
 	v2AuthEnabled   bool
 	v2AnonymousPull bool
+	authUsername    string
+	authPassword    string
 
 	corsAllowedOrigins   []string
 	rateLimitLoginPerMin int
@@ -43,6 +45,14 @@ type Server struct {
 	mirrorTagTTL         time.Duration
 	metricsEnabled       bool
 	stats                *statsCache
+
+	scanEnabled           bool
+	trivyServerURL        string
+	trivyBinPath          string
+	scanTimeout           time.Duration
+	scanMaxReportBytes    int64
+	scanDedupWindow       time.Duration
+	trivyInsecureRegistry bool
 }
 
 func NewServer() *http.Server {
@@ -59,12 +69,22 @@ func NewServer() *http.Server {
 		mode:            m,
 		v2AuthEnabled:   cfg.V2AuthEnabled,
 		v2AnonymousPull: cfg.V2AnonymousPull,
+		authUsername:    cfg.AuthUsername,
+		authPassword:    cfg.AuthPassword,
 		events:          events.NewHub(),
 
 		corsAllowedOrigins:   cfg.CORSAllowedOrigins,
 		rateLimitLoginPerMin: cfg.RateLimitLoginPerMin,
 		rateLimitGlobalRPS:   cfg.RateLimitGlobalRPS,
 		metricsEnabled:       cfg.MetricsEnabled,
+
+		scanEnabled:           cfg.ScanEnabled,
+		trivyServerURL:        cfg.TrivyServerURL,
+		trivyBinPath:          cfg.TrivyBinPath,
+		scanTimeout:           cfg.ScanTimeout,
+		scanMaxReportBytes:    cfg.ScanMaxReportBytes,
+		scanDedupWindow:       cfg.ScanDedupWindow,
+		trivyInsecureRegistry: cfg.TrivyInsecureRegistry,
 	}
 
 	switch m {

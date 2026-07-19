@@ -26,6 +26,7 @@ tags:
   - name: storage
   - name: retention
   - name: webhooks
+  - name: scan
   - name: audit
   - name: system
 
@@ -580,7 +581,7 @@ paths:
                   description: HMAC-SHA256 signing secret for X-Dockyard-Signature.
                 events:
                   type: array
-                  items: { type: string, enum: [push, delete, retention, gc] }
+                  items: { type: string, enum: [push, delete, retention, gc, scan] }
                 format: { type: string, enum: [generic, slack, discord] }
       responses:
         "201":
@@ -613,6 +614,93 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
         "502": { description: Endpoint rejected the delivery }
+
+  /api/admin/scans:
+    get:
+      tags: [scan]
+      summary: List vulnerability scans, newest first (admin only)
+      parameters:
+        - { name: name, in: query, schema: { type: string } }
+        - { name: digest, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: Scans
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scans:
+                    type: array
+                    items: { $ref: "#/components/schemas/ScanResult" }
+                  count: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [scan]
+      summary: Trigger a vulnerability scan for an image (admin only)
+      description: |
+        Requires SCAN_ENABLED and TRIVY_SERVER_URL to be configured; Dockyard
+        shells out to `trivy image --server ...` against an operator-managed
+        trivy server. Scans run asynchronously — poll GET /api/admin/scans/{id}
+        for the outcome. A recent successful scan for the same resolved
+        digest is reused instead of re-scanning (see `cached` in the response).
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, reference]
+              properties:
+                name: { type: string }
+                reference:
+                  type: string
+                  description: Tag or digest to scan.
+      responses:
+        "202":
+          description: Scan queued (or a cached result reused)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  scan: { $ref: "#/components/schemas/ScanResult" }
+                  cached: { type: boolean }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { description: Manifest not found }
+
+  /api/admin/scans/{id}:
+    get:
+      tags: [scan]
+      summary: Get a scan's status and severity counts (admin only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Scan
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ScanResult" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/admin/scans/{id}/report:
+    get:
+      tags: [scan]
+      summary: Get the full trivy JSON report for a scan (admin only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200":
+          description: Raw trivy report JSON
+          content:
+            application/json:
+              schema: { type: object }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
 
   /api/admin/audit:
     get:
@@ -647,7 +735,7 @@ paths:
       parameters:
         - { name: token, in: query, schema: { type: string } }
       responses:
-        "200": { description: "SSE stream of events: push, delete, retention, gc" }
+        "200": { description: "SSE stream of events: push, delete, retention, gc, scan" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
   /health:
@@ -855,9 +943,29 @@ components:
         url: { type: string, format: uri }
         events:
           type: array
-          items: { type: string, enum: [push, delete, retention, gc] }
+          items: { type: string, enum: [push, delete, retention, gc, scan] }
         format: { type: string, enum: [generic, slack, discord] }
         enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    ScanResult:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        reference: { type: string }
+        digest: { type: string }
+        status: { type: string, enum: [queued, running, succeeded, failed] }
+        requested_by: { type: string }
+        trivy_version: { type: string }
+        critical_count: { type: integer }
+        high_count: { type: integer }
+        medium_count: { type: integer }
+        low_count: { type: integer }
+        unknown_count: { type: integer }
+        error: { type: string }
+        started_at: { type: string, format: date-time, nullable: true }
+        finished_at: { type: string, format: date-time, nullable: true }
         created_at: { type: string, format: date-time }
 
     AuditEntry:

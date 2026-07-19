@@ -42,7 +42,7 @@
 | P5.3 — Export/import OCI | #31 | ✅ fait | `10ef9e1` | internal/export : tar OCI image-layout streamé (dédup blobs, multi-arch récursif), import avec buffering des petits blobs seulement (layers streamés + hash-vérifiés), endpoints admin, spec OpenAPI + types régénérés, round-trip digests testé |
 | P5.4 — dockyard-cli | #32 | ✅ fait | `5b0114b` | cmd/dockyard-cli (Cobra) : login/repos/tags/delete/gc --dry-run/export/import/users/sessions, refresh silencieux, binaires multi-plateformes attachés aux releases ; e2e complet (backend local !) ; bonus : Preflight export (plus de tar tronqué) |
 | P5.5 — Tests P5 | #33 | ✅ fait | (ce commit) | round-trip export/import déjà testé (digests préservés) + tests CLI (config, erreur sans login, refresh silencieux sur 401 avec rotation) |
-| P6.1 — Scan Trivy | #34 | ⬜ à faire | | Trivy server mode |
+| P6.1 — Scan Trivy | #34 | ✅ fait | (ce commit) | internal/scan : Dockyard shell le binaire `trivy` embarqué (mode --server) contre un trivy server externe géré par l'opérateur (aucune dépendance Go trivy, pas de CGO) ; table `scans` (migration 0006), dispatcher single-flight avec dédoublonnage par digest, `POST/GET /api/admin/scans[/:id[/report]]`, event `scan` (SSE + webhooks), audit explicite, config `SCAN_*`/`TRIVY_*`, Dockerfile (binaire trivy copié, testé sur `scratch`), Helm `scan.*` (à valider par l'utilisateur, pas d'accès cluster) |
 | P6.2 — UI scan | #35 | ⬜ à faire | | |
 | P6.3 — Signatures cosign | #36 | ⬜ à faire | | inclut referrers si besoin |
 | P6.4 — Tests P6 | #37 | ⬜ à faire | | |
@@ -59,7 +59,7 @@
 
 ## Prochaine étape
 
-**Phases 1, 2 et 4 complètes ; Phase 3 : reste P3.4 (OTel, optionnel).** Suite recommandée : **P5.1 OpenAPI spec** (#29) — l'API admin est maintenant stabilisée (P1–P4 livrées), puis P5.3 export/import OCI et P5.4 dockyard-cli. P6 (Trivy/cosign) et le reste de P7 ensuite.
+**Phases 1, 2, 4 et 5 complètes ; Phase 3 : reste P3.4 (OTel, optionnel).** P6.1 (scan Trivy) fait. Suite recommandée : **P6.2 — UI scan** (#35, affichage des résultats dans l'UI, badges de sévérité) puis **P6.3 — Signatures cosign** (#36). P7 ensuite.
 
 ## Notes de reprise
 

@@ -1,6 +1,7 @@
 package server
 
 import (
+	"fmt"
 	"io/fs"
 	"log/slog"
 	"net/http"
@@ -13,6 +14,7 @@ import (
 	"dockyard/internal/export"
 	"dockyard/internal/metrics"
 	"dockyard/internal/retention"
+	"dockyard/internal/scan"
 	"dockyard/internal/store"
 	"dockyard/internal/webhooks"
 	uiassets "dockyard/internal/ui"
@@ -253,6 +255,37 @@ func (s *Server) RegisterRoutes() http.Handler {
 	api.POST("/webhooks", wh.Create, auth.RequireAdmin)
 	api.DELETE("/webhooks/:id", wh.Delete, auth.RequireAdmin)
 	api.POST("/webhooks/:id/test", wh.Test, auth.RequireAdmin)
+
+	// Vulnerability scanning — shells out to `trivy` in --server mode against
+	// an operator-managed trivy server. Off unless SCAN_ENABLED and
+	// TRIVY_SERVER_URL are both set.
+	if s.scanEnabled && s.trivyServerURL != "" {
+		var resolver interface {
+			GetManifest(name, reference string) ([]byte, string, error)
+		}
+		if s.mode == modeProxy {
+			resolver = scan.RegistryResolver{Client: s.proxy}
+		} else {
+			resolver = s.backend
+		}
+		sd := scan.NewDispatcher(s.store, scan.Config{
+			TrivyBin:       s.trivyBinPath,
+			TrivyServerURL: s.trivyServerURL,
+			RegistryURL:    fmt.Sprintf("localhost:%d", s.port),
+			RegistryUser:   s.authUsername,
+			RegistryPass:   s.authPassword,
+			Insecure:       s.trivyInsecureRegistry,
+			Timeout:        s.scanTimeout,
+			MaxReportBytes: s.scanMaxReportBytes,
+			DedupWindow:    s.scanDedupWindow,
+		})
+		sd.SetHub(s.events)
+		sh := scan.NewHandler(s.store, sd, resolver, auditor)
+		api.POST("/scans", sh.Trigger, auth.RequireAdmin)
+		api.GET("/scans", sh.List, auth.RequireAdmin)
+		api.GET("/scans/:id", sh.Get, auth.RequireAdmin)
+		api.GET("/scans/:id/report", sh.Report, auth.RequireAdmin)
+	}
 
 	// SSE feed of registry pushes. Registered outside the /api/admin group
 	// because EventSource can't set an Authorization header — it authenticates

@@ -71,6 +71,20 @@ type Config struct {
 	// MetricsEnabled exposes Prometheus metrics on /metrics (no auth — keep
 	// the port private or disable).
 	MetricsEnabled bool
+
+	// Vulnerability scanning: Dockyard shells out to a `trivy` binary in
+	// --server mode against an operator-managed trivy server (the vuln DB
+	// lives there, not in Dockyard). Off unless both are set.
+	ScanEnabled        bool
+	TrivyServerURL     string
+	TrivyBinPath       string
+	ScanTimeout        time.Duration
+	ScanMaxReportBytes int64
+	ScanDedupWindow    time.Duration
+	// TrivyInsecureRegistry: trivy pulls the image being scanned from
+	// Dockyard's own /v2 endpoint on localhost, which is plain HTTP unless
+	// TLS_MODE is set — true by default so that's the common case.
+	TrivyInsecureRegistry bool
 }
 
 func Load() *Config {
@@ -114,6 +128,14 @@ func Load() *Config {
 		TLSACMEEmail: getEnv("TLS_ACME_EMAIL", ""),
 
 		MetricsEnabled: getEnv("METRICS_ENABLED", "true") == "true",
+
+		ScanEnabled:           getEnv("SCAN_ENABLED", "false") == "true",
+		TrivyServerURL:        getEnv("TRIVY_SERVER_URL", ""),
+		TrivyBinPath:          getEnv("TRIVY_BIN_PATH", "/trivy"),
+		ScanTimeout:           getEnvDuration("SCAN_TIMEOUT", 5*time.Minute),
+		ScanMaxReportBytes:    getEnvInt64("SCAN_MAX_REPORT_BYTES", 20<<20),
+		ScanDedupWindow:       getEnvDuration("SCAN_DEDUP_WINDOW", time.Hour),
+		TrivyInsecureRegistry: getEnv("TRIVY_INSECURE_REGISTRY", "true") == "true",
 	}
 }
 
@@ -129,6 +151,15 @@ func getEnvDuration(key string, fallback time.Duration) time.Duration {
 func getEnvInt(key string, fallback int) int {
 	if v := os.Getenv(key); v != "" {
 		if n, err := strconv.Atoi(v); err == nil {
+			return n
+		}
+	}
+	return fallback
+}
+
+func getEnvInt64(key string, fallback int64) int64 {
+	if v := os.Getenv(key); v != "" {
+		if n, err := strconv.ParseInt(v, 10, 64); err == nil {
 			return n
 		}
 	}

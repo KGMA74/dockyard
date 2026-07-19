@@ -1,4 +1,5 @@
-// Package webhooks delivers registry events (push, delete, retention, gc) to
+// Package webhooks delivers registry events (push, delete, retention, gc,
+// scan) to
 // HTTP endpoints with at-least-once semantics: events are enqueued into a
 // SQLite outbox and a dispatcher retries with exponential backoff. Payloads
 // are signed with HMAC-SHA256 when the hook has a secret.

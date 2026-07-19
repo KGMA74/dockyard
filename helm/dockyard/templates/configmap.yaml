@@ -25,3 +25,9 @@ data:
   TLS_CERT_FILE: "/etc/dockyard-tls/tls.crt"
   TLS_KEY_FILE: "/etc/dockyard-tls/tls.key"
   {{- end }}
+  SCAN_ENABLED: {{ (.Values.scan).enabled | default false | toString | quote }}
+  TRIVY_SERVER_URL: {{ (.Values.scan).trivyServerURL | default "" | quote }}
+  SCAN_TIMEOUT: {{ (.Values.scan).timeout | default "5m" | quote }}
+  SCAN_MAX_REPORT_BYTES: {{ (.Values.scan).maxReportBytes | default 20971520 | quote }}
+  SCAN_DEDUP_WINDOW: {{ (.Values.scan).dedupWindow | default "1h" | quote }}
+  TRIVY_INSECURE_REGISTRY: {{ (.Values.scan).insecureRegistry | default true | toString | quote }}

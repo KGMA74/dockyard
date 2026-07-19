@@ -1136,7 +1136,7 @@ export interface paths {
                         url: string;
                         /** @description HMAC-SHA256 signing secret for X-Dockyard-Signature. */
                         secret?: string;
-                        events?: ("push" | "delete" | "retention" | "gc")[];
+                        events?: ("push" | "delete" | "retention" | "gc" | "scan")[];
                         /** @enum {string} */
                         format?: "generic" | "slack" | "discord";
                     };
@@ -1233,6 +1233,178 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/scans": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List vulnerability scans, newest first (admin only) */
+        get: {
+            parameters: {
+                query?: {
+                    name?: string;
+                    digest?: string;
+                    limit?: number;
+                    offset?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Scans */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            scans?: components["schemas"]["ScanResult"][];
+                            count?: number;
+                        };
+                    };
+                };
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        /**
+         * Trigger a vulnerability scan for an image (admin only)
+         * @description Requires SCAN_ENABLED and TRIVY_SERVER_URL to be configured; Dockyard
+         *     shells out to `trivy image --server ...` against an operator-managed
+         *     trivy server. Scans run asynchronously — poll GET /api/admin/scans/{id}
+         *     for the outcome. A recent successful scan for the same resolved
+         *     digest is reused instead of re-scanning (see `cached` in the response).
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        name: string;
+                        /** @description Tag or digest to scan. */
+                        reference: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Scan queued (or a cached result reused) */
+                202: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            scan?: components["schemas"]["ScanResult"];
+                            cached?: boolean;
+                        };
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+                /** @description Manifest not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/scans/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get a scan's status and severity counts (admin only) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Scan */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["ScanResult"];
+                    };
+                };
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/scans/{id}/report": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Get the full trivy JSON report for a scan (admin only) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Raw trivy report JSON */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": Record<string, never>;
+                    };
+                };
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/audit": {
         parameters: {
             query?: never;
@@ -1301,7 +1473,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description SSE stream of events: push, delete, retention, gc */
+                /** @description SSE stream of events: push, delete, retention, gc, scan */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -1552,10 +1724,32 @@ export interface components {
             id?: number;
             /** Format: uri */
             url?: string;
-            events?: ("push" | "delete" | "retention" | "gc")[];
+            events?: ("push" | "delete" | "retention" | "gc" | "scan")[];
             /** @enum {string} */
             format?: "generic" | "slack" | "discord";
             enabled?: boolean;
+            /** Format: date-time */
+            created_at?: string;
+        };
+        ScanResult: {
+            id?: number;
+            name?: string;
+            reference?: string;
+            digest?: string;
+            /** @enum {string} */
+            status?: "queued" | "running" | "succeeded" | "failed";
+            requested_by?: string;
+            trivy_version?: string;
+            critical_count?: number;
+            high_count?: number;
+            medium_count?: number;
+            low_count?: number;
+            unknown_count?: number;
+            error?: string;
+            /** Format: date-time */
+            started_at?: string | null;
+            /** Format: date-time */
+            finished_at?: string | null;
             /** Format: date-time */
             created_at?: string;
         };

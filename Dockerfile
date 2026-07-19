@@ -28,11 +28,17 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     -o dockyard \
     ./cmd/dockyard
 
-# ── Stage 3 : Final image ─────────────────────────────────────────────────────
+# ── Stage 3 : trivy binary (vulnerability scanning, see internal/scan) ────────
+# Pinned explicitly — a version bump may require adjusting the JSON parsing in
+# internal/scan/trivy.go, so treat it as a deliberate, linked change.
+FROM aquasec/trivy:0.56.2 AS trivy
+
+# ── Stage 4 : Final image ─────────────────────────────────────────────────────
 FROM scratch
 
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /app/dockyard /dockyard
+COPY --from=trivy /usr/local/bin/trivy /trivy
 
 EXPOSE 8080
 

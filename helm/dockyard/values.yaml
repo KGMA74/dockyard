@@ -65,6 +65,20 @@ metrics:
     # Extra labels for Prometheus instance selection (e.g. release: kps).
     labels: {}
 
+scan:
+  # Vulnerability scanning: Dockyard shells out to a `trivy` binary (bundled
+  # in the image) in --server mode against an operator-managed trivy server.
+  # Dockyard does not run or manage Trivy itself — point this at an existing
+  # `trivy server --listen` deployment.
+  enabled: false
+  trivyServerURL: ""
+  timeout: "5m"
+  maxReportBytes: 20971520
+  dedupWindow: "1h"
+  # trivy pulls the scanned image from Dockyard's own /v2 endpoint on
+  # localhost, which is plain HTTP unless tls.mode below is set.
+  insecureRegistry: true
+
 tls:
   # off | static | self-signed | acme — served natively by Dockyard.
   # "static" expects existingCertSecret below; "acme" needs the pod reachable
