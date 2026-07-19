@@ -329,6 +329,26 @@ All endpoints require `Authorization: Bearer <token>` (except login/logout).
 
 ---
 
+## dockyard-cli
+
+A command-line client for the admin API (binaries attached to GitHub releases, or `go build ./cmd/dockyard-cli`):
+
+```bash
+dockyard-cli login https://registry.example.com -u admin -p …   # session in ~/.dockyard/config.json
+dockyard-cli repos                       # list repositories
+dockyard-cli tags team/app               # tags + digests
+dockyard-cli delete team/app v1          # delete one manifest (resolves the tag)
+dockyard-cli gc --dry-run                # preview the garbage collection
+dockyard-cli export team/app -o app.oci.tar    # OCI image-layout dump
+dockyard-cli import team/app -i app.oci.tar
+dockyard-cli users create ci --role pusher -p … --repos "team/*"
+dockyard-cli sessions list
+```
+
+Sessions refresh silently (single-use rotating refresh tokens), like the web UI.
+
+---
+
 ## Docker Registry V2 API
 
 Dockyard implements the [Docker Registry HTTP API V2](https://distribution.github.io/distribution/spec/api/). Standard `docker push` / `docker pull` work out of the box.

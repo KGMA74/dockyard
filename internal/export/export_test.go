@@ -3,6 +3,7 @@ package export
 import (
 	"bytes"
 	"slices"
+	"strings"
 	"testing"
 
 	"dockyard/internal/storage"
@@ -95,6 +96,24 @@ func TestImportRejectsNonLayout(t *testing.T) {
 	dst := newBackend(t)
 	if _, err := Import(bytes.NewReader([]byte("not a tar at all")), dst, "x"); err == nil {
 		t.Fatal("garbage accepted as OCI layout")
+	}
+}
+
+func TestPreflightCatchesMissingBlob(t *testing.T) {
+	b := newBackend(t)
+	// Manifest referencing a blob that was never stored.
+	manifest := storagetest.ManifestFor("sha256:" + strings.Repeat("0", 64))
+	if err := b.PutManifest("broken/app", "v1", storagetest.Digest(manifest), manifest); err != nil {
+		t.Fatal(err)
+	}
+	if err := Preflight(b, "broken/app"); err == nil {
+		t.Fatal("preflight passed despite missing blob")
+	}
+
+	src := newBackend(t)
+	seedRepo(t, src, "ok/app")
+	if err := Preflight(src, "ok/app"); err != nil {
+		t.Fatalf("preflight on healthy repo: %v", err)
 	}
 }
 

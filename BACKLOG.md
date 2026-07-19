@@ -40,7 +40,7 @@
 | P5.1 — OpenAPI spec | #29 | ✅ fait | `ca21f2a` | api/openapi.yaml écrit à la main (auth/users/sessions/repos/storage/retention/webhooks/audit/insights/health/v2-token), validé par redocly lint en CI (job ui) |
 | P5.2 — Client TS généré | #30 | ✅ fait | `8d47245` | openapi-typescript → ui/src/generated/api.d.ts (npm run gen-api), garde anti-drift en CI (git diff --exit-code), adoption progressive démarrée (type Role) |
 | P5.3 — Export/import OCI | #31 | ✅ fait | (ce commit) | internal/export : tar OCI image-layout streamé (dédup blobs, multi-arch récursif), import avec buffering des petits blobs seulement (layers streamés + hash-vérifiés), endpoints admin, spec OpenAPI + types régénérés, round-trip digests testé |
-| P5.4 — dockyard-cli | #32 | ⬜ à faire | | |
+| P5.4 — dockyard-cli | #32 | ✅ fait | (ce commit) | cmd/dockyard-cli (Cobra) : login/repos/tags/delete/gc --dry-run/export/import/users/sessions, refresh silencieux, binaires multi-plateformes attachés aux releases ; e2e complet (backend local !) ; bonus : Preflight export (plus de tar tronqué) |
 | P5.5 — Tests P5 | #33 | ⬜ à faire | | |
 | P6.1 — Scan Trivy | #34 | ⬜ à faire | | Trivy server mode |
 | P6.2 — UI scan | #35 | ⬜ à faire | | |

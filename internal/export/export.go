@@ -65,8 +65,51 @@ func blobPath(digest string) string {
 	return "blobs/sha256/" + strings.TrimPrefix(digest, "sha256:")
 }
 
+// Preflight walks the repository and verifies every referenced blob exists,
+// so Export can fail with a clean error before any byte is streamed (a
+// mid-stream failure can only truncate the tar).
+func Preflight(backend storage.Backend, name string) error {
+	tags, err := backend.ListTags(name)
+	if err != nil {
+		return err
+	}
+	if len(tags) == 0 {
+		return fmt.Errorf("repository %q has no tags", name)
+	}
+	var walk func(raw []byte) error
+	walk = func(raw []byte) error {
+		blobs, children := manifestRefs(raw)
+		for _, bd := range blobs {
+			if ok, err := backend.BlobExists(bd); err != nil || !ok {
+				return fmt.Errorf("referenced blob %s is missing from storage", bd)
+			}
+		}
+		for _, child := range children {
+			childRaw, _, err := backend.GetManifest(name, child)
+			if err != nil {
+				return fmt.Errorf("child manifest %s: %w", child, err)
+			}
+			if err := walk(childRaw); err != nil {
+				return err
+			}
+		}
+		return nil
+	}
+	for _, tag := range tags {
+		raw, _, err := backend.GetManifest(name, tag)
+		if err != nil {
+			continue
+		}
+		if err := walk(raw); err != nil {
+			return fmt.Errorf("tag %s: %w", tag, err)
+		}
+	}
+	return nil
+}
+
 // Export streams the repository as an OCI image-layout tar. Each tag becomes
 // an index.json entry annotated with its name; blobs are deduplicated.
+// Callers should run Preflight first — a failure here truncates the stream.
 func Export(w io.Writer, backend storage.Backend, name string) error {
 	tags, err := backend.ListTags(name)
 	if err != nil {

@@ -23,6 +23,10 @@ func (h *Handler) Export(c echo.Context) error {
 	if name == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "param 'name' required"})
 	}
+	// Verify everything is exportable before committing to a 200 stream.
+	if err := Preflight(h.backend, name); err != nil {
+		return c.JSON(http.StatusConflict, map[string]string{"error": err.Error()})
+	}
 	filename := fmt.Sprintf("%s.oci.tar", sanitizeFilename(name))
 	c.Response().Header().Set(echo.HeaderContentType, "application/x-tar")
 	c.Response().Header().Set(echo.HeaderContentDisposition, `attachment; filename="`+filename+`"`)
