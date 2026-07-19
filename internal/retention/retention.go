@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"dockyard/internal/auth"
+	"dockyard/internal/events"
 	"dockyard/internal/storage"
 	"dockyard/internal/store"
 )
@@ -19,11 +20,16 @@ import (
 type Engine struct {
 	store   *store.Store
 	backend storage.Backend
+	hub     *events.Hub
 }
 
 func New(st *store.Store, backend storage.Backend) *Engine {
 	return &Engine{store: st, backend: backend}
 }
+
+// SetHub makes Apply publish a "retention" event per deleted tag (webhooks,
+// SSE). Optional.
+func (e *Engine) SetHub(hub *events.Hub) { e.hub = hub }
 
 // Candidate is one tag the plan wants gone, with the digest its deletion
 // would remove.
@@ -196,6 +202,9 @@ func (e *Engine) Apply(plan *Plan) (deleted int, err error) {
 		}
 		done[key] = true
 		deleted++
+		if e.hub != nil {
+			e.hub.Publish(events.Event{Type: "retention", Name: c.Repo, Tag: c.Tag, Actor: "retention-policy"})
+		}
 		slog.Info("retention: deleted", "repo", c.Repo, "tag", c.Tag, "digest", c.Digest, "reason", c.Reason)
 	}
 	return deleted, nil

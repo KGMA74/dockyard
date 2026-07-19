@@ -13,6 +13,7 @@ import (
 	"dockyard/internal/metrics"
 	"dockyard/internal/retention"
 	"dockyard/internal/store"
+	"dockyard/internal/webhooks"
 	uiassets "dockyard/internal/ui"
 	"dockyard/internal/v2"
 	"dockyard/internal/version"
@@ -223,12 +224,23 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	// Retention policies — embedded/mirror only (needs local storage).
 	if s.backend != nil {
-		rh := retention.NewHandler(retention.New(s.store, s.backend), s.store)
+		engine := retention.New(s.store, s.backend)
+		engine.SetHub(s.events)
+		rh := retention.NewHandler(engine, s.store)
 		api.GET("/retention", rh.List, auth.RequireAdmin)
 		api.POST("/retention", rh.Create, auth.RequireAdmin)
 		api.DELETE("/retention/:id", rh.Delete, auth.RequireAdmin)
 		api.POST("/retention/run", rh.Run, auth.RequireAdmin)
 	}
+
+	// Webhooks — outbox-backed deliveries for push/delete/retention/gc events.
+	dispatcher := webhooks.NewDispatcher(s.store)
+	dispatcher.Subscribe(s.events)
+	wh := webhooks.NewHandler(s.store, dispatcher)
+	api.GET("/webhooks", wh.List, auth.RequireAdmin)
+	api.POST("/webhooks", wh.Create, auth.RequireAdmin)
+	api.DELETE("/webhooks/:id", wh.Delete, auth.RequireAdmin)
+	api.POST("/webhooks/:id/test", wh.Test, auth.RequireAdmin)
 
 	// SSE feed of registry pushes. Registered outside the /api/admin group
 	// because EventSource can't set an Authorization header — it authenticates

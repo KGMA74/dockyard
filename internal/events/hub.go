@@ -5,9 +5,10 @@ package events
 import "sync"
 
 type Event struct {
-	Type string `json:"type"` // "push"
-	Name string `json:"name"`
-	Tag  string `json:"tag,omitempty"`
+	Type  string `json:"type"` // push | delete | retention | gc
+	Name  string `json:"name"`
+	Tag   string `json:"tag,omitempty"`
+	Actor string `json:"actor,omitempty"`
 }
 
 type Hub struct {

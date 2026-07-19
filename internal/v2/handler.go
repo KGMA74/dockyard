@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	"dockyard/internal/auth"
 	"dockyard/internal/events"
 	"dockyard/internal/storage"
 )
@@ -158,13 +159,16 @@ func (h *Handler) manifests(w http.ResponseWriter, r *http.Request, name, ref st
 		// Only tag pushes are notified — multi-arch pushes also PUT each
 		// platform manifest by digest, which would just be repeat noise.
 		if h.hub != nil && !strings.HasPrefix(ref, "sha256:") {
-			h.hub.Publish(events.Event{Type: "push", Name: name, Tag: ref})
+			h.hub.Publish(events.Event{Type: "push", Name: name, Tag: ref, Actor: requestActor(r)})
 		}
 
 	case http.MethodDelete:
 		if err := h.store.DeleteManifest(name, ref); err != nil {
 			registryError(w, http.StatusNotFound, "MANIFEST_UNKNOWN", err.Error())
 			return
+		}
+		if h.hub != nil {
+			h.hub.Publish(events.Event{Type: "delete", Name: name, Tag: ref, Actor: requestActor(r)})
 		}
 		w.WriteHeader(http.StatusAccepted)
 
@@ -264,6 +268,14 @@ func (h *Handler) patchOrCommitUpload(w http.ResponseWriter, r *http.Request, na
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
+
+// requestActor names the authenticated principal, if the auth middleware ran.
+func requestActor(r *http.Request) string {
+	if p, ok := auth.PrincipalFromRequest(r); ok {
+		return p.Username
+	}
+	return ""
+}
 
 func mediaType(content []byte) string {
 	var m struct {
