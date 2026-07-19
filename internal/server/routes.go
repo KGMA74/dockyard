@@ -11,6 +11,7 @@ import (
 	"dockyard/internal/admin"
 	"dockyard/internal/audit"
 	"dockyard/internal/auth"
+	"dockyard/internal/cosign"
 	"dockyard/internal/export"
 	"dockyard/internal/metrics"
 	"dockyard/internal/retention"
@@ -122,11 +123,11 @@ func (s *Server) RegisterRoutes() http.Handler {
 		}
 		v2h = ph
 	case modeMirror:
-		mirror = v2.NewMirror(s.backend, s.events, s.proxy, s.mirrorTagTTL)
+		mirror = v2.NewMirror(s.backend, s.events, s.proxy, s.mirrorTagTTL, s.signingPolicy)
 		mirror.OnPull(store.NewPullTracker(s.store).Record)
 		v2h = mirror
 	default:
-		h := v2.New(s.backend, s.events)
+		h := v2.New(s.backend, s.events, s.signingPolicy)
 		h.OnPull(store.NewPullTracker(s.store).Record)
 		v2h = h
 	}
@@ -186,7 +187,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	// ── Admin API ─────────────────────────────────────────────────────────────
 	api := e.Group("/api/admin", s.auth.Middleware(), auditor.AdminMiddleware())
 	if s.mode == modeProxy {
-		h := admin.NewRemote(s.proxy)
+		h := admin.NewRemote(s.proxy, s.signingPolicy)
 		api.GET("/repositories", h.GetRepositories)
 		api.GET("/repositories/tags", h.GetTags)
 		api.GET("/repositories/manifest", h.GetManifestDetails)
@@ -197,7 +198,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 		api.GET("/storage/tree", admin.NotSupported)
 		api.POST("/gc", admin.NotSupported)
 	} else {
-		h := admin.New(s.backend)
+		h := admin.New(s.backend, s.signingPolicy)
 		api.GET("/repositories", h.GetRepositories)
 		api.GET("/repositories/tags", h.GetTags)
 		api.GET("/repositories/manifest", h.GetManifestDetails)
@@ -286,6 +287,13 @@ func (s *Server) RegisterRoutes() http.Handler {
 		api.GET("/scans/:id", sh.Get, auth.RequireAdmin)
 		api.GET("/scans/:id/report", sh.Report, auth.RequireAdmin)
 	}
+
+	// Signed-push policy — status + per-repo overrides (admin only).
+	cosignHandler := cosign.NewHandler(s.store, s.signingPolicy)
+	api.GET("/signing", cosignHandler.Status, auth.RequireAdmin)
+	api.GET("/signing/policies", cosignHandler.List, auth.RequireAdmin)
+	api.POST("/signing/policies", cosignHandler.Create, auth.RequireAdmin)
+	api.DELETE("/signing/policies/:id", cosignHandler.Delete, auth.RequireAdmin)
 
 	// SSE feed of registry pushes. Registered outside the /api/admin group
 	// because EventSource can't set an Authorization header — it authenticates

@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"dockyard/internal/auth"
+	"dockyard/internal/cosign"
 	"dockyard/internal/events"
 	"dockyard/internal/storage"
 )
@@ -21,13 +22,14 @@ import (
 // Handler implements http.Handler for the Docker Registry V2 protocol.
 // Image names containing slashes (org/image, org/sub/image) are supported via regex routing.
 type Handler struct {
-	store  storage.Backend
-	hub    *events.Hub
-	onPull func(name, reference string)
+	store   storage.Backend
+	hub     *events.Hub
+	onPull  func(name, reference string)
+	signing *cosign.Policy // nil = signed-push enforcement off
 }
 
-func New(backend storage.Backend, hub *events.Hub) *Handler {
-	return &Handler{store: backend, hub: hub}
+func New(backend storage.Backend, hub *events.Hub, signing *cosign.Policy) *Handler {
+	return &Handler{store: backend, hub: hub, signing: signing}
 }
 
 // OnPull registers a callback fired after each successful manifest GET — the
@@ -149,6 +151,16 @@ func (h *Handler) manifests(w http.ResponseWriter, r *http.Request, name, ref st
 		hasher := sha256.New()
 		hasher.Write(body)
 		dgst := "sha256:" + hex.EncodeToString(hasher.Sum(nil))
+		// Signed-push policy applies only to "real" tag pushes — pushes by
+		// digest and cosign's own signature/attestation/sbom tags are
+		// exempt, since cosign must be able to attach a signature to an
+		// image that isn't tagged yet (push by digest, sign, then tag).
+		if !strings.HasPrefix(ref, "sha256:") && !cosign.IsArtifactTag(ref) {
+			if err := h.signing.Enforce(cosign.BackendFetcher{Backend: h.store}, name, dgst); err != nil {
+				registryError(w, http.StatusForbidden, "DENIED", err.Error())
+				return
+			}
+		}
 		if err := h.store.PutManifest(name, ref, dgst, body); err != nil {
 			registryError(w, http.StatusInternalServerError, "UNKNOWN", err.Error())
 			return

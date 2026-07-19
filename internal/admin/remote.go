@@ -4,6 +4,7 @@ import (
 	"net/http"
 	"strings"
 
+	"dockyard/internal/cosign"
 	"dockyard/internal/registry"
 
 	"github.com/labstack/echo/v4"
@@ -12,11 +13,12 @@ import (
 // RemoteHandler expose les mêmes routes admin mais en interrogeant
 // une registry distante via l'API V2. GC et stats de stockage ne sont pas disponibles.
 type RemoteHandler struct {
-	client *registry.Client
+	client  *registry.Client
+	signing *cosign.Policy
 }
 
-func NewRemote(client *registry.Client) *RemoteHandler {
-	return &RemoteHandler{client: client}
+func NewRemote(client *registry.Client, signing *cosign.Policy) *RemoteHandler {
+	return &RemoteHandler{client: client, signing: signing}
 }
 
 // GET /api/admin/repositories
@@ -87,6 +89,9 @@ func (h *RemoteHandler) GetManifestDetails(c echo.Context) error {
 	})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	if h.signing.HasKeys() {
+		result["signed"] = h.signing.Signed(cosign.ClientFetcher{Client: h.client}, name, digest)
 	}
 	return c.JSON(http.StatusOK, result)
 }

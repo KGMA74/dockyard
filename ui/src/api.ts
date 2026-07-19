@@ -198,6 +198,7 @@ export interface ManifestDetails {
   architecture?: string
   os?: string
   platforms?: PlatformInfo[]
+  signed?: boolean
 }
 
 export async function getManifestDetails(name: string, reference: string): Promise<ManifestDetails> {
@@ -427,6 +428,29 @@ export async function triggerScan(name: string, reference: string): Promise<{ sc
 
 export async function getScan(id: number): Promise<ScanResult> {
   return req(`/scans/${id}`)
+}
+
+export interface SigningPolicy {
+  id: number
+  repo_pattern: string
+  required: boolean
+  created_at: string
+}
+
+export async function getSigningStatus(): Promise<{ enabled: boolean; keys_loaded: number }> {
+  return req('/signing')
+}
+
+export async function listSigningPolicies(): Promise<{ policies: SigningPolicy[]; count: number }> {
+  return req('/signing/policies')
+}
+
+export async function createSigningPolicy(repoPattern: string, required: boolean): Promise<SigningPolicy> {
+  return req('/signing/policies', { method: 'POST', body: JSON.stringify({ repo_pattern: repoPattern, required }) })
+}
+
+export async function deleteSigningPolicy(id: number): Promise<void> {
+  return req(`/signing/policies/${id}`, { method: 'DELETE' })
 }
 
 export interface StatsSample {

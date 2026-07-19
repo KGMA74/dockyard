@@ -71,7 +71,8 @@ spec:
           {{- end }}
           {{- $localPVC := and (eq .Values.registry.storage.backend "local") .Values.persistence.enabled }}
           {{- $tlsSecret := (.Values.tls).existingCertSecret }}
-          {{- if or $localPVC $tlsSecret }}
+          {{- $cosignSecret := (.Values.signing).publicKeysSecret }}
+          {{- if or $localPVC $tlsSecret $cosignSecret }}
           volumeMounts:
             {{- if $localPVC }}
             - name: registry-data
@@ -82,10 +83,16 @@ spec:
               mountPath: /etc/dockyard-tls
               readOnly: true
             {{- end }}
+            {{- if $cosignSecret }}
+            - name: cosign-keys
+              mountPath: /etc/dockyard-cosign-keys
+              readOnly: true
+            {{- end }}
           {{- end }}
       {{- $localPVC := and (eq .Values.registry.storage.backend "local") .Values.persistence.enabled }}
       {{- $tlsSecret := (.Values.tls).existingCertSecret }}
-      {{- if or $localPVC $tlsSecret }}
+      {{- $cosignSecret := (.Values.signing).publicKeysSecret }}
+      {{- if or $localPVC $tlsSecret $cosignSecret }}
       volumes:
         {{- if $localPVC }}
         - name: registry-data
@@ -96,6 +103,11 @@ spec:
         - name: tls-cert
           secret:
             secretName: {{ $tlsSecret }}
+        {{- end }}
+        {{- if $cosignSecret }}
+        - name: cosign-keys
+          secret:
+            secretName: {{ $cosignSecret }}
         {{- end }}
       {{- end }}
       {{- with .Values.nodeSelector }}

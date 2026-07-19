@@ -31,3 +31,7 @@ data:
   SCAN_MAX_REPORT_BYTES: {{ (.Values.scan).maxReportBytes | default 20971520 | quote }}
   SCAN_DEDUP_WINDOW: {{ (.Values.scan).dedupWindow | default "1h" | quote }}
   TRIVY_INSECURE_REGISTRY: {{ (.Values.scan).insecureRegistry | default true | toString | quote }}
+  REQUIRE_SIGNED_PUSH: {{ (.Values.signing).enabled | default false | toString | quote }}
+  {{- if (.Values.signing).publicKeysSecret }}
+  COSIGN_PUBLIC_KEYS_DIR: "/etc/dockyard-cosign-keys"
+  {{- end }}

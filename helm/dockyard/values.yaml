@@ -65,6 +65,16 @@ metrics:
     # Extra labels for Prometheus instance selection (e.g. release: kps).
     labels: {}
 
+signing:
+  # Signed-push enforcement: verifies cosign signatures against configured
+  # public keys. Signing itself always happens client-side (cosign CLI) —
+  # Dockyard never holds private keys, and does not support keyless
+  # (Fulcio/Rekor) verification.
+  enabled: false
+  # Name of an existing Secret whose keys (one or more *.pem files) get
+  # mounted read-only and scanned for public keys to verify against.
+  publicKeysSecret: ""
+
 scan:
   # Vulnerability scanning: Dockyard shells out to a `trivy` binary (bundled
   # in the image) in --server mode against an operator-managed trivy server.

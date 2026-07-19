@@ -22,7 +22,7 @@ func newTestServer(t *testing.T) (*httptest.Server, *events.Hub) {
 		t.Fatalf("NewLocal: %v", err)
 	}
 	hub := events.NewHub()
-	srv := httptest.NewServer(New(backend, hub))
+	srv := httptest.NewServer(New(backend, hub, nil))
 	t.Cleanup(srv.Close)
 	return srv, hub
 }

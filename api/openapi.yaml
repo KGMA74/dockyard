@@ -27,6 +27,7 @@ tags:
   - name: retention
   - name: webhooks
   - name: scan
+  - name: signing
   - name: audit
   - name: system
 
@@ -702,6 +703,71 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/admin/signing:
+    get:
+      tags: [signing]
+      summary: Signed-push status — global default and configured key count (admin only)
+      responses:
+        "200":
+          description: Status
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled: { type: boolean, description: REQUIRE_SIGNED_PUSH global default }
+                  keys_loaded: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/admin/signing/policies:
+    get:
+      tags: [signing]
+      summary: List per-repository signed-push overrides (admin only)
+      responses:
+        "200":
+          description: Policies
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  policies:
+                    type: array
+                    items: { $ref: "#/components/schemas/SigningPolicy" }
+                  count: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [signing]
+      summary: Create a signed-push override for a repository pattern (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                repo_pattern: { type: string, default: "*" }
+                required: { type: boolean }
+      responses:
+        "201":
+          description: Created policy
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/SigningPolicy" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/admin/signing/policies/{id}:
+    delete:
+      tags: [signing]
+      summary: Delete a signed-push override (admin only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /api/admin/audit:
     get:
       tags: [audit]
@@ -894,6 +960,11 @@ components:
         created: { type: string, format: date-time }
         architecture: { type: string }
         os: { type: string }
+        signed:
+          type: boolean
+          description: >
+            Present only when cosign public keys are configured. True if a
+            valid cosign signature was found for this digest.
         layers:
           type: array
           items:
@@ -946,6 +1017,14 @@ components:
           items: { type: string, enum: [push, delete, retention, gc, scan] }
         format: { type: string, enum: [generic, slack, discord] }
         enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    SigningPolicy:
+      type: object
+      properties:
+        id: { type: integer }
+        repo_pattern: { type: string }
+        required: { type: boolean }
         created_at: { type: string, format: date-time }
 
     ScanResult:

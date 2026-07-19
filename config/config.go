@@ -85,6 +85,14 @@ type Config struct {
 	// Dockyard's own /v2 endpoint on localhost, which is plain HTTP unless
 	// TLS_MODE is set — true by default so that's the common case.
 	TrivyInsecureRegistry bool
+
+	// Signed-push enforcement: verifies cosign "simple signing" signatures
+	// against statically configured public keys (no Fulcio/Rekor keyless
+	// support — signing itself always happens client-side, Dockyard never
+	// holds private keys). Off unless RequireSignedPush is set; per-repo
+	// overrides live in the signing_policies table.
+	RequireSignedPush   bool
+	CosignPublicKeysDir string
 }
 
 func Load() *Config {
@@ -136,6 +144,9 @@ func Load() *Config {
 		ScanMaxReportBytes:    getEnvInt64("SCAN_MAX_REPORT_BYTES", 20<<20),
 		ScanDedupWindow:       getEnvDuration("SCAN_DEDUP_WINDOW", time.Hour),
 		TrivyInsecureRegistry: getEnv("TRIVY_INSECURE_REGISTRY", "true") == "true",
+
+		RequireSignedPush:   getEnv("REQUIRE_SIGNED_PUSH", "false") == "true",
+		CosignPublicKeysDir: getEnv("COSIGN_PUBLIC_KEYS_DIR", ""),
 	}
 }
 

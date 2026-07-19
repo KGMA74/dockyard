@@ -14,6 +14,7 @@ A lightweight, self-hosted Docker Registry V2 server written in Go. Ships as a *
 - **Two modes** — embedded registry or proxy in front of an existing registry
 - **Garbage collection** — manual trigger via UI or API, automatic daily cron at midnight UTC
 - **Vulnerability scanning** — trigger a Trivy scan on any pushed image via the admin API (`SCAN_ENABLED` + `TRIVY_SERVER_URL`), results stored with severity counts and the full report
+- **Signed-push enforcement** — reject tag pushes without a valid cosign signature (`REQUIRE_SIGNED_PUSH` + per-repo overrides), verified server-side against configured public keys
 - **JWT auth** on the admin API, optional Basic Auth on `/v2/*`
 - **Structured JSON logging** via `log/slog`
 - **Single Docker image** — multi-stage build, final image from `scratch`
@@ -163,6 +164,20 @@ V2_AUTH_ENABLED=false
 # SCAN_MAX_REPORT_BYTES=20971520       # cap on the raw trivy JSON report (20 MiB)
 # SCAN_DEDUP_WINDOW=1h                 # reuse a recent successful scan for the same digest
 # TRIVY_INSECURE_REGISTRY=true         # trivy pulls from Dockyard over plain HTTP on localhost
+
+# ── Signed-push enforcement (cosign) ──────────────────────────────────────────
+# Off by default. When on, tag pushes are rejected unless a valid cosign
+# signature already exists for the digest — verified server-side against
+# statically configured public keys (COSIGN_PUBLIC_KEYS_DIR, one or more
+# *.pem files). Signing itself always happens client-side with the cosign
+# CLI; Dockyard never holds private keys and does not implement keyless
+# (Fulcio/Rekor) verification. Pushes by digest and cosign's own
+# signature/attestation/sbom tags are always exempt — the standard flow is:
+# push by digest -> `cosign sign` (references the digest) -> push the tag.
+# Per-repository overrides can be managed via POST/GET/DELETE
+# /api/admin/signing/policies (first matching repo_pattern wins).
+# REQUIRE_SIGNED_PUSH=true
+# COSIGN_PUBLIC_KEYS_DIR=/etc/dockyard-cosign-keys
 
 # ── Proxy mode ────────────────────────────────────────────────────────────────
 # REGISTRY_MODE=proxy
@@ -415,6 +430,7 @@ Un serveur Docker Registry V2 léger, écrit en Go. Livré sous forme d'un **bin
 - **Deux modes** — registry embarquée ou proxy devant une registry existante
 - **Garbage collection** — déclenchement manuel via UI ou API, cron automatique quotidien à minuit UTC
 - **Scan de vulnérabilités** — déclencher un scan Trivy sur une image poussée via l'API admin (`SCAN_ENABLED` + `TRIVY_SERVER_URL`), résultats stockés avec comptes par sévérité et rapport complet
+- **Application des push signés** — rejette les push de tags sans signature cosign valide (`REQUIRE_SIGNED_PUSH` + overrides par repo), vérifiée côté serveur contre des clés publiques configurées
 - **Auth JWT** sur l'API admin, Basic Auth optionnelle sur `/v2/*`
 - **Logs structurés JSON** via `log/slog`
 - **Image Docker unique** — build multi-stage, image finale depuis `scratch`
@@ -565,6 +581,21 @@ V2_AUTH_ENABLED=false
 # SCAN_MAX_REPORT_BYTES=20971520       # cap sur le rapport JSON brut (20 Mio)
 # SCAN_DEDUP_WINDOW=1h                 # réutilise un scan récent réussi pour le même digest
 # TRIVY_INSECURE_REGISTRY=true         # trivy pull depuis Dockyard en HTTP simple sur localhost
+
+# ── Application des push signés (cosign) ──────────────────────────────────────
+# Désactivé par défaut. Si activé, les push de tags sont rejetés sauf si une
+# signature cosign valide existe déjà pour le digest — vérifiée côté serveur
+# contre des clés publiques statiquement configurées (COSIGN_PUBLIC_KEYS_DIR,
+# un ou plusieurs fichiers *.pem). La signature elle-même se fait toujours
+# côté client avec le CLI cosign ; Dockyard ne détient jamais de clé privée
+# et n'implémente pas la vérification keyless (Fulcio/Rekor). Les push par
+# digest et les tags cosign (signature/attestation/sbom) sont toujours
+# exemptés — le flux standard est : push par digest -> `cosign sign`
+# (référence le digest) -> push du tag. Les overrides par dépôt se gèrent
+# via POST/GET/DELETE /api/admin/signing/policies (premier repo_pattern
+# correspondant qui gagne).
+# REQUIRE_SIGNED_PUSH=true
+# COSIGN_PUBLIC_KEYS_DIR=/etc/dockyard-cosign-keys
 
 # ── Mode proxy ────────────────────────────────────────────────────────────────
 # REGISTRY_MODE=proxy

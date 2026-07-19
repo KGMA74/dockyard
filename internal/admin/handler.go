@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"dockyard/internal/cosign"
 	"dockyard/internal/metrics"
 	"dockyard/internal/storage"
 
@@ -33,12 +34,13 @@ type Handler struct {
 	store     storage.Backend
 	gcStore   gcBackend   // non-nil for local and S3
 	treeStore treeBackend // non-nil for local only
+	signing   *cosign.Policy
 }
 
-func New(backend storage.Backend) *Handler {
+func New(backend storage.Backend, signing *cosign.Policy) *Handler {
 	gc, _ := backend.(gcBackend)
 	tree, _ := backend.(treeBackend)
-	return &Handler{store: backend, gcStore: gc, treeStore: tree}
+	return &Handler{store: backend, gcStore: gc, treeStore: tree, signing: signing}
 }
 
 // GET /api/admin/repositories
@@ -125,6 +127,9 @@ func (h *Handler) GetManifestDetails(c echo.Context) error {
 	})
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, err500(err))
+	}
+	if h.signing.HasKeys() {
+		result["signed"] = h.signing.Signed(cosign.BackendFetcher{Backend: h.store}, name, digest)
 	}
 	return c.JSON(http.StatusOK, result)
 }

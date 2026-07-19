@@ -63,7 +63,7 @@ func newMirrorFixture(t *testing.T, ttl time.Duration) (*httptest.Server, *fakeU
 		t.Fatal(err)
 	}
 	client := registry.NewClient(upstream.URL, "", "")
-	m := NewMirror(backend, events.NewHub(), client, ttl)
+	m := NewMirror(backend, events.NewHub(), client, ttl, nil)
 	srv := httptest.NewServer(m)
 	t.Cleanup(srv.Close)
 	return srv, up, m
@@ -175,7 +175,7 @@ func TestMirrorFetchesChildManifestByDigest(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m := NewMirror(backend, events.NewHub(), registry.NewClient(upstream.URL, "", ""), time.Hour)
+	m := NewMirror(backend, events.NewHub(), registry.NewClient(upstream.URL, "", ""), time.Hour, nil)
 	srv := httptest.NewServer(m)
 	t.Cleanup(srv.Close)
 

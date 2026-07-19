@@ -1405,6 +1405,149 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/signing": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Signed-push status — global default and configured key count (admin only) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Status */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            /** @description REQUIRE_SIGNED_PUSH global default */
+                            enabled?: boolean;
+                            keys_loaded?: number;
+                        };
+                    };
+                };
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/signing/policies": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List per-repository signed-push overrides (admin only) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Policies */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            policies?: components["schemas"]["SigningPolicy"][];
+                            count?: number;
+                        };
+                    };
+                };
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        /** Create a signed-push override for a repository pattern (admin only) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @default * */
+                        repo_pattern?: string;
+                        required?: boolean;
+                    };
+                };
+            };
+            responses: {
+                /** @description Created policy */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SigningPolicy"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/signing/policies/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a signed-push override (admin only) */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                200: components["responses"]["Message"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/audit": {
         parameters: {
             query?: never;
@@ -1690,6 +1833,8 @@ export interface components {
             created?: string;
             architecture?: string;
             os?: string;
+            /** @description Present only when cosign public keys are configured. True if a valid cosign signature was found for this digest. */
+            signed?: boolean;
             layers?: {
                 digest?: string;
                 size_bytes?: number;
@@ -1728,6 +1873,13 @@ export interface components {
             /** @enum {string} */
             format?: "generic" | "slack" | "discord";
             enabled?: boolean;
+            /** Format: date-time */
+            created_at?: string;
+        };
+        SigningPolicy: {
+            id?: number;
+            repo_pattern?: string;
+            required?: boolean;
             /** Format: date-time */
             created_at?: string;
         };

@@ -110,7 +110,21 @@ export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
                 </div>
 
                 <div>
-                  <p className="text-xs text-muted-foreground font-medium mb-2">Digest</p>
+                  <p className="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-1.5">
+                    Digest
+                    {details.signed !== undefined && (
+                      <Badge
+                        variant="outline"
+                        className={
+                          details.signed
+                            ? 'text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
+                            : 'text-muted-foreground'
+                        }
+                      >
+                        {details.signed ? 'Signed' : 'Unsigned'}
+                      </Badge>
+                    )}
+                  </p>
                   <p className="font-mono text-xs text-muted-foreground bg-muted/50 border rounded-lg px-3 py-2 break-all">
                     {details.digest}
                   </p>

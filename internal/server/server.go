@@ -10,6 +10,7 @@ import (
 
 	"dockyard/config"
 	"dockyard/internal/auth"
+	"dockyard/internal/cosign"
 	"dockyard/internal/events"
 	"dockyard/internal/registry"
 	"dockyard/internal/retention"
@@ -53,6 +54,8 @@ type Server struct {
 	scanMaxReportBytes    int64
 	scanDedupWindow       time.Duration
 	trivyInsecureRegistry bool
+
+	signingPolicy *cosign.Policy
 }
 
 func NewServer() *http.Server {
@@ -132,6 +135,16 @@ func NewServer() *http.Server {
 		os.Exit(1)
 	}
 	srv.store = st
+
+	cosignKeys, err := cosign.LoadPublicKeys(cfg.CosignPublicKeysDir)
+	if err != nil {
+		slog.Error("cosign: failed to load public keys", "err", err)
+		os.Exit(1)
+	}
+	srv.signingPolicy = cosign.NewPolicy(cfg.RequireSignedPush, cosignKeys, st)
+	if cfg.RequireSignedPush && len(cosignKeys) == 0 {
+		slog.Warn("REQUIRE_SIGNED_PUSH is on but no cosign public keys are configured — all gated pushes will be rejected until COSIGN_PUBLIC_KEYS_DIR is set")
+	}
 
 	// Daily maintenance (retention then GC) needs both the backend and the
 	// policy store, hence scheduled after both exist.

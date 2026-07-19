@@ -9,6 +9,7 @@ import (
 	"sync"
 	"time"
 
+	"dockyard/internal/cosign"
 	"dockyard/internal/events"
 	"dockyard/internal/registry"
 	"dockyard/internal/storage"
@@ -35,9 +36,9 @@ type Mirror struct {
 	misses     uint64
 }
 
-func NewMirror(backend storage.Backend, hub *events.Hub, client *registry.Client, ttl time.Duration) *Mirror {
+func NewMirror(backend storage.Backend, hub *events.Hub, client *registry.Client, ttl time.Duration, signing *cosign.Policy) *Mirror {
 	return &Mirror{
-		inner:      New(backend, hub),
+		inner:      New(backend, hub, signing),
 		store:      backend,
 		client:     client,
 		hub:        hub,
