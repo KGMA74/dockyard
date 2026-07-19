@@ -117,6 +117,7 @@ func NewServer() *http.Server {
 	// policy store, hence scheduled after both exist.
 	if srv.backend != nil {
 		scheduleMaintenance(srv.backend, retention.New(st, srv.backend))
+		go srv.sampleStatsLoop()
 	}
 
 	if cfg.AuthUsername == "" || cfg.AuthPassword == "" || cfg.JWTSecret == "" {

@@ -385,6 +385,24 @@ export async function testWebhook(id: number): Promise<void> {
   return req(`/webhooks/${id}/test`, { method: 'POST' })
 }
 
+export interface StatsSample {
+  at: string
+  total_size: number
+  blob_count: number
+  repo_count: number
+}
+
+export interface RepoSize {
+  name: string
+  size_bytes: number
+  size_human: string
+  tags: number
+}
+
+export async function getInsights(): Promise<{ history: StatsSample[]; top_repos: RepoSize[] }> {
+  return req('/insights')
+}
+
 export interface HealthInfo {
   status: string
   mode: 'embedded' | 'proxy' | 'mirror'

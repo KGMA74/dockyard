@@ -34,3 +34,23 @@ func (c *statsCache) Get() (storage.StorageStats, error) {
 	c.fetched = time.Now()
 	return c.cached, c.err
 }
+
+// sampleStatsLoop snapshots storage stats into stats_history every 6 hours
+// (plus once shortly after boot) to feed the insights view.
+func (s *Server) sampleStatsLoop() {
+	sample := func() {
+		if s.stats == nil || s.store == nil {
+			return
+		}
+		if st, err := s.stats.Get(); err == nil {
+			_ = s.store.AddStatsSample(st.TotalSize, st.BlobCount, st.RepoCount)
+		}
+	}
+	time.Sleep(30 * time.Second) // let the server settle before the first sample
+	sample()
+	ticker := time.NewTicker(6 * time.Hour)
+	defer ticker.Stop()
+	for range ticker.C {
+		sample()
+	}
+}

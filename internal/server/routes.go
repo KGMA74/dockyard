@@ -222,6 +222,12 @@ func (s *Server) RegisterRoutes() http.Handler {
 	// Audit trail of sensitive actions (logins, pushes, deletions, GC).
 	api.GET("/audit", auditor.List, auth.RequireAdmin)
 
+	// Storage insights — growth history + largest repositories.
+	if s.backend != nil {
+		ih := admin.NewInsights(s.backend, s.store)
+		api.GET("/insights", ih.Get, auth.RequireAdmin)
+	}
+
 	// Retention policies — embedded/mirror only (needs local storage).
 	if s.backend != nil {
 		engine := retention.New(s.store, s.backend)

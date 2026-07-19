@@ -26,16 +26,16 @@
 | P2.2 — Mirror auth upstream | #15 | ✅ fait | `cef9b6b` | token dance Bearer dans registry.Client (401 challenge → realm → token, cache par scope), Basic conservé ; e2e réel : docker pull alpine via mirror devant registry-1.docker.io |
 | P2.3 — Mirror hit/miss | #16 | ✅ fait | `3e12fd0` | compteurs déjà dans /health (P2.1) ; cartes Cache hits/misses + upstream dans StorageTab (choix : pas de nouvel endpoint admin, /health suffit) |
 | P2.4 — Tests mirror | #17 | ✅ fait | `c056924` | couverts par mirror_test.go + client_test.go, ajout du scénario multi-arch enfant-par-digest |
-| P3.1 — /metrics Prometheus | #18 | ✅ fait | (ce commit) | internal/metrics (registre par défaut, sources swappables anti-double-register), HTTP par route normalisée (garde anti-cardinalité testée), jauges storage, compteurs GC (scheduler+admin), hits/misses mirror, échecs auth ; METRICS_ENABLED=true par défaut |
-| P3.2 — /health enrichi | #19 | ✅ fait | (ce commit) | probe storage (latence, degraded), stats cachées 30 s (les jauges Prometheus ne full-listent plus S3 à chaque scrape), free_bytes disque en local (win+unix) |
-| P3.3 — Dashboard insights | #20 | ⬜ à faire | | après P3.1/P3.2 |
+| P3.1 — /metrics Prometheus | #18 | ✅ fait | `048b695` | internal/metrics (registre par défaut, sources swappables anti-double-register), HTTP par route normalisée (garde anti-cardinalité testée), jauges storage, compteurs GC (scheduler+admin), hits/misses mirror, échecs auth ; METRICS_ENABLED=true par défaut |
+| P3.2 — /health enrichi | #19 | ✅ fait | `5d16f5c` | probe storage (latence, degraded), stats cachées 30 s (les jauges Prometheus ne full-listent plus S3 à chaque scrape), free_bytes disque en local (win+unix) |
+| P3.3 — Dashboard insights | #20 | ✅ fait | (ce commit) | migration 0005 stats_history (échantillon 6 h, purge 90 j), GET /api/admin/insights (historique + top repos par taille avec dédup de digests), InsightsSection dans StorageTab (barres top repos + table de croissance) |
 | P3.4 — OpenTelemetry | #21 | ⬜ à faire | | optionnel |
-| P3.5 — Helm ServiceMonitor | #22 | ✅ fait | (ce commit) | serviceaccount.yaml (create/name/annotations) + servicemonitor.yaml (gated metrics.serviceMonitor.enabled, scheme https si tls) — `helm template` à valider côté user |
-| P4.1 — Pull tracking | #23 | ✅ fait | (ce commit) | migration 0002 last_pulls (repo, reference, last_pulled_at, pull_count), PullTracker async (batch 3 s/256, drop si saturé), hook OnPull sur GET manifest (embedded + mirror) |
-| P4.2 — Moteur rétention | #24 | ✅ fait | (ce commit) | internal/retention : keep-N, unpulled_days (pulls > push), keep_patterns globs, protected_tags, garde digest partagé (skip + raison), CRUD + /retention/run?dryRun, planifié avant le GC quotidien |
-| P4.3 — UI rétention | #25 | ✅ fait | (ce commit) | RetentionSection dans StorageTab : liste/création/suppression de politiques, Preview plan (table delete/skipped avec raisons), Apply now ; e2e vérifié (keep_n=1 sur 3 tags → 2 supprimés). Fix largeur : les onglets Settings/Storage/Users occupent tout l'espace (max-w-3xl retiré) |
-| P4.4 — Webhooks | #26 | ✅ fait | (ce commit) | internal/webhooks : outbox SQLite (migration 0004), dispatcher retry backoff expo 30s→32min cap 8 tentatives, HMAC X-Dockyard-Signature, formats generic/slack/discord, events push/delete/retention (+Actor dans events.Event), CRUD + /test synchrone |
-| P4.5 — UI webhooks | #27 | ✅ fait | (ce commit) | WebhooksSection dans SettingsTab (admin-only) : création (url/secret/format/événements cochables), liste, suppression, bouton test synchrone |
+| P3.5 — Helm ServiceMonitor | #22 | ✅ fait | `2707507` | serviceaccount.yaml (create/name/annotations) + servicemonitor.yaml (gated metrics.serviceMonitor.enabled, scheme https si tls) — `helm template` à valider côté user |
+| P4.1 — Pull tracking | #23 | ✅ fait | `167e77d` | migration 0002 last_pulls (repo, reference, last_pulled_at, pull_count), PullTracker async (batch 3 s/256, drop si saturé), hook OnPull sur GET manifest (embedded + mirror) |
+| P4.2 — Moteur rétention | #24 | ✅ fait | `49b4ef2` | internal/retention : keep-N, unpulled_days (pulls > push), keep_patterns globs, protected_tags, garde digest partagé (skip + raison), CRUD + /retention/run?dryRun, planifié avant le GC quotidien |
+| P4.3 — UI rétention | #25 | ✅ fait | `796392e` | RetentionSection dans StorageTab : liste/création/suppression de politiques, Preview plan (table delete/skipped avec raisons), Apply now ; e2e vérifié (keep_n=1 sur 3 tags → 2 supprimés). Fix largeur : les onglets Settings/Storage/Users occupent tout l'espace (max-w-3xl retiré) |
+| P4.4 — Webhooks | #26 | ✅ fait | `14c1e5a` | internal/webhooks : outbox SQLite (migration 0004), dispatcher retry backoff expo 30s→32min cap 8 tentatives, HMAC X-Dockyard-Signature, formats generic/slack/discord, events push/delete/retention (+Actor dans events.Event), CRUD + /test synchrone |
+| P4.5 — UI webhooks | #27 | ✅ fait | `a94e2ef` | WebhooksSection dans SettingsTab (admin-only) : création (url/secret/format/événements cochables), liste, suppression, bouton test synchrone |
 | P4.6 — Tests P4 | #28 | ✅ fait | `84c56d0` | edge cases globs semver ajoutés (zoo de tags réaliste), retry webhooks déjà couvert |
 | P5.1 — OpenAPI spec | #29 | ⬜ à faire | | volontairement tardif (API stabilisée après P1–P4) |
 | P5.2 — Client TS généré | #30 | ⬜ à faire | | |
@@ -55,11 +55,11 @@
 | P7.7 — Réplication | #44 | ⬜ à faire | | après P4.4 + P1.4 |
 | P7.8 — Quotas | #45 | ⬜ à faire | | après P1.2 + P3.2 |
 | P7.9 — Hardening (fuzz/load) | #46 | ⬜ à faire | | |
-| P7.10 — zstd LayerBrowser | #47 | ✅ fait | (ce commit) | klauspost/compress/zstd dans parseLayerEntries, test des 3 formats (plain/gzip/zstd) |
+| P7.10 — zstd LayerBrowser | #47 | ✅ fait | `333ee7a` | klauspost/compress/zstd dans parseLayerEntries, test des 3 formats (plain/gzip/zstd) |
 
 ## Prochaine étape
 
-**🎉 Phases 1 et 2 COMPLÈTES** (issues #1–#17 fermées). Suite : **Phase 3 — P3.1 /metrics Prometheus** (issue #18) : prometheus/client_golang + middleware echo, métriques HTTP (route/statut/durée), registry (blobs/repos/GC/uploads), hit/miss mirror, échecs auth ; gated METRICS_ENABLED. Astuce MinIO locale : `docker run --rm -d -p 19000:9000 -e MINIO_ROOT_USER=minioadmin -e MINIO_ROOT_PASSWORD=minioadmin minio/minio server /data` + `="false"` (le .env force true).
+**Phases 1, 2 et 4 complètes ; Phase 3 : reste P3.4 (OTel, optionnel).** Suite recommandée : **P5.1 OpenAPI spec** (#29) — l'API admin est maintenant stabilisée (P1–P4 livrées), puis P5.3 export/import OCI et P5.4 dockyard-cli. P6 (Trivy/cosign) et le reste de P7 ensuite.
 
 ## Notes de reprise
 

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Trash2, Database, Boxes, Layers, Tags, Eye, Zap } from 'lucide-react'
 import { getHealth, runGC, HealthInfo, RepoSummary, StorageStats } from '../api'
+import InsightsSection from './InsightsSection'
 import RetentionSection from './RetentionSection'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -124,6 +125,8 @@ export default function StorageTab({ stats, repos, onRefresh }: Props) {
           )}
         </Card>
       </div>
+
+      {!unavailable && <InsightsSection />}
 
       {!unavailable && <RetentionSection />}
     </div>
