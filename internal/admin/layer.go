@@ -5,11 +5,11 @@ import (
 	"bufio"
 	"bytes"
 	"compress/gzip"
-	"errors"
 	"fmt"
 	"io"
 
 	lru "github.com/hashicorp/golang-lru/v2"
+	"github.com/klauspost/compress/zstd"
 )
 
 type layerEntry struct {
@@ -40,19 +40,24 @@ func parseLayerEntries(r io.Reader) ([]layerEntry, error) {
 	br := bufio.NewReader(r)
 
 	magic, _ := br.Peek(4)
-	if len(magic) == 4 && bytes.Equal(magic, zstdMagic) {
-		return nil, errors.New("zstd-compressed layers are not supported yet")
-	}
 
 	var tr *tar.Reader
-	if len(magic) >= 2 && bytes.Equal(magic[:2], gzipMagic) {
+	switch {
+	case len(magic) == 4 && bytes.Equal(magic, zstdMagic):
+		zr, err := zstd.NewReader(br)
+		if err != nil {
+			return nil, fmt.Errorf("zstd: %w", err)
+		}
+		defer zr.Close()
+		tr = tar.NewReader(zr)
+	case len(magic) >= 2 && bytes.Equal(magic[:2], gzipMagic):
 		gzr, err := gzip.NewReader(br)
 		if err != nil {
 			return nil, fmt.Errorf("gzip: %w", err)
 		}
 		defer func() { _ = gzr.Close() }()
 		tr = tar.NewReader(gzr)
-	} else {
+	default:
 		tr = tar.NewReader(br)
 	}
 

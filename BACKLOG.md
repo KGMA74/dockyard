@@ -55,7 +55,7 @@
 | P7.7 — Réplication | #44 | ⬜ à faire | | après P4.4 + P1.4 |
 | P7.8 — Quotas | #45 | ⬜ à faire | | après P1.2 + P3.2 |
 | P7.9 — Hardening (fuzz/load) | #46 | ⬜ à faire | | |
-| P7.10 — zstd LayerBrowser | #47 | ⬜ à faire | | filler |
+| P7.10 — zstd LayerBrowser | #47 | ✅ fait | (ce commit) | klauspost/compress/zstd dans parseLayerEntries, test des 3 formats (plain/gzip/zstd) |
 
 ## Prochaine étape
 
