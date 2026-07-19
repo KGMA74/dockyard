@@ -43,7 +43,7 @@
 | P5.4 — dockyard-cli | #32 | ✅ fait | `5b0114b` | cmd/dockyard-cli (Cobra) : login/repos/tags/delete/gc --dry-run/export/import/users/sessions, refresh silencieux, binaires multi-plateformes attachés aux releases ; e2e complet (backend local !) ; bonus : Preflight export (plus de tar tronqué) |
 | P5.5 — Tests P5 | #33 | ✅ fait | (ce commit) | round-trip export/import déjà testé (digests préservés) + tests CLI (config, erreur sans login, refresh silencieux sur 401 avec rotation) |
 | P6.1 — Scan Trivy | #34 | ✅ fait | (ce commit) | internal/scan : Dockyard shell le binaire `trivy` embarqué (mode --server) contre un trivy server externe géré par l'opérateur (aucune dépendance Go trivy, pas de CGO) ; table `scans` (migration 0006), dispatcher single-flight avec dédoublonnage par digest, `POST/GET /api/admin/scans[/:id[/report]]`, event `scan` (SSE + webhooks), audit explicite, config `SCAN_*`/`TRIVY_*`, Dockerfile (binaire trivy copié, testé sur `scratch`), Helm `scan.*` (à valider par l'utilisateur, pas d'accès cluster) |
-| P6.2 — UI scan | #35 | ⬜ à faire | | |
+| P6.2 — UI scan | #35 | ✅ fait | (ce commit) | bouton « Scan for vulnerabilities » + badges statut/sévérité dans ImageDetailsPanel (polling 2s tant que queued/running), ScansSection (historique) dans StorageTab, event `scan` ajouté aux checkboxes webhooks ; testé en navigateur réel (push alpine local, scan déclenché, Queued→Failed via polling, historique visible) |
 | P6.3 — Signatures cosign | #36 | ⬜ à faire | | inclut referrers si besoin |
 | P6.4 — Tests P6 | #37 | ⬜ à faire | | |
 | P7.1 — Diff de tags | #38 | ⬜ à faire | | |
@@ -59,7 +59,7 @@
 
 ## Prochaine étape
 
-**Phases 1, 2, 4 et 5 complètes ; Phase 3 : reste P3.4 (OTel, optionnel).** P6.1 (scan Trivy) fait. Suite recommandée : **P6.2 — UI scan** (#35, affichage des résultats dans l'UI, badges de sévérité) puis **P6.3 — Signatures cosign** (#36). P7 ensuite.
+**Phases 1, 2, 4 et 5 complètes ; Phase 3 : reste P3.4 (OTel, optionnel).** P6.1 et P6.2 (scan Trivy + UI) faits. Suite recommandée : **P6.3 — Signatures cosign** (#36) puis P6.4 (tests P6). P7 ensuite.
 
 ## Notes de reprise
 

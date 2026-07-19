@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
-import { Layers as LayersIcon, FolderOpen } from 'lucide-react'
-import { getManifestDetails, ManifestDetails, TagInfo } from '../api'
+import { toast } from 'sonner'
+import { Layers as LayersIcon, FolderOpen, ShieldAlert } from 'lucide-react'
+import { getManifestDetails, listScans, triggerScan, ManifestDetails, ScanResult, TagInfo } from '../api'
 import LayerBrowser from './LayerBrowser'
+import { ScanStatusBadge, SeverityBadge } from './ScanBadges'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -23,6 +25,10 @@ export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
   const [browsingLayer, setBrowsingLayer] = useState<string | null>(null)
+  // undefined = still loading / feature unavailable (403 in non-admin roles,
+  // or SCAN_ENABLED=false) — the whole section stays hidden in that case.
+  const [scan, setScan] = useState<ScanResult | null | undefined>(undefined)
+  const [triggering, setTriggering] = useState(false)
 
   useEffect(() => {
     let cancelled = false
@@ -34,6 +40,39 @@ export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
   }, [imageName, tag.digest])
+
+  useEffect(() => {
+    let cancelled = false
+    listScans({ name: imageName, digest: tag.digest, limit: 1 })
+      .then(r => { if (!cancelled) setScan(r.scans[0] ?? null) })
+      .catch(() => { if (!cancelled) setScan(undefined) })
+    return () => { cancelled = true }
+  }, [imageName, tag.digest])
+
+  // Poll while a scan is in flight — the backend docs recommend polling
+  // GET /api/admin/scans/:id rather than wiring SSE for this.
+  useEffect(() => {
+    if (!scan || (scan.status !== 'queued' && scan.status !== 'running')) return
+    const id = setInterval(() => {
+      listScans({ name: imageName, digest: tag.digest, limit: 1 })
+        .then(r => setScan(r.scans[0] ?? null))
+        .catch(() => {})
+    }, 2000)
+    return () => clearInterval(id)
+  }, [scan, imageName, tag.digest])
+
+  async function handleScan() {
+    setTriggering(true)
+    try {
+      const result = await triggerScan(imageName, tag.digest)
+      setScan(result.scan)
+      if (result.cached) toast.info('Reusing a recent scan for this image')
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to start scan')
+    } finally {
+      setTriggering(false)
+    }
+  }
 
   return (
     <>
@@ -76,6 +115,43 @@ export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
                     {details.digest}
                   </p>
                 </div>
+
+                {scan !== undefined && (
+                  <div>
+                    <p className="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-1.5">
+                      <ShieldAlert className="size-3.5" />
+                      Vulnerability scan
+                    </p>
+                    {scan === null ? (
+                      <Button variant="outline" size="sm" onClick={handleScan} disabled={triggering}>
+                        <ShieldAlert />
+                        {triggering ? 'Starting…' : 'Scan for vulnerabilities'}
+                      </Button>
+                    ) : (
+                      <div className="bg-muted/50 border rounded-lg px-3 py-2 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <ScanStatusBadge status={scan.status} />
+                          {(scan.status === 'succeeded' || scan.status === 'failed') && (
+                            <Button variant="outline" size="sm" onClick={handleScan} disabled={triggering}>
+                              {triggering ? 'Starting…' : 'Re-scan'}
+                            </Button>
+                          )}
+                        </div>
+                        {scan.status === 'succeeded' && (
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            <SeverityBadge label="Critical" count={scan.critical_count} tone="critical" />
+                            <SeverityBadge label="High" count={scan.high_count} tone="high" />
+                            <SeverityBadge label="Medium" count={scan.medium_count} tone="medium" />
+                            <SeverityBadge label="Low" count={scan.low_count} tone="low" />
+                          </div>
+                        )}
+                        {scan.status === 'failed' && scan.error && (
+                          <p className="text-xs text-destructive">{scan.error}</p>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                )}
 
                 {details.platforms && details.platforms.length > 0 && (
                   <div>

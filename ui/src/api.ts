@@ -392,6 +392,43 @@ export async function testWebhook(id: number): Promise<void> {
   return req(`/webhooks/${id}/test`, { method: 'POST' })
 }
 
+export interface ScanResult {
+  id: number
+  name: string
+  reference: string
+  digest: string
+  status: 'queued' | 'running' | 'succeeded' | 'failed'
+  requested_by: string
+  trivy_version?: string
+  critical_count: number
+  high_count: number
+  medium_count: number
+  low_count: number
+  unknown_count: number
+  error?: string
+  started_at?: string
+  finished_at?: string
+  created_at: string
+}
+
+export async function listScans(params: { name?: string; digest?: string; limit?: number; offset?: number } = {}): Promise<{ scans: ScanResult[]; count: number }> {
+  const qs = new URLSearchParams()
+  if (params.name) qs.set('name', params.name)
+  if (params.digest) qs.set('digest', params.digest)
+  if (params.limit) qs.set('limit', String(params.limit))
+  if (params.offset) qs.set('offset', String(params.offset))
+  const suffix = qs.toString()
+  return req(`/scans${suffix ? `?${suffix}` : ''}`)
+}
+
+export async function triggerScan(name: string, reference: string): Promise<{ scan: ScanResult; cached: boolean }> {
+  return req('/scans', { method: 'POST', body: JSON.stringify({ name, reference }) })
+}
+
+export async function getScan(id: number): Promise<ScanResult> {
+  return req(`/scans/${id}`)
+}
+
 export interface StatsSample {
   at: string
   total_size: number
