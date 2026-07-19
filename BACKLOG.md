@@ -28,7 +28,7 @@
 | P2.4 — Tests mirror | #17 | ✅ fait | `c056924` | couverts par mirror_test.go + client_test.go, ajout du scénario multi-arch enfant-par-digest |
 | P3.1 — /metrics Prometheus | #18 | ✅ fait | `048b695` | internal/metrics (registre par défaut, sources swappables anti-double-register), HTTP par route normalisée (garde anti-cardinalité testée), jauges storage, compteurs GC (scheduler+admin), hits/misses mirror, échecs auth ; METRICS_ENABLED=true par défaut |
 | P3.2 — /health enrichi | #19 | ✅ fait | `5d16f5c` | probe storage (latence, degraded), stats cachées 30 s (les jauges Prometheus ne full-listent plus S3 à chaque scrape), free_bytes disque en local (win+unix) |
-| P3.3 — Dashboard insights | #20 | ✅ fait | (ce commit) | migration 0005 stats_history (échantillon 6 h, purge 90 j), GET /api/admin/insights (historique + top repos par taille avec dédup de digests), InsightsSection dans StorageTab (barres top repos + table de croissance) |
+| P3.3 — Dashboard insights | #20 | ✅ fait | `567d13f` | migration 0005 stats_history (échantillon 6 h, purge 90 j), GET /api/admin/insights (historique + top repos par taille avec dédup de digests), InsightsSection dans StorageTab (barres top repos + table de croissance) |
 | P3.4 — OpenTelemetry | #21 | ⬜ à faire | | optionnel |
 | P3.5 — Helm ServiceMonitor | #22 | ✅ fait | `2707507` | serviceaccount.yaml (create/name/annotations) + servicemonitor.yaml (gated metrics.serviceMonitor.enabled, scheme https si tls) — `helm template` à valider côté user |
 | P4.1 — Pull tracking | #23 | ✅ fait | `167e77d` | migration 0002 last_pulls (repo, reference, last_pulled_at, pull_count), PullTracker async (batch 3 s/256, drop si saturé), hook OnPull sur GET manifest (embedded + mirror) |
@@ -37,9 +37,9 @@
 | P4.4 — Webhooks | #26 | ✅ fait | `14c1e5a` | internal/webhooks : outbox SQLite (migration 0004), dispatcher retry backoff expo 30s→32min cap 8 tentatives, HMAC X-Dockyard-Signature, formats generic/slack/discord, events push/delete/retention (+Actor dans events.Event), CRUD + /test synchrone |
 | P4.5 — UI webhooks | #27 | ✅ fait | `a94e2ef` | WebhooksSection dans SettingsTab (admin-only) : création (url/secret/format/événements cochables), liste, suppression, bouton test synchrone |
 | P4.6 — Tests P4 | #28 | ✅ fait | `84c56d0` | edge cases globs semver ajoutés (zoo de tags réaliste), retry webhooks déjà couvert |
-| P5.1 — OpenAPI spec | #29 | ✅ fait | (ce commit) | api/openapi.yaml écrit à la main (auth/users/sessions/repos/storage/retention/webhooks/audit/insights/health/v2-token), validé par redocly lint en CI (job ui) |
-| P5.2 — Client TS généré | #30 | ✅ fait | (ce commit) | openapi-typescript → ui/src/generated/api.d.ts (npm run gen-api), garde anti-drift en CI (git diff --exit-code), adoption progressive démarrée (type Role) |
-| P5.3 — Export/import OCI | #31 | ⬜ à faire | | |
+| P5.1 — OpenAPI spec | #29 | ✅ fait | `ca21f2a` | api/openapi.yaml écrit à la main (auth/users/sessions/repos/storage/retention/webhooks/audit/insights/health/v2-token), validé par redocly lint en CI (job ui) |
+| P5.2 — Client TS généré | #30 | ✅ fait | `8d47245` | openapi-typescript → ui/src/generated/api.d.ts (npm run gen-api), garde anti-drift en CI (git diff --exit-code), adoption progressive démarrée (type Role) |
+| P5.3 — Export/import OCI | #31 | ✅ fait | (ce commit) | internal/export : tar OCI image-layout streamé (dédup blobs, multi-arch récursif), import avec buffering des petits blobs seulement (layers streamés + hash-vérifiés), endpoints admin, spec OpenAPI + types régénérés, round-trip digests testé |
 | P5.4 — dockyard-cli | #32 | ⬜ à faire | | |
 | P5.5 — Tests P5 | #33 | ⬜ à faire | | |
 | P6.1 — Scan Trivy | #34 | ⬜ à faire | | Trivy server mode |

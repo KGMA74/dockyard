@@ -10,6 +10,7 @@ import (
 	"dockyard/internal/admin"
 	"dockyard/internal/audit"
 	"dockyard/internal/auth"
+	"dockyard/internal/export"
 	"dockyard/internal/metrics"
 	"dockyard/internal/retention"
 	"dockyard/internal/store"
@@ -226,6 +227,11 @@ func (s *Server) RegisterRoutes() http.Handler {
 	if s.backend != nil {
 		ih := admin.NewInsights(s.backend, s.store)
 		api.GET("/insights", ih.Get, auth.RequireAdmin)
+
+		// Repository export/import (OCI image-layout tarballs).
+		eh := export.NewHandler(s.backend)
+		api.GET("/repositories/export", eh.Export, auth.RequireAdmin)
+		api.POST("/repositories/import", eh.Import, auth.RequireAdmin)
 	}
 
 	// Retention policies — embedded/mirror only (needs local storage).

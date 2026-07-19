@@ -337,6 +337,45 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/admin/repositories/export:
+    get:
+      tags: [repositories]
+      summary: Export a repository as an OCI image-layout tarball (admin only)
+      description: Interoperates with skopeo/crane. Each tag becomes an index.json entry.
+      parameters:
+        - { name: name, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Tar stream
+          content:
+            application/x-tar:
+              schema: { type: string, format: binary }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/admin/repositories/import:
+    post:
+      tags: [repositories]
+      summary: Import an OCI image-layout tarball into a repository (admin only)
+      parameters:
+        - { name: name, in: query, required: true, schema: { type: string } }
+      requestBody:
+        required: true
+        content:
+          application/x-tar:
+            schema: { type: string, format: binary }
+      responses:
+        "200":
+          description: Import result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message: { type: string }
+                  tags: { type: integer }
+        "400": { description: Not an OCI image layout }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
   /api/admin/storage/stats:
     get:
       tags: [storage]

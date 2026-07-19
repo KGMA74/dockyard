@@ -312,6 +312,8 @@ All endpoints require `Authorization: Bearer <token>` (except login/logout).
 | `GET`/`POST` | `/api/admin/retention` | List / create retention policies `{repo_pattern, keep_n, unpulled_days, keep_patterns, protected_tags}` (admin) |
 | `DELETE` | `/api/admin/retention/:id` | Delete a retention policy (admin) |
 | `POST` | `/api/admin/retention/run?dryRun=true` | Preview or apply the retention plan (admin) — also runs daily before the GC |
+| `GET` | `/api/admin/repositories/export?name=<repo>` | Export a repository as an OCI image-layout tarball (skopeo/crane-compatible, admin) |
+| `POST` | `/api/admin/repositories/import?name=<repo>` | Import an OCI image-layout tarball (admin) |
 | `GET`/`POST` | `/api/admin/webhooks` | List / create webhooks `{url, secret, events: [push,delete,retention,gc], format: generic\|slack\|discord}` (admin) |
 | `DELETE` | `/api/admin/webhooks/:id` | Delete a webhook (admin) |
 | `POST` | `/api/admin/webhooks/:id/test` | Send a synchronous test event (admin) |
@@ -677,6 +679,8 @@ Tous les endpoints nécessitent `Authorization: Bearer <token>` (sauf login/logo
 | `GET`/`POST` | `/api/admin/retention` | Lister / créer des politiques de rétention `{repo_pattern, keep_n, unpulled_days, keep_patterns, protected_tags}` (admin) |
 | `DELETE` | `/api/admin/retention/:id` | Supprimer une politique (admin) |
 | `POST` | `/api/admin/retention/run?dryRun=true` | Prévisualiser ou appliquer le plan de rétention (admin) — tourne aussi chaque nuit avant le GC |
+| `GET` | `/api/admin/repositories/export?name=<repo>` | Exporter un dépôt en tarball OCI image-layout (compatible skopeo/crane, admin) |
+| `POST` | `/api/admin/repositories/import?name=<repo>` | Importer un tarball OCI image-layout (admin) |
 | `GET`/`POST` | `/api/admin/webhooks` | Lister / créer des webhooks `{url, secret, events: [push,delete,retention,gc], format: generic\|slack\|discord}` (admin) |
 | `DELETE` | `/api/admin/webhooks/:id` | Supprimer un webhook (admin) |
 | `POST` | `/api/admin/webhooks/:id/test` | Envoyer un événement de test synchrone (admin) |
