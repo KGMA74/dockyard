@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { User, KeyRound, Server, CircleCheck, CircleAlert, GitFork, BookOpen, Bug, ScrollText } from 'lucide-react'
 import { getAudit, getHealth, getUsername, AuditEntry, HealthInfo } from '../api'
+import WebhooksSection from './WebhooksSection'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
@@ -85,6 +86,8 @@ export default function SettingsTab({ onChangePassword }: Props) {
           )}
         </Card>
       </div>
+
+      <WebhooksSection />
 
       {audit !== null && (
         <div>

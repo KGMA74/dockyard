@@ -35,7 +35,7 @@
 | P4.2 — Moteur rétention | #24 | ✅ fait | (ce commit) | internal/retention : keep-N, unpulled_days (pulls > push), keep_patterns globs, protected_tags, garde digest partagé (skip + raison), CRUD + /retention/run?dryRun, planifié avant le GC quotidien |
 | P4.3 — UI rétention | #25 | ✅ fait | (ce commit) | RetentionSection dans StorageTab : liste/création/suppression de politiques, Preview plan (table delete/skipped avec raisons), Apply now ; e2e vérifié (keep_n=1 sur 3 tags → 2 supprimés). Fix largeur : les onglets Settings/Storage/Users occupent tout l'espace (max-w-3xl retiré) |
 | P4.4 — Webhooks | #26 | ✅ fait | (ce commit) | internal/webhooks : outbox SQLite (migration 0004), dispatcher retry backoff expo 30s→32min cap 8 tentatives, HMAC X-Dockyard-Signature, formats generic/slack/discord, events push/delete/retention (+Actor dans events.Event), CRUD + /test synchrone |
-| P4.5 — UI webhooks | #27 | ⬜ à faire | | |
+| P4.5 — UI webhooks | #27 | ✅ fait | (ce commit) | WebhooksSection dans SettingsTab (admin-only) : création (url/secret/format/événements cochables), liste, suppression, bouton test synchrone |
 | P4.6 — Tests P4 | #28 | ⬜ à faire | | |
 | P5.1 — OpenAPI spec | #29 | ⬜ à faire | | volontairement tardif (API stabilisée après P1–P4) |
 | P5.2 — Client TS généré | #30 | ⬜ à faire | | |

@@ -355,6 +355,36 @@ export async function runRetention(dryRun: boolean): Promise<{ plan: RetentionPl
   return req(`/retention/run${dryRun ? '?dryRun=true' : ''}`, { method: 'POST' })
 }
 
+export interface WebhookInfo {
+  id: number
+  url: string
+  events: string[]
+  format: 'generic' | 'slack' | 'discord'
+  enabled: boolean
+  created_at: string
+}
+
+export async function listWebhooks(): Promise<{ webhooks: WebhookInfo[]; count: number }> {
+  return req('/webhooks')
+}
+
+export async function createWebhook(hook: {
+  url: string
+  secret: string
+  events: string[]
+  format: string
+}): Promise<WebhookInfo> {
+  return req('/webhooks', { method: 'POST', body: JSON.stringify(hook) })
+}
+
+export async function deleteWebhook(id: number): Promise<void> {
+  return req(`/webhooks/${id}`, { method: 'DELETE' })
+}
+
+export async function testWebhook(id: number): Promise<void> {
+  return req(`/webhooks/${id}/test`, { method: 'POST' })
+}
+
 export interface HealthInfo {
   status: string
   mode: 'embedded' | 'proxy' | 'mirror'
