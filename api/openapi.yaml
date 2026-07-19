@@ -1,0 +1,835 @@
+openapi: 3.0.3
+info:
+  title: Dockyard Admin API
+  description: |
+    Administration API of Dockyard, a self-hosted Docker Registry V2.
+
+    Authentication: obtain an access token (15 min) plus a rotating refresh
+    token via `POST /api/admin/auth/login`, then send
+    `Authorization: Bearer <token>`. The registry protocol itself lives under
+    `/v2/*` (Docker Registry HTTP API V2) and authenticates through
+    `GET /v2/token` (Docker token auth) — only the token endpoint is described
+    here.
+
+    Roles: `admin` (everything), `pusher` (pull + push), `reader` (read-only).
+    Endpoints marked *admin only* return `403` for other roles.
+  version: "1.0"
+  license:
+    name: MIT
+servers:
+  - url: /
+tags:
+  - name: auth
+  - name: users
+  - name: sessions
+  - name: repositories
+  - name: storage
+  - name: retention
+  - name: webhooks
+  - name: audit
+  - name: system
+
+security:
+  - bearerAuth: []
+
+paths:
+  /api/admin/auth/login:
+    post:
+      tags: [auth]
+      summary: Log in
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username: { type: string }
+                password: { type: string }
+      responses:
+        "200":
+          description: Access + refresh tokens
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthTokens" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { description: Rate limited (RATE_LIMIT_LOGIN_PER_MIN) }
+
+  /api/admin/auth/refresh:
+    post:
+      tags: [auth]
+      summary: Renew the access token
+      description: Refresh tokens are single-use — each call rotates it.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [refresh_token]
+              properties:
+                refresh_token: { type: string }
+      responses:
+        "200":
+          description: Fresh access + refresh tokens
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthTokens" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/admin/auth/logout:
+    post:
+      tags: [auth]
+      summary: Log out
+      description: Revokes the access token (persisted) and kills the session.
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/admin/auth/password:
+    post:
+      tags: [auth]
+      summary: Change own password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [current_password, new_password]
+              properties:
+                current_password: { type: string }
+                new_password: { type: string, minLength: 8 }
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /api/admin/users:
+    get:
+      tags: [users]
+      summary: List users (admin only)
+      responses:
+        "200":
+          description: Users
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  users:
+                    type: array
+                    items: { $ref: "#/components/schemas/User" }
+                  count: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [users]
+      summary: Create a user (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password, role]
+              properties:
+                username: { type: string }
+                password: { type: string, minLength: 8 }
+                role: { $ref: "#/components/schemas/Role" }
+                repo_patterns:
+                  type: array
+                  items: { type: string }
+                  description: Repo globs restricting the account ('*' crosses '/').
+      responses:
+        "201":
+          description: Created user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: Username already exists }
+
+  /api/admin/users/{username}:
+    parameters:
+      - { name: username, in: path, required: true, schema: { type: string } }
+    put:
+      tags: [users]
+      summary: Update role, patterns and/or password (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                role: { $ref: "#/components/schemas/Role" }
+                repo_patterns:
+                  type: array
+                  items: { type: string }
+                password: { type: string, minLength: 8 }
+      responses:
+        "200":
+          description: Updated user
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+        "400": { description: Invalid change (e.g. demoting the last admin) }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+    delete:
+      tags: [users]
+      summary: Delete a user (admin only)
+      description: Self-deletion and removing the last admin are refused.
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "400": { description: Refused (own account or last admin) }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/admin/sessions:
+    get:
+      tags: [sessions]
+      summary: List active sessions (admin only)
+      responses:
+        "200":
+          description: Sessions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items: { $ref: "#/components/schemas/Session" }
+                  count: { type: integer }
+                  current_id:
+                    type: integer
+                    description: Session id of the caller.
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/admin/sessions/{id}:
+    delete:
+      tags: [sessions]
+      summary: Revoke a session (admin only)
+      description: Kills the refresh token; outstanding access tokens die within 15 minutes.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/admin/repositories:
+    get:
+      tags: [repositories]
+      summary: List repositories with tags and last push time
+      responses:
+        "200":
+          description: Repositories
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  repositories:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string }
+                        tags: { type: array, items: { type: string } }
+                        total: { type: integer }
+                        last_pushed: { type: string, format: date-time }
+                  total: { type: integer }
+    delete:
+      tags: [repositories]
+      summary: Delete a repository and all its tags (admin only)
+      parameters:
+        - { name: name, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/admin/repositories/tags:
+    get:
+      tags: [repositories]
+      summary: List tags of a repository with digests
+      parameters:
+        - { name: name, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Tags
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name: { type: string }
+                  tags:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        tag: { type: string }
+                        digest: { type: string }
+                        pushed_at: { type: string, format: date-time }
+                  total: { type: integer }
+
+  /api/admin/repositories/manifest:
+    get:
+      tags: [repositories]
+      summary: Manifest details (size, layers, platforms)
+      parameters:
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: reference, in: query, required: true, schema: { type: string }, description: Tag or digest }
+      responses:
+        "200":
+          description: Manifest details
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ManifestDetails" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/admin/repositories/layer:
+    get:
+      tags: [repositories]
+      summary: List the files inside a layer (gzip, zstd or plain tar)
+      parameters:
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: digest, in: query, required: true, schema: { type: string } }
+      responses:
+        "200":
+          description: Layer entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  digest: { type: string }
+                  entries:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        path: { type: string }
+                        type: { type: string, enum: [file, dir, symlink, hardlink, other] }
+                        size: { type: integer }
+                        size_human: { type: string }
+                        mode: { type: string }
+                        link_name: { type: string }
+                  count: { type: integer }
+
+  /api/admin/repositories/manifests:
+    delete:
+      tags: [repositories]
+      summary: Delete a manifest (admin only)
+      description: Removes the manifest and every tag pointing at its digest.
+      parameters:
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: digest, in: query, required: true, schema: { type: string } }
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/admin/storage/stats:
+    get:
+      tags: [storage]
+      summary: Storage usage
+      responses:
+        "200":
+          description: Stats
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  total_size_bytes: { type: integer }
+                  total_size_human: { type: string }
+                  blob_count: { type: integer }
+                  repo_count: { type: integer }
+                  storage_path: { type: string }
+        "501": { description: Not available in proxy mode }
+
+  /api/admin/storage/tree:
+    get:
+      tags: [storage]
+      summary: Raw filesystem tree (local backend only)
+      responses:
+        "200": { description: File list }
+        "501": { description: Not available (proxy mode or S3 backend) }
+
+  /api/admin/gc:
+    post:
+      tags: [storage]
+      summary: Garbage-collect unreferenced blobs (admin only)
+      parameters:
+        - name: dryRun
+          in: query
+          schema: { type: boolean }
+          description: Report what would be removed without deleting.
+      responses:
+        "200":
+          description: GC result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  removed: { type: array, items: { type: string } }
+                  count: { type: integer }
+                  freed_bytes: { type: integer }
+                  freed_human: { type: string }
+                  dry_run: { type: boolean }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "501": { description: Not available in proxy mode }
+
+  /api/admin/insights:
+    get:
+      tags: [storage]
+      summary: Growth history and largest repositories (admin only)
+      responses:
+        "200":
+          description: Insights
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  history:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        at: { type: string, format: date-time }
+                        total_size: { type: integer }
+                        blob_count: { type: integer }
+                        repo_count: { type: integer }
+                  top_repos:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: { type: string }
+                        size_bytes: { type: integer }
+                        size_human: { type: string }
+                        tags: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/admin/retention:
+    get:
+      tags: [retention]
+      summary: List retention policies (admin only)
+      responses:
+        "200":
+          description: Policies
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  policies:
+                    type: array
+                    items: { $ref: "#/components/schemas/RetentionPolicy" }
+                  count: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [retention]
+      summary: Create a retention policy (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RetentionPolicyInput" }
+      responses:
+        "201":
+          description: Created policy
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RetentionPolicy" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/admin/retention/{id}:
+    delete:
+      tags: [retention]
+      summary: Delete a retention policy (admin only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/admin/retention/run:
+    post:
+      tags: [retention]
+      summary: Evaluate (and optionally apply) the retention plan (admin only)
+      parameters:
+        - name: dryRun
+          in: query
+          schema: { type: boolean }
+          description: Preview the plan without deleting anything.
+      responses:
+        "200":
+          description: Plan and outcome
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  plan:
+                    type: object
+                    properties:
+                      delete:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            repo: { type: string }
+                            tag: { type: string }
+                            digest: { type: string }
+                            reason: { type: string }
+                      skipped:
+                        type: array
+                        items:
+                          type: object
+                          properties:
+                            repo: { type: string }
+                            tag: { type: string }
+                            reason: { type: string }
+                  dry_run: { type: boolean }
+                  deleted: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/admin/webhooks:
+    get:
+      tags: [webhooks]
+      summary: List webhooks (admin only)
+      responses:
+        "200":
+          description: Webhooks
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  webhooks:
+                    type: array
+                    items: { $ref: "#/components/schemas/Webhook" }
+                  count: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [webhooks]
+      summary: Create a webhook (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [url]
+              properties:
+                url: { type: string, format: uri }
+                secret:
+                  type: string
+                  description: HMAC-SHA256 signing secret for X-Dockyard-Signature.
+                events:
+                  type: array
+                  items: { type: string, enum: [push, delete, retention, gc] }
+                format: { type: string, enum: [generic, slack, discord] }
+      responses:
+        "201":
+          description: Created webhook
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Webhook" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/admin/webhooks/{id}:
+    delete:
+      tags: [webhooks]
+      summary: Delete a webhook (admin only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/admin/webhooks/{id}/test:
+    post:
+      tags: [webhooks]
+      summary: Send a synchronous test event (admin only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "502": { description: Endpoint rejected the delivery }
+
+  /api/admin/audit:
+    get:
+      tags: [audit]
+      summary: Audit trail, newest first (admin only)
+      parameters:
+        - { name: repo, in: query, schema: { type: string } }
+        - { name: actor, in: query, schema: { type: string } }
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 500 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: Entries
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  entries:
+                    type: array
+                    items: { $ref: "#/components/schemas/AuditEntry" }
+                  total: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/admin/events:
+    get:
+      tags: [system]
+      summary: Server-sent events feed of registry activity
+      description: |
+        SSE stream (`text/event-stream`). EventSource cannot set headers, so
+        the JWT may be passed as the `token` query parameter instead.
+      parameters:
+        - { name: token, in: query, schema: { type: string } }
+      responses:
+        "200": { description: "SSE stream of events: push, delete, retention, gc" }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+
+  /health:
+    get:
+      tags: [system]
+      summary: Health check
+      security: []
+      responses:
+        "200":
+          description: Status (degraded when the storage probe fails)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status: { type: string, enum: [ok, degraded] }
+                  mode: { type: string, enum: [embedded, proxy, mirror] }
+                  version: { type: string }
+                  registry: { type: string, description: Upstream URL or unreachable error (proxy/mirror) }
+                  storage:
+                    type: object
+                    properties:
+                      ok: { type: boolean }
+                      latency_ms: { type: integer }
+                      blobs: { type: integer }
+                      bytes: { type: integer }
+                      repositories: { type: integer }
+                      free_bytes: { type: integer }
+                  mirror:
+                    type: object
+                    properties:
+                      hits: { type: integer }
+                      misses: { type: integer }
+
+  /metrics:
+    get:
+      tags: [system]
+      summary: Prometheus metrics (when METRICS_ENABLED)
+      security: []
+      responses:
+        "200": { description: Prometheus exposition format }
+
+  /v2/token:
+    get:
+      tags: [auth]
+      summary: Docker registry token endpoint
+      description: |
+        Trades Basic credentials (any user account) for a short-lived JWT used
+        against `/v2/*`. With `V2_ANONYMOUS_PULL`, anonymous requests get a
+        pull-only token.
+      security: []
+      parameters:
+        - { name: service, in: query, schema: { type: string } }
+        - { name: scope, in: query, schema: { type: string }, example: "repository:team/app:pull,push" }
+      responses:
+        "200":
+          description: Registry token
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: { type: string }
+                  access_token: { type: string }
+                  expires_in: { type: integer }
+                  issued_at: { type: string, format: date-time }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+        "429": { description: Rate limited }
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+
+  responses:
+    Message:
+      description: Success message
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              message: { type: string }
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Unauthorized:
+      description: Missing, invalid or revoked credentials
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    Forbidden:
+      description: Requires the admin role
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema: { $ref: "#/components/schemas/Error" }
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        error: { type: string }
+
+    Role:
+      type: string
+      enum: [admin, pusher, reader]
+
+    AuthTokens:
+      type: object
+      properties:
+        token: { type: string, description: JWT access token (15 min) }
+        refresh_token: { type: string, description: Single-use refresh token (30 days) }
+        role: { $ref: "#/components/schemas/Role" }
+        expires_in: { type: integer, example: 900 }
+
+    User:
+      type: object
+      properties:
+        id: { type: integer }
+        username: { type: string }
+        role: { $ref: "#/components/schemas/Role" }
+        repo_patterns:
+          type: array
+          items: { type: string }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+
+    Session:
+      type: object
+      properties:
+        id: { type: integer }
+        username: { type: string }
+        user_agent: { type: string }
+        ip: { type: string }
+        created_at: { type: string, format: date-time }
+        last_seen_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time }
+
+    ManifestDetails:
+      type: object
+      properties:
+        digest: { type: string }
+        media_type: { type: string }
+        total_size_bytes: { type: integer }
+        total_size_human: { type: string }
+        config_digest: { type: string }
+        created: { type: string, format: date-time }
+        architecture: { type: string }
+        os: { type: string }
+        layers:
+          type: array
+          items:
+            type: object
+            properties:
+              digest: { type: string }
+              size_bytes: { type: integer }
+              size_human: { type: string }
+        platforms:
+          type: array
+          items:
+            type: object
+            properties:
+              architecture: { type: string }
+              os: { type: string }
+              digest: { type: string }
+              size_bytes: { type: integer }
+              size_human: { type: string }
+
+    RetentionPolicyInput:
+      type: object
+      properties:
+        repo_pattern: { type: string, default: "*" }
+        keep_n: { type: integer, description: Keep the N most recently pushed tags (0 = off) }
+        unpulled_days: { type: integer, description: Delete tags unpulled for N days (0 = off) }
+        keep_patterns:
+          type: array
+          items: { type: string }
+          description: Tag globs always kept (only '*' is special).
+        protected_tags:
+          type: array
+          items: { type: string }
+
+    RetentionPolicy:
+      allOf:
+        - $ref: "#/components/schemas/RetentionPolicyInput"
+        - type: object
+          properties:
+            id: { type: integer }
+            enabled: { type: boolean }
+            created_at: { type: string, format: date-time }
+
+    Webhook:
+      type: object
+      properties:
+        id: { type: integer }
+        url: { type: string, format: uri }
+        events:
+          type: array
+          items: { type: string, enum: [push, delete, retention, gc] }
+        format: { type: string, enum: [generic, slack, discord] }
+        enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
+
+    AuditEntry:
+      type: object
+      properties:
+        id: { type: integer }
+        at: { type: string, format: date-time }
+        actor: { type: string }
+        action: { type: string }
+        repo: { type: string }
+        tag: { type: string }
+        source_ip: { type: string }
+        result: { type: string }
+        details: { type: string }

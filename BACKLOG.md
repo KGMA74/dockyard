@@ -37,7 +37,7 @@
 | P4.4 — Webhooks | #26 | ✅ fait | `14c1e5a` | internal/webhooks : outbox SQLite (migration 0004), dispatcher retry backoff expo 30s→32min cap 8 tentatives, HMAC X-Dockyard-Signature, formats generic/slack/discord, events push/delete/retention (+Actor dans events.Event), CRUD + /test synchrone |
 | P4.5 — UI webhooks | #27 | ✅ fait | `a94e2ef` | WebhooksSection dans SettingsTab (admin-only) : création (url/secret/format/événements cochables), liste, suppression, bouton test synchrone |
 | P4.6 — Tests P4 | #28 | ✅ fait | `84c56d0` | edge cases globs semver ajoutés (zoo de tags réaliste), retry webhooks déjà couvert |
-| P5.1 — OpenAPI spec | #29 | ⬜ à faire | | volontairement tardif (API stabilisée après P1–P4) |
+| P5.1 — OpenAPI spec | #29 | ✅ fait | (ce commit) | api/openapi.yaml écrit à la main (auth/users/sessions/repos/storage/retention/webhooks/audit/insights/health/v2-token), validé par redocly lint en CI (job ui) |
 | P5.2 — Client TS généré | #30 | ⬜ à faire | | |
 | P5.3 — Export/import OCI | #31 | ⬜ à faire | | |
 | P5.4 — dockyard-cli | #32 | ⬜ à faire | | |

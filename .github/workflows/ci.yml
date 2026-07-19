@@ -52,3 +52,6 @@ jobs:
 
       - name: Typecheck and build
         run: npm run build
+
+      - name: Validate OpenAPI spec
+        run: npx --yes @redocly/cli@latest lint ../api/openapi.yaml
