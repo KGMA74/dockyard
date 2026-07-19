@@ -40,3 +40,6 @@ internal/ui/dist/*
 !internal/ui/dist/index.html
 ui/node_modules/
 
+
+# Local dev registry data (SQLite db, blobs)
+data/
