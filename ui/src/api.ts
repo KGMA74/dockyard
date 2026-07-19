@@ -1,3 +1,10 @@
+import type { components } from './generated/api'
+
+// Types generated from api/openapi.yaml (npm run gen-api — CI fails on
+// drift). Hand-written interfaces below are being migrated progressively.
+export type Role = NonNullable<components['schemas']['Role']>
+export type GeneratedSchemas = components['schemas']
+
 const BASE = '/api/admin'
 const TOKEN_KEY = 'dockyard_token'
 const REFRESH_KEY = 'dockyard_refresh'
@@ -252,7 +259,7 @@ export async function changePassword(currentPassword: string, newPassword: strin
 export interface UserInfo {
   id: number
   username: string
-  role: 'admin' | 'pusher' | 'reader'
+  role: Role
   repo_patterns: string[]
   created_at: string
   updated_at: string

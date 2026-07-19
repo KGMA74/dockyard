@@ -55,3 +55,8 @@ jobs:
 
       - name: Validate OpenAPI spec
         run: npx --yes @redocly/cli@latest lint ../api/openapi.yaml
+
+      - name: Generated API types are in sync
+        run: |
+          npm run gen-api
+          git diff --exit-code -- src/generated
