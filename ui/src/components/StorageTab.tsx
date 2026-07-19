@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Trash2, Database, Boxes, Layers, Tags, Eye, Zap } from 'lucide-react'
 import { getHealth, runGC, HealthInfo, RepoSummary, StorageStats } from '../api'
+import RetentionSection from './RetentionSection'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 
@@ -47,7 +48,7 @@ export default function StorageTab({ stats, repos, onRefresh }: Props) {
   const avgTags = repos.length > 0 ? (totalTags / repos.length).toFixed(1) : '0'
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6">
       <div>
         <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">
           Storage
@@ -123,6 +124,8 @@ export default function StorageTab({ stats, repos, onRefresh }: Props) {
           )}
         </Card>
       </div>
+
+      {!unavailable && <RetentionSection />}
     </div>
   )
 }

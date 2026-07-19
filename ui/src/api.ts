@@ -317,6 +317,44 @@ export async function getAudit(limit = 50): Promise<{ entries: AuditEntry[]; tot
   return req(`/audit?limit=${limit}`)
 }
 
+export interface RetentionPolicy {
+  id: number
+  repo_pattern: string
+  keep_n: number
+  unpulled_days: number
+  keep_patterns: string[]
+  protected_tags: string[]
+  enabled: boolean
+  created_at: string
+}
+
+export interface RetentionPlan {
+  delete: { repo: string; tag: string; digest: string; reason: string }[]
+  skipped: { repo: string; tag: string; reason: string }[]
+}
+
+export async function listRetentionPolicies(): Promise<{ policies: RetentionPolicy[]; count: number }> {
+  return req('/retention')
+}
+
+export async function createRetentionPolicy(policy: {
+  repo_pattern: string
+  keep_n: number
+  unpulled_days: number
+  keep_patterns: string[]
+  protected_tags: string[]
+}): Promise<RetentionPolicy> {
+  return req('/retention', { method: 'POST', body: JSON.stringify(policy) })
+}
+
+export async function deleteRetentionPolicy(id: number): Promise<void> {
+  return req(`/retention/${id}`, { method: 'DELETE' })
+}
+
+export async function runRetention(dryRun: boolean): Promise<{ plan: RetentionPlan; dry_run: boolean; deleted: number }> {
+  return req(`/retention/run${dryRun ? '?dryRun=true' : ''}`, { method: 'POST' })
+}
+
 export interface HealthInfo {
   status: string
   mode: 'embedded' | 'proxy' | 'mirror'

@@ -25,7 +25,7 @@ export default function SettingsTab({ onChangePassword }: Props) {
   const proxyUnreachable = health?.mode === 'proxy' && health.registry?.startsWith('unreachable')
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6">
       <div>
         <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">
           Account

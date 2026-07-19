@@ -68,7 +68,7 @@ export default function UsersTab() {
   }
 
   return (
-    <div className="space-y-6 max-w-3xl">
+    <div className="space-y-6">
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest">
