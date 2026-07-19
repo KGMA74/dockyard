@@ -51,9 +51,26 @@ func TestOpenCreatesSchema(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Version: %v", err)
 	}
-	if v != 1 {
-		t.Errorf("schema version = %d, want 1", v)
+	if v != latestMigrationVersion(t) {
+		t.Errorf("schema version = %d, want %d (all migrations applied)", v, latestMigrationVersion(t))
 	}
+}
+
+// latestMigrationVersion derives the expected schema version from the
+// embedded migration files, so adding a migration doesn't break these tests.
+func latestMigrationVersion(t *testing.T) int {
+	t.Helper()
+	entries, err := migrationsFS.ReadDir("migrations")
+	if err != nil {
+		t.Fatal(err)
+	}
+	max := 0
+	for _, e := range entries {
+		if v, err := migrationVersion(e.Name()); err == nil && v > max {
+			max = v
+		}
+	}
+	return max
 }
 
 func TestReopenIsIdempotent(t *testing.T) {
@@ -83,8 +100,8 @@ func TestReopenIsIdempotent(t *testing.T) {
 	if count != 1 {
 		t.Errorf("user count after reopen = %d, want 1 (data lost or migration re-ran)", count)
 	}
-	if v, _ := s2.Version(); v != 1 {
-		t.Errorf("schema version after reopen = %d, want 1", v)
+	if v, _ := s2.Version(); v != latestMigrationVersion(t) {
+		t.Errorf("schema version after reopen = %d, want %d", v, latestMigrationVersion(t))
 	}
 }
 

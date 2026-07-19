@@ -46,6 +46,9 @@ func NewMirror(backend storage.Backend, hub *events.Hub, client *registry.Client
 	}
 }
 
+// OnPull delegates to the embedded handler (pulls served from cache count too).
+func (m *Mirror) OnPull(fn func(name, reference string)) { m.inner.OnPull(fn) }
+
 // Stats reports cache hits and misses since boot.
 func (m *Mirror) Stats() (hits, misses uint64) {
 	m.mu.Lock()

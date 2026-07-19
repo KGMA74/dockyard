@@ -11,6 +11,7 @@ import (
 	"dockyard/internal/audit"
 	"dockyard/internal/auth"
 	"dockyard/internal/metrics"
+	"dockyard/internal/store"
 	uiassets "dockyard/internal/ui"
 	"dockyard/internal/v2"
 	"dockyard/internal/version"
@@ -117,9 +118,12 @@ func (s *Server) RegisterRoutes() http.Handler {
 		v2h = ph
 	case modeMirror:
 		mirror = v2.NewMirror(s.backend, s.events, s.proxy, s.mirrorTagTTL)
+		mirror.OnPull(store.NewPullTracker(s.store).Record)
 		v2h = mirror
 	default:
-		v2h = v2.New(s.backend, s.events)
+		h := v2.New(s.backend, s.events)
+		h.OnPull(store.NewPullTracker(s.store).Record)
+		v2h = h
 	}
 	if s.metricsEnabled {
 		if mirror != nil {

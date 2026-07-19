@@ -31,7 +31,7 @@
 | P3.3 — Dashboard insights | #20 | ⬜ à faire | | après P3.1/P3.2 |
 | P3.4 — OpenTelemetry | #21 | ⬜ à faire | | optionnel |
 | P3.5 — Helm ServiceMonitor | #22 | ✅ fait | (ce commit) | serviceaccount.yaml (create/name/annotations) + servicemonitor.yaml (gated metrics.serviceMonitor.enabled, scheme https si tls) — `helm template` à valider côté user |
-| P4.1 — Pull tracking | #23 | ⬜ à faire | | |
+| P4.1 — Pull tracking | #23 | ✅ fait | (ce commit) | migration 0002 last_pulls (repo, reference, last_pulled_at, pull_count), PullTracker async (batch 3 s/256, drop si saturé), hook OnPull sur GET manifest (embedded + mirror) |
 | P4.2 — Moteur rétention | #24 | ⬜ à faire | | après P4.1 + P1.9 |
 | P4.3 — UI rétention | #25 | ⬜ à faire | | |
 | P4.4 — Webhooks | #26 | ⬜ à faire | | après P1.5 (acteur dans payload) |

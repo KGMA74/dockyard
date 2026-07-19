@@ -20,13 +20,19 @@ import (
 // Handler implements http.Handler for the Docker Registry V2 protocol.
 // Image names containing slashes (org/image, org/sub/image) are supported via regex routing.
 type Handler struct {
-	store storage.Backend
-	hub   *events.Hub
+	store  storage.Backend
+	hub    *events.Hub
+	onPull func(name, reference string)
 }
 
 func New(backend storage.Backend, hub *events.Hub) *Handler {
 	return &Handler{store: backend, hub: hub}
 }
+
+// OnPull registers a callback fired after each successful manifest GET — the
+// event that constitutes "a pull". The callback must not block (the pull
+// tracker batches asynchronously).
+func (h *Handler) OnPull(fn func(name, reference string)) { h.onPull = fn }
 
 var (
 	reCatalog       = regexp.MustCompile(`^/v2/_catalog$`)
@@ -123,6 +129,9 @@ func (h *Handler) manifests(w http.ResponseWriter, r *http.Request, name, ref st
 		w.Header().Set("Docker-Content-Digest", digest)
 		w.Header().Set("Content-Type", mediaType(content))
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(content)))
+		if h.onPull != nil && r.Method == http.MethodGet {
+			h.onPull(name, ref)
+		}
 		if r.Method == http.MethodHead {
 			w.WriteHeader(http.StatusOK)
 			return
