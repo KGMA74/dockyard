@@ -50,7 +50,7 @@
 | P7.2 — Recherche serveur | #39 | ✅ fait | (ce commit) | `GET /api/admin/repositories/search?q=&signed=&limit=&offset=` (embedded+proxy) : correspond sur nom de repo OU tag, filtre `signed` résolu seulement sur les résultats matchés (pas tout le registre), infos scan (statut+critical/high) jointes par digest, tags cosign (.sig/.att/.sbom) exclus des résultats, pagination triée nom+tag ; nouveau champ `db *store.Store` sur `admin.Handler`/`RemoteHandler` (accès aux scans) ; UI : toggle Cards/Dense dans Dashboard, `DenseRepoView.tsx` (table plate paginée, filtre Signed, ouverture du panneau détails), réutilise la barre de recherche existante ; testé en navigateur réel (recherche par nom et par tag, ouverture détails depuis la vue dense) |
 | P7.3 — Notifications in-app | #40 | ✅ fait | (ce commit) | événements `gc` et `import` ajoutés (n'existaient pas avant : GC manuel/planifié et import n'émettaient rien) ; GC planifié ne publie que si des blobs ont été supprimés (évite le bruit quotidien), GC manuel publie toujours (feedback de l'action déclenchée) ; `subscribeToPushEvents` généralisé en `subscribeToEvents`/`RegistryEvent` (tous types) ; UI : cloche dans Sidebar (Popover radix-ui, badge non-lus, historique 20 derniers événements en mémoire de session), toasts sonner pour tous les types ; testé en navigateur réel (GC + push vus en direct) |
 | P7.4 — i18n FR/EN | #41 | ⬜ à faire | | après P7.1/P7.2 |
-| P7.5 — Helm HPA/PDB | #42 | ⬜ à faire | | HPA gated backend S3 |
+| P7.5 — Helm HPA/PDB | #42 | ✅ fait | (ce commit) | `templates/hpa.yaml` (autoscaling/v2, `{{ fail }}` si `registry.storage.backend != s3` — PVC local RWO non partageable entre replicas), `templates/pdb.yaml` (minAvailable/maxUnavailable), `deployment.yaml` : `replicas` omis quand l'HPA est actif (sinon Helm et l'HPA se battent à chaque reconciliation) + sondes liveness/readiness configurables (`values.probes.*`), `ingress.yaml` : annotation `cert-manager.io/cluster-issuer` auto via `ingress.certManager.clusterIssuer` ; pas de `helm template` possible depuis cette machine (pas d'accès cluster) — à valider côté user |
 | P7.6 — Terraform + Artifact Hub | #43 | ⬜ à faire | | |
 | P7.7 — Réplication | #44 | ⬜ à faire | | après P4.4 + P1.4 |
 | P7.8 — Quotas | #45 | ⬜ à faire | | après P1.2 + P3.2 |
@@ -59,8 +59,9 @@
 
 ## Prochaine étape
 
-**Phases 1, 2, 4, 5 et 6 complètes** (reste P3.4 OTel, optionnel). P7.1, P7.2 et P7.3 faits. Suite
-recommandée : **P7.4 — i18n FR/EN** (#41), ou **P7.5 — Helm HPA/PDB** (#42).
+**Phases 1, 2, 4, 5 et 6 complètes** (reste P3.4 OTel, optionnel). P7.1, P7.2, P7.3 et P7.5 faits.
+Suite recommandée : **P7.4 — i18n FR/EN** (#41, gros chantier transversal — react-i18next +
+extraction de toutes les chaînes UI) ou **P7.6 — Terraform + Artifact Hub** (#43).
 
 ## Notes de reprise
 

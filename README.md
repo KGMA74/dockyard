@@ -94,7 +94,7 @@ helm upgrade --install dockyard oci://ghcr.io/kgma74/charts/dockyard \
   --set auth.password=changeme
 ```
 
-See `helm/dockyard/values.yaml` for the full set of options (storage backend, S3, ingress, proxy mode, etc.).
+See `helm/dockyard/values.yaml` for the full set of options (storage backend, S3, ingress, proxy mode, autoscaling, PodDisruptionBudget, cert-manager, etc.).
 
 ---
 
@@ -523,7 +523,7 @@ helm upgrade --install dockyard oci://ghcr.io/kgma74/charts/dockyard \
   --set auth.password=changeme
 ```
 
-Voir `helm/dockyard/values.yaml` pour l'ensemble des options (backend de stockage, S3, ingress, mode proxy, etc.).
+Voir `helm/dockyard/values.yaml` pour l'ensemble des options (backend de stockage, S3, ingress, mode proxy, autoscaling, PodDisruptionBudget, cert-manager, etc.).
 
 ---
 

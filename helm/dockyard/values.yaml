@@ -126,12 +126,60 @@ ingress:
   #   nginx.ingress.kubernetes.io/proxy-send-timeout: "600"
   className: ""
   annotations: {}
+  certManager:
+    # Cluster-issuer name (e.g. "letsencrypt-prod") — adds the
+    # cert-manager.io/cluster-issuer annotation automatically and requires
+    # cert-manager to already be installed in the cluster. Leave empty to
+    # manage the annotation/secret yourself (or use tls.mode=acme instead,
+    # which needs no ingress controller or cert-manager at all).
+    clusterIssuer: ""
   hosts:
     - host: registry.example.com
       paths:
         - path: /
           pathType: Prefix
+  # With certManager.clusterIssuer set, add a matching entry here so
+  # cert-manager knows which Secret to populate, e.g.:
+  #   - secretName: dockyard-tls
+  #     hosts: [registry.example.com]
   tls: []
+
+# Horizontal Pod Autoscaler. Requires the metrics-server (or another
+# custom-metrics provider) in the cluster. Gated on S3 storage: local
+# storage uses a ReadWriteOnce PVC that only one pod can mount, so scaling
+# beyond 1 replica would either fail to schedule or split traffic across
+# pods with inconsistent local state — this chart refuses to render the HPA
+# otherwise (see templates/hpa.yaml).
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 75
+  # Empty = no memory-based scaling target.
+  targetMemoryUtilizationPercentage: ""
+
+# PodDisruptionBudget — protects against voluntary disruptions (node drains,
+# cluster upgrades) evicting too many replicas at once. Only one of
+# minAvailable/maxUnavailable should be set; minAvailable takes precedence.
+podDisruptionBudget:
+  enabled: false
+  minAvailable: 1
+  maxUnavailable: ""
+
+# Liveness/readiness probe tuning. Defaults match what the chart has always
+# used; override for slower storage backends (S3) or resource-constrained
+# nodes where the defaults are too aggressive.
+probes:
+  liveness:
+    initialDelaySeconds: 5
+    periodSeconds: 10
+    timeoutSeconds: 5
+    failureThreshold: 3
+  readiness:
+    initialDelaySeconds: 3
+    periodSeconds: 5
+    timeoutSeconds: 5
+    failureThreshold: 3
 
 # Persistent volume for local storage backend.
 # Ignored when registry.storage.backend=s3.
