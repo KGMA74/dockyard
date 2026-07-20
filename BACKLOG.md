@@ -68,3 +68,10 @@
 - Credentials dev locaux dans `.env` (admin/changeme123).
 - Vérif e2e locale : builder `dockyard-test.exe`, `REGISTRY_STORAGE_PATH` vers un dossier temp, `PORT=18099`.
 - La machine n'a pas accès au cluster k8s de la registry — demander à l'utilisateur pour les vérifs Helm.
+- **Fix P6.1 (post-clôture, ce commit)** : le scan Trivy passe en mode **standalone par défaut**
+  (le binaire embarqué gère sa propre base de vulnérabilités, `SCAN_ENABLED=true` seul suffit) —
+  `TRIVY_SERVER_URL` reste optionnel pour un trivy server externe mutualisé/air-gapped. Corrige au
+  passage un bug latent : `--cache-dir` est maintenant toujours passé à trivy (l'image `scratch`
+  n'a pas de `HOME`, donc la résolution du cache par trivy était indéterminée même en mode
+  serveur). Voir `internal/scan/trivy.go` (`buildTrivyArgs`) et `internal/server/server.go`
+  (calcul de `trivyCacheDir` sous `<storage>/trivy-cache`).

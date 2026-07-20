@@ -72,12 +72,15 @@ type Config struct {
 	// the port private or disable).
 	MetricsEnabled bool
 
-	// Vulnerability scanning: Dockyard shells out to a `trivy` binary in
-	// --server mode against an operator-managed trivy server (the vuln DB
-	// lives there, not in Dockyard). Off unless both are set.
+	// Vulnerability scanning: Dockyard shells out to a `trivy` binary bundled
+	// in its own image. Standalone by default (trivy manages its own vuln DB,
+	// cached under TrivyCacheDir) — set TrivyServerURL to defer to a shared
+	// `trivy server` instead (mutualized DB, or air-gapped setups where
+	// Dockyard itself has no internet egress).
 	ScanEnabled        bool
 	TrivyServerURL     string
 	TrivyBinPath       string
+	TrivyCacheDir      string // empty = computed from StoragePath at startup
 	ScanTimeout        time.Duration
 	ScanMaxReportBytes int64
 	ScanDedupWindow    time.Duration
@@ -140,6 +143,7 @@ func Load() *Config {
 		ScanEnabled:           getEnv("SCAN_ENABLED", "false") == "true",
 		TrivyServerURL:        getEnv("TRIVY_SERVER_URL", ""),
 		TrivyBinPath:          getEnv("TRIVY_BIN_PATH", "/trivy"),
+		TrivyCacheDir:         getEnv("TRIVY_CACHE_DIR", ""),
 		ScanTimeout:           getEnvDuration("SCAN_TIMEOUT", 5*time.Minute),
 		ScanMaxReportBytes:    getEnvInt64("SCAN_MAX_REPORT_BYTES", 20<<20),
 		ScanDedupWindow:       getEnvDuration("SCAN_DEDUP_WINDOW", time.Hour),

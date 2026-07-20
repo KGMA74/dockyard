@@ -13,7 +13,7 @@ A lightweight, self-hosted Docker Registry V2 server written in Go. Ships as a *
 - **Two storage backends** — local filesystem or any S3-compatible object store
 - **Two modes** — embedded registry or proxy in front of an existing registry
 - **Garbage collection** — manual trigger via UI or API, automatic daily cron at midnight UTC
-- **Vulnerability scanning** — trigger a Trivy scan on any pushed image via the admin API (`SCAN_ENABLED` + `TRIVY_SERVER_URL`), results stored with severity counts and the full report
+- **Vulnerability scanning** — trigger a Trivy scan on any pushed image via the admin API (just `SCAN_ENABLED=true`, standalone by default), results stored with severity counts and the full report
 - **Signed-push enforcement** — reject tag pushes without a valid cosign signature (`REQUIRE_SIGNED_PUSH` + per-repo overrides), verified server-side against configured public keys
 - **Tag diff** — compare layers, size and config between any two tags of the same image, right from the UI
 - **JWT auth** on the admin API, optional Basic Auth on `/v2/*`
@@ -155,12 +155,22 @@ V2_AUTH_ENABLED=false
 
 # ── Vulnerability scanning (Trivy) ────────────────────────────────────────────
 # Off by default. Dockyard shells out to the `trivy` binary bundled in its own
-# image (--server mode) against an operator-managed `trivy server --listen`
-# instance, which hosts the vulnerability DB. Dockyard does not run Trivy
-# itself. Trigger a scan via POST /api/admin/scans {"name","reference"}.
+# image. SCAN_ENABLED=true is enough to turn it on — standalone mode is the
+# default: trivy manages its own vulnerability DB, downloaded and cached
+# under TRIVY_CACHE_DIR on first scan (needs outbound internet access; give
+# the first scan a generous SCAN_TIMEOUT while the DB downloads, subsequent
+# scans reuse the cache and are fast). Trigger a scan via
+# POST /api/admin/scans {"name","reference"}.
 # SCAN_ENABLED=true
+#
+# Advanced: point at a shared/external trivy server instead of standalone —
+# useful to mutualize the DB across multiple Dockyard instances, or when
+# Dockyard itself has no internet egress (the external server needs it, not
+# Dockyard).
 # TRIVY_SERVER_URL=http://trivy:4954
+#
 # TRIVY_BIN_PATH=/trivy                # path to the trivy binary in the image
+# TRIVY_CACHE_DIR=                     # empty = <storage>/trivy-cache
 # SCAN_TIMEOUT=5m                      # per-scan subprocess timeout
 # SCAN_MAX_REPORT_BYTES=20971520       # cap on the raw trivy JSON report (20 MiB)
 # SCAN_DEDUP_WINDOW=1h                 # reuse a recent successful scan for the same digest
@@ -430,7 +440,7 @@ Un serveur Docker Registry V2 léger, écrit en Go. Livré sous forme d'un **bin
 - **Deux backends de stockage** — filesystem local ou tout stockage objet compatible S3
 - **Deux modes** — registry embarquée ou proxy devant une registry existante
 - **Garbage collection** — déclenchement manuel via UI ou API, cron automatique quotidien à minuit UTC
-- **Scan de vulnérabilités** — déclencher un scan Trivy sur une image poussée via l'API admin (`SCAN_ENABLED` + `TRIVY_SERVER_URL`), résultats stockés avec comptes par sévérité et rapport complet
+- **Scan de vulnérabilités** — déclencher un scan Trivy sur une image poussée via l'API admin (`SCAN_ENABLED=true` suffit, standalone par défaut), résultats stockés avec comptes par sévérité et rapport complet
 - **Application des push signés** — rejette les push de tags sans signature cosign valide (`REQUIRE_SIGNED_PUSH` + overrides par repo), vérifiée côté serveur contre des clés publiques configurées
 - **Diff de tags** — comparer layers, taille et config entre deux tags d'une même image, directement depuis l'UI
 - **Auth JWT** sur l'API admin, Basic Auth optionnelle sur `/v2/*`
@@ -572,13 +582,23 @@ V2_AUTH_ENABLED=false
 
 # ── Scan de vulnérabilités (Trivy) ────────────────────────────────────────────
 # Désactivé par défaut. Dockyard appelle en subprocess le binaire `trivy`
-# embarqué dans sa propre image (mode --server) contre un `trivy server
-# --listen` géré par l'opérateur, qui héberge la base de vulnérabilités.
-# Dockyard ne fait pas tourner Trivy lui-même. Déclencher un scan via
+# embarqué dans sa propre image. SCAN_ENABLED=true suffit à l'activer — le
+# mode standalone est celui par défaut : trivy gère lui-même sa base de
+# vulnérabilités, téléchargée et mise en cache sous TRIVY_CACHE_DIR au
+# premier scan (nécessite un accès internet sortant ; prévoir un
+# SCAN_TIMEOUT généreux pour le premier scan le temps du téléchargement, les
+# suivants réutilisent le cache et sont rapides). Déclencher un scan via
 # POST /api/admin/scans {"name","reference"}.
 # SCAN_ENABLED=true
+#
+# Avancé : pointer vers un trivy server externe/mutualisé au lieu du mode
+# standalone — utile pour partager la base entre plusieurs instances
+# Dockyard, ou quand Dockyard lui-même n'a pas d'accès internet sortant (le
+# serveur externe en a besoin, pas Dockyard).
 # TRIVY_SERVER_URL=http://trivy:4954
+#
 # TRIVY_BIN_PATH=/trivy                # chemin du binaire trivy dans l'image
+# TRIVY_CACHE_DIR=                     # vide = <storage>/trivy-cache
 # SCAN_TIMEOUT=5m                      # timeout du subprocess par scan
 # SCAN_MAX_REPORT_BYTES=20971520       # cap sur le rapport JSON brut (20 Mio)
 # SCAN_DEDUP_WINDOW=1h                 # réutilise un scan récent réussi pour le même digest

@@ -1,8 +1,12 @@
 // Package scan runs vulnerability scans against images already in Dockyard by
-// shelling out to the `trivy` CLI in `--server` mode: an operator-managed
-// `trivy server --listen` process hosts the vulnerability DB, and Dockyard's
-// own registry endpoint is what trivy pulls the image from. This keeps the Go
-// binary free of any trivy dependency (no CGO, stays scratch-buildable).
+// shelling out to the `trivy` CLI bundled in Dockyard's own image. Standalone
+// mode (default) has trivy manage its own vulnerability DB, cached under
+// TrivyCacheDir; an operator can instead point TrivyServerURL at a shared
+// `trivy server --listen` process (mutualized DB across instances, or an
+// air-gapped setup where Dockyard itself has no internet egress). Either way
+// Dockyard's own registry endpoint is what trivy pulls the image from. This
+// keeps the Go binary free of any trivy dependency (no CGO, stays
+// scratch-buildable).
 package scan
 
 import (
@@ -79,20 +83,35 @@ func (c *cappedBuffer) Write(p []byte) (int, error) {
 	return c.buf.Write(p)
 }
 
-// runTrivy shells out to `trivy image --server ...` and returns the raw JSON
-// report. user/pass authenticate trivy's own registry pull against Dockyard.
-func runTrivy(ctx context.Context, bin, server, imageRef, user, pass string, insecure bool, maxBytes int64) ([]byte, error) {
+// buildTrivyArgs constructs the `trivy image` argument list. server is
+// optional — empty means standalone mode (trivy manages its own DB under
+// cacheDir); non-empty adds --server so trivy defers to an external
+// `trivy server`. --cache-dir is always set: the final image runs FROM
+// scratch with no HOME, so trivy's default cache-dir resolution is
+// unreliable even in server mode (it still pulls and unpacks image layers
+// locally to scan them, regardless of where the vulnerability DB lives).
+func buildTrivyArgs(server, cacheDir, imageRef string, insecure bool) []string {
 	args := []string{
 		"image",
-		"--server", server,
+		"--cache-dir", cacheDir,
 		"--format", "json",
 		"--scanners", "vuln",
 		"--quiet",
 	}
+	if server != "" {
+		args = append(args, "--server", server)
+	}
 	if insecure {
 		args = append(args, "--insecure")
 	}
-	args = append(args, imageRef)
+	return append(args, imageRef)
+}
+
+// runTrivy shells out to `trivy image` (standalone or --server, depending on
+// whether server is set) and returns the raw JSON report. user/pass
+// authenticate trivy's own registry pull against Dockyard.
+func runTrivy(ctx context.Context, bin, server, cacheDir, imageRef, user, pass string, insecure bool, maxBytes int64) ([]byte, error) {
+	args := buildTrivyArgs(server, cacheDir, imageRef, insecure)
 	cmd := exec.CommandContext(ctx, bin, args...) //nolint:gosec // bin/server/imageRef are operator/config-controlled, not end-user input
 	if user != "" {
 		cmd.Env = append(cmd.Environ(), "DOCKER_USERNAME="+user, "DOCKER_PASSWORD="+pass)

@@ -17,7 +17,8 @@ import (
 // Config holds the operator-provided settings the dispatcher needs.
 type Config struct {
 	TrivyBin       string        // path to the trivy binary, e.g. "/trivy"
-	TrivyServerURL string        // TRIVY_SERVER_URL — the trivy server hosting the vuln DB
+	TrivyServerURL string        // TRIVY_SERVER_URL — optional; empty = standalone mode (trivy manages its own DB)
+	TrivyCacheDir  string        // persistent dir for trivy's vulnerability DB / image cache
 	RegistryURL    string        // how trivy reaches Dockyard's own /v2 endpoint
 	RegistryUser   string        // credentials trivy uses to pull from Dockyard
 	RegistryPass   string
@@ -157,7 +158,7 @@ func (d *Dispatcher) execute(sc *store.ScanResult) error {
 	defer cancel()
 
 	imageRef := fmt.Sprintf("%s/%s@%s", d.cfg.RegistryURL, sc.Name, sc.Digest)
-	report, err := runTrivy(ctx, d.cfg.TrivyBin, d.cfg.TrivyServerURL, imageRef, d.cfg.RegistryUser, d.cfg.RegistryPass, d.cfg.Insecure, d.cfg.MaxReportBytes)
+	report, err := runTrivy(ctx, d.cfg.TrivyBin, d.cfg.TrivyServerURL, d.cfg.TrivyCacheDir, imageRef, d.cfg.RegistryUser, d.cfg.RegistryPass, d.cfg.Insecure, d.cfg.MaxReportBytes)
 	if err != nil {
 		return err
 	}

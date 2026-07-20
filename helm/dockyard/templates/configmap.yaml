@@ -27,6 +27,9 @@ data:
   {{- end }}
   SCAN_ENABLED: {{ (.Values.scan).enabled | default false | toString | quote }}
   TRIVY_SERVER_URL: {{ (.Values.scan).trivyServerURL | default "" | quote }}
+  {{- if (.Values.scan).cacheDir }}
+  TRIVY_CACHE_DIR: {{ .Values.scan.cacheDir | quote }}
+  {{- end }}
   SCAN_TIMEOUT: {{ (.Values.scan).timeout | default "5m" | quote }}
   SCAN_MAX_REPORT_BYTES: {{ (.Values.scan).maxReportBytes | default 20971520 | quote }}
   SCAN_DEDUP_WINDOW: {{ (.Values.scan).dedupWindow | default "1h" | quote }}

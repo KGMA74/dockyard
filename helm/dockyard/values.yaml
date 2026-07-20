@@ -76,12 +76,20 @@ signing:
   publicKeysSecret: ""
 
 scan:
-  # Vulnerability scanning: Dockyard shells out to a `trivy` binary (bundled
-  # in the image) in --server mode against an operator-managed trivy server.
-  # Dockyard does not run or manage Trivy itself — point this at an existing
-  # `trivy server --listen` deployment.
+  # Vulnerability scanning: Dockyard shells out to a `trivy` binary bundled in
+  # its own image. Standalone by default (empty trivyServerURL) — trivy
+  # manages its own vulnerability DB, downloaded and cached under cacheDir on
+  # first scan (needs outbound internet access from the Dockyard pod). Set
+  # trivyServerURL to defer to a shared/external `trivy server --listen`
+  # deployment instead (mutualized DB across instances, or air-gapped setups
+  # where Dockyard itself has no internet egress) — Dockyard never runs or
+  # manages Trivy itself in that case.
   enabled: false
   trivyServerURL: ""
+  # Empty = computed automatically under the storage volume
+  # (<registry.storage.path>/trivy-cache). Override only if you need the
+  # cache on a different persistent path.
+  cacheDir: ""
   timeout: "5m"
   maxReportBytes: 20971520
   dedupWindow: "1h"

@@ -50,6 +50,7 @@ type Server struct {
 	scanEnabled           bool
 	trivyServerURL        string
 	trivyBinPath          string
+	trivyCacheDir         string
 	scanTimeout           time.Duration
 	scanMaxReportBytes    int64
 	scanDedupWindow       time.Duration
@@ -84,10 +85,20 @@ func NewServer() *http.Server {
 		scanEnabled:           cfg.ScanEnabled,
 		trivyServerURL:        cfg.TrivyServerURL,
 		trivyBinPath:          cfg.TrivyBinPath,
+		trivyCacheDir:         cfg.TrivyCacheDir,
 		scanTimeout:           cfg.ScanTimeout,
 		scanMaxReportBytes:    cfg.ScanMaxReportBytes,
 		scanDedupWindow:       cfg.ScanDedupWindow,
 		trivyInsecureRegistry: cfg.TrivyInsecureRegistry,
+	}
+	if srv.trivyCacheDir == "" {
+		srv.trivyCacheDir = filepath.Join(cfg.StoragePath, "trivy-cache")
+	}
+	if srv.scanEnabled {
+		if err := os.MkdirAll(srv.trivyCacheDir, 0700); err != nil {
+			slog.Error("scan: failed to create trivy cache dir", "dir", srv.trivyCacheDir, "err", err)
+			os.Exit(1)
+		}
 	}
 
 	switch m {

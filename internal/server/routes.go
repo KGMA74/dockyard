@@ -259,10 +259,12 @@ func (s *Server) RegisterRoutes() http.Handler {
 	api.DELETE("/webhooks/:id", wh.Delete, auth.RequireAdmin)
 	api.POST("/webhooks/:id/test", wh.Test, auth.RequireAdmin)
 
-	// Vulnerability scanning — shells out to `trivy` in --server mode against
-	// an operator-managed trivy server. Off unless SCAN_ENABLED and
-	// TRIVY_SERVER_URL are both set.
-	if s.scanEnabled && s.trivyServerURL != "" {
+	// Vulnerability scanning — shells out to the `trivy` binary bundled in
+	// Dockyard's own image. Standalone by default (TRIVY_SERVER_URL unset:
+	// trivy manages its own vuln DB under the cache dir); set
+	// TRIVY_SERVER_URL to defer to a shared/external trivy server instead.
+	// Off unless SCAN_ENABLED is set.
+	if s.scanEnabled {
 		var resolver interface {
 			GetManifest(name, reference string) ([]byte, string, error)
 		}
@@ -274,6 +276,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 		sd := scan.NewDispatcher(s.store, scan.Config{
 			TrivyBin:       s.trivyBinPath,
 			TrivyServerURL: s.trivyServerURL,
+			TrivyCacheDir:  s.trivyCacheDir,
 			RegistryURL:    fmt.Sprintf("localhost:%d", s.port),
 			RegistryUser:   s.authUsername,
 			RegistryPass:   s.authPassword,

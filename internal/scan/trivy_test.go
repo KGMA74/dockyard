@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -38,6 +39,42 @@ func runHelperProcess() {
 		os.Exit(1)
 	case "hang":
 		time.Sleep(5 * time.Second)
+	}
+}
+
+func TestBuildTrivyArgsStandalone(t *testing.T) {
+	args := buildTrivyArgs("", "/cache", "registry.local/team/app@sha256:abc", false)
+	joined := strings.Join(args, " ")
+	if strings.Contains(joined, "--server") {
+		t.Fatalf("standalone args should not include --server: %v", args)
+	}
+	if !strings.Contains(joined, "--cache-dir /cache") {
+		t.Fatalf("expected --cache-dir /cache in args: %v", args)
+	}
+	if args[len(args)-1] != "registry.local/team/app@sha256:abc" {
+		t.Fatalf("image ref should be the last arg: %v", args)
+	}
+}
+
+func TestBuildTrivyArgsServerMode(t *testing.T) {
+	args := buildTrivyArgs("http://trivy:4954", "/cache", "registry.local/team/app@sha256:abc", false)
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "--server http://trivy:4954") {
+		t.Fatalf("expected --server http://trivy:4954 in args: %v", args)
+	}
+	if !strings.Contains(joined, "--cache-dir /cache") {
+		t.Fatalf("expected --cache-dir /cache in args: %v", args)
+	}
+}
+
+func TestBuildTrivyArgsInsecure(t *testing.T) {
+	args := buildTrivyArgs("http://trivy:4954", "/cache", "img", true)
+	if !slices.Contains(args, "--insecure") {
+		t.Fatalf("expected --insecure in args: %v", args)
+	}
+	args = buildTrivyArgs("", "/cache", "img", false)
+	if slices.Contains(args, "--insecure") {
+		t.Fatalf("did not expect --insecure in args: %v", args)
 	}
 }
 

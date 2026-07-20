@@ -90,6 +90,30 @@ func TestDispatcherRunsQueuedScanToSuccess(t *testing.T) {
 	}
 }
 
+// TestDispatcherStandaloneMode confirms scanning works with TrivyServerURL
+// unset (standalone: trivy manages its own vuln DB under TrivyCacheDir).
+// The fake trivy binary ignores CLI args either way, so this mainly proves
+// nothing in the dispatcher/store path assumes a server URL is set.
+func TestDispatcherStandaloneMode(t *testing.T) {
+	st := openTestStore(t)
+	t.Setenv("HELPER_MODE", "report")
+	t.Setenv("HELPER_REPORT", `{"Results":[{"Vulnerabilities":[{"Severity":"LOW"}]}]}`)
+
+	d := newTestDispatcher(t, st, func(c *Config) {
+		c.TrivyServerURL = ""
+		c.TrivyCacheDir = t.TempDir()
+	})
+
+	res, err := d.Enqueue("library/nginx", "latest", "sha256:standalone", "admin")
+	if err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+	got := waitForStatus(t, st, res.Scan.ID, "succeeded")
+	if got.LowCount != 1 {
+		t.Fatalf("unexpected severity counts: %+v", got)
+	}
+}
+
 func TestDispatcherMarksFailureOnTrivyError(t *testing.T) {
 	st := openTestStore(t)
 	t.Setenv("HELPER_MODE", "fail")
