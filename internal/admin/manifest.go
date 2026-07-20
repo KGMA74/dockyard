@@ -1,6 +1,9 @@
 package admin
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"sort"
+)
 
 const (
 	mediaTypeManifestList = "application/vnd.docker.distribution.manifest.list.v2+json"
@@ -169,4 +172,58 @@ func parseManifestList(
 		"config_digest":    "",
 		"platforms":        platforms,
 	}, nil
+}
+
+// diffManifests compares two parsed manifest details (as returned by
+// parseManifestDetails) and reports which layer digests each side has
+// exclusively, which they share, and the total size delta (b - a).
+// Comparing layer sets rather than the manifest JSON directly means a
+// rebuild that reuses the same base layers reports "unchanged", not "every
+// byte different".
+func diffManifests(a, b map[string]any) map[string]any {
+	layerDigests := func(m map[string]any) map[string]bool {
+		set := map[string]bool{}
+		layers, _ := m["layers"].([]layerDetail)
+		for _, l := range layers {
+			set[l.Digest] = true
+		}
+		return set
+	}
+	setA, setB := layerDigests(a), layerDigests(b)
+
+	var onlyA, onlyB, common []string
+	for d := range setA {
+		if setB[d] {
+			common = append(common, d)
+		} else {
+			onlyA = append(onlyA, d)
+		}
+	}
+	for d := range setB {
+		if !setA[d] {
+			onlyB = append(onlyB, d)
+		}
+	}
+	sort.Strings(onlyA)
+	sort.Strings(onlyB)
+	sort.Strings(common)
+
+	totalA, _ := a["total_size_bytes"].(int64)
+	totalB, _ := b["total_size_bytes"].(int64)
+
+	return map[string]any{
+		"a":                a,
+		"b":                b,
+		"layers_only_a":    emptyIfNil(onlyA),
+		"layers_only_b":    emptyIfNil(onlyB),
+		"layers_common":    emptyIfNil(common),
+		"size_delta_bytes": totalB - totalA,
+	}
+}
+
+func emptyIfNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

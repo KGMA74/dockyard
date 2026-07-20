@@ -15,6 +15,7 @@ A lightweight, self-hosted Docker Registry V2 server written in Go. Ships as a *
 - **Garbage collection** — manual trigger via UI or API, automatic daily cron at midnight UTC
 - **Vulnerability scanning** — trigger a Trivy scan on any pushed image via the admin API (`SCAN_ENABLED` + `TRIVY_SERVER_URL`), results stored with severity counts and the full report
 - **Signed-push enforcement** — reject tag pushes without a valid cosign signature (`REQUIRE_SIGNED_PUSH` + per-repo overrides), verified server-side against configured public keys
+- **Tag diff** — compare layers, size and config between any two tags of the same image, right from the UI
 - **JWT auth** on the admin API, optional Basic Auth on `/v2/*`
 - **Structured JSON logging** via `log/slog`
 - **Single Docker image** — multi-stage build, final image from `scratch`
@@ -431,6 +432,7 @@ Un serveur Docker Registry V2 léger, écrit en Go. Livré sous forme d'un **bin
 - **Garbage collection** — déclenchement manuel via UI ou API, cron automatique quotidien à minuit UTC
 - **Scan de vulnérabilités** — déclencher un scan Trivy sur une image poussée via l'API admin (`SCAN_ENABLED` + `TRIVY_SERVER_URL`), résultats stockés avec comptes par sévérité et rapport complet
 - **Application des push signés** — rejette les push de tags sans signature cosign valide (`REQUIRE_SIGNED_PUSH` + overrides par repo), vérifiée côté serveur contre des clés publiques configurées
+- **Diff de tags** — comparer layers, taille et config entre deux tags d'une même image, directement depuis l'UI
 - **Auth JWT** sur l'API admin, Basic Auth optionnelle sur `/v2/*`
 - **Logs structurés JSON** via `log/slog`
 - **Image Docker unique** — build multi-stage, image finale depuis `scratch`

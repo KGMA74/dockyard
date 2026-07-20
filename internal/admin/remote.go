@@ -77,9 +77,20 @@ func (h *RemoteHandler) GetManifestDetails(c echo.Context) error {
 	if name == "" || reference == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "params 'name' and 'reference' required"})
 	}
-	raw, digest, err := h.client.RawManifest(name, reference)
+	result, err := h.manifestDetails(name, reference)
 	if err != nil {
 		return c.JSON(http.StatusBadGateway, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, result)
+}
+
+// manifestDetails resolves reference and parses its manifest, tagging the
+// result with signed status when cosign keys are configured. Shared by
+// GetManifestDetails and GetTagDiff.
+func (h *RemoteHandler) manifestDetails(name, reference string) (map[string]any, error) {
+	raw, digest, err := h.client.RawManifest(name, reference)
+	if err != nil {
+		return nil, err
 	}
 	result, err := parseManifestDetails(raw, digest, func(blobDigest string) ([]byte, error) {
 		return h.client.Blob(name, blobDigest)
@@ -88,12 +99,31 @@ func (h *RemoteHandler) GetManifestDetails(c echo.Context) error {
 		return childRaw, err
 	})
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+		return nil, err
 	}
 	if h.signing.HasKeys() {
 		result["signed"] = h.signing.Signed(cosign.ClientFetcher{Client: h.client}, name, digest)
 	}
-	return c.JSON(http.StatusOK, result)
+	return result, nil
+}
+
+// GET /api/admin/repositories/diff?name=<image>&reference_a=<tag-or-digest>&reference_b=<tag-or-digest>
+func (h *RemoteHandler) GetTagDiff(c echo.Context) error {
+	name := c.QueryParam("name")
+	refA := c.QueryParam("reference_a")
+	refB := c.QueryParam("reference_b")
+	if name == "" || refA == "" || refB == "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "params 'name', 'reference_a' and 'reference_b' required"})
+	}
+	a, err := h.manifestDetails(name, refA)
+	if err != nil {
+		return c.JSON(http.StatusBadGateway, map[string]string{"error": "reference_a: " + err.Error()})
+	}
+	b, err := h.manifestDetails(name, refB)
+	if err != nil {
+		return c.JSON(http.StatusBadGateway, map[string]string{"error": "reference_b: " + err.Error()})
+	}
+	return c.JSON(http.StatusOK, diffManifests(a, b))
 }
 
 // GET /api/admin/repositories/layer?name=<image>&digest=sha256:<layer-digest>

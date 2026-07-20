@@ -558,6 +558,50 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/repositories/diff": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Compare layers/config between two tags or digests of the same image */
+        get: {
+            parameters: {
+                query: {
+                    name: string;
+                    /** @description Tag or digest */
+                    reference_a: string;
+                    /** @description Tag or digest */
+                    reference_b: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Diff */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["TagDiff"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/repositories/layer": {
         parameters: {
             query?: never;
@@ -1847,6 +1891,15 @@ export interface components {
                 size_bytes?: number;
                 size_human?: string;
             }[];
+        };
+        TagDiff: {
+            a?: components["schemas"]["ManifestDetails"];
+            b?: components["schemas"]["ManifestDetails"];
+            layers_only_a?: string[];
+            layers_only_b?: string[];
+            layers_common?: string[];
+            /** @description b's total size minus a's. */
+            size_delta_bytes?: number;
         };
         RetentionPolicyInput: {
             /** @default * */

@@ -205,6 +205,19 @@ export async function getManifestDetails(name: string, reference: string): Promi
   return req(`/repositories/manifest?name=${encodeURIComponent(name)}&reference=${encodeURIComponent(reference)}`)
 }
 
+export interface TagDiff {
+  a: ManifestDetails
+  b: ManifestDetails
+  layers_only_a: string[]
+  layers_only_b: string[]
+  layers_common: string[]
+  size_delta_bytes: number
+}
+
+export async function getTagDiff(name: string, referenceA: string, referenceB: string): Promise<TagDiff> {
+  return req(`/repositories/diff?name=${encodeURIComponent(name)}&reference_a=${encodeURIComponent(referenceA)}&reference_b=${encodeURIComponent(referenceB)}`)
+}
+
 export interface LayerEntry {
   path: string
   type: 'file' | 'dir' | 'symlink' | 'hardlink' | 'other'

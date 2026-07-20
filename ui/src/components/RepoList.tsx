@@ -1,9 +1,10 @@
 import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
-import { Box, ChevronDown, Copy, Check, Info, Trash2 } from 'lucide-react'
+import { Box, ChevronDown, Copy, Check, GitCompare, Info, Trash2 } from 'lucide-react'
 import { getTags, deleteManifest, deleteRepository, TagInfo, RepoSummary } from '../api'
 import DeleteModal from './DeleteModal'
 import ImageDetailsPanel from './ImageDetailsPanel'
+import TagDiff from './TagDiff'
 import { relativeTime } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -71,6 +72,18 @@ function RepoCard({
   const [loadingTags, setLoadingTags] = useState(false)
   const [toDelete, setToDelete] = useState<TagInfo | null>(null)
   const [deleteRepo, setDeleteRepo] = useState(false)
+  const [selected, setSelected] = useState<TagInfo[]>([])
+  const [diffing, setDiffing] = useState(false)
+
+  function toggleSelect(tag: TagInfo) {
+    setSelected(cur => {
+      if (cur.some(t => t.digest === tag.digest && t.tag === tag.tag)) {
+        return cur.filter(t => !(t.digest === tag.digest && t.tag === tag.tag))
+      }
+      if (cur.length >= 2) return [cur[1], tag] // keep the two most recently picked
+      return [...cur, tag]
+    })
+  }
 
   async function handleExpand() {
     if (!open && tags.length === 0) {
@@ -142,32 +155,66 @@ function RepoCard({
             ) : tags.length === 0 ? (
               <p className="px-4 py-3 text-sm text-muted-foreground">No tags found</p>
             ) : (
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead className="px-4 text-xs">Tag</TableHead>
-                    <TableHead className="px-4 text-xs hidden sm:table-cell">Digest</TableHead>
-                    <TableHead className="px-4 text-xs hidden md:table-cell">Pull</TableHead>
-                    <TableHead className="px-4 text-xs hidden lg:table-cell">Pushed</TableHead>
-                    <TableHead className="px-4 w-16" />
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {tags.map(tag => (
-                    <TagRow
-                      key={tag.digest}
-                      imageName={repo.name}
-                      tag={tag}
-                      onDelete={() => setToDelete(tag)}
-                      onShowDetails={() => onShowDetails(tag)}
-                    />
-                  ))}
-                </TableBody>
-              </Table>
+              <>
+                {selected.length > 0 && (
+                  <div className="flex items-center justify-between gap-3 px-4 py-2 bg-muted/50 border-b text-xs">
+                    <span className="text-muted-foreground">
+                      {selected.length === 1
+                        ? `${selected[0].tag} selected — pick one more tag to compare`
+                        : `Comparing ${selected[0].tag} and ${selected[1].tag}`}
+                    </span>
+                    <div className="flex items-center gap-2 shrink-0">
+                      {selected.length === 2 && (
+                        <Button variant="outline" size="sm" onClick={() => setDiffing(true)}>
+                          <GitCompare />
+                          Compare
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="sm" onClick={() => setSelected([])}>
+                        Clear
+                      </Button>
+                    </div>
+                  </div>
+                )}
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead className="px-4 w-10" />
+                      <TableHead className="px-4 text-xs">Tag</TableHead>
+                      <TableHead className="px-4 text-xs hidden sm:table-cell">Digest</TableHead>
+                      <TableHead className="px-4 text-xs hidden md:table-cell">Pull</TableHead>
+                      <TableHead className="px-4 text-xs hidden lg:table-cell">Pushed</TableHead>
+                      <TableHead className="px-4 w-16" />
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {tags.map(tag => (
+                      <TagRow
+                        key={tag.digest}
+                        imageName={repo.name}
+                        tag={tag}
+                        selected={selected.some(t => t.digest === tag.digest && t.tag === tag.tag)}
+                        onToggleSelect={() => toggleSelect(tag)}
+                        onDelete={() => setToDelete(tag)}
+                        onShowDetails={() => onShowDetails(tag)}
+                      />
+                    ))}
+                  </TableBody>
+                </Table>
+              </>
             )}
           </div>
         )}
       </div>
+
+      {diffing && selected.length === 2 && (
+        <TagDiff
+          imageName={repo.name}
+          tagA={selected[0].tag}
+          tagB={selected[1].tag}
+          onClose={() => setDiffing(false)}
+        />
+      )}
 
       {toDelete && (
         <DeleteModal
@@ -212,11 +259,15 @@ function RepoCard({
 function TagRow({
   imageName,
   tag,
+  selected,
+  onToggleSelect,
   onDelete,
   onShowDetails,
 }: {
   imageName: string
   tag: TagInfo
+  selected: boolean
+  onToggleSelect: () => void
   onDelete: () => void
   onShowDetails: () => void
 }) {
@@ -240,6 +291,15 @@ function TagRow({
 
   return (
     <TableRow className="group/row">
+      <TableCell className="px-4 py-3">
+        <input
+          type="checkbox"
+          checked={selected}
+          onChange={onToggleSelect}
+          title="Select for diff"
+          className="size-3.5 cursor-pointer align-middle"
+        />
+      </TableCell>
       <TableCell className="px-4 py-3">
         <TagBadge>{tag.tag}</TagBadge>
       </TableCell>

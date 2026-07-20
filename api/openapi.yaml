@@ -297,6 +297,23 @@ paths:
               schema: { $ref: "#/components/schemas/ManifestDetails" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/admin/repositories/diff:
+    get:
+      tags: [repositories]
+      summary: Compare layers/config between two tags or digests of the same image
+      parameters:
+        - { name: name, in: query, required: true, schema: { type: string } }
+        - { name: reference_a, in: query, required: true, schema: { type: string }, description: Tag or digest }
+        - { name: reference_b, in: query, required: true, schema: { type: string }, description: Tag or digest }
+      responses:
+        "200":
+          description: Diff
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/TagDiff" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
   /api/admin/repositories/layer:
     get:
       tags: [repositories]
@@ -983,6 +1000,24 @@ components:
               digest: { type: string }
               size_bytes: { type: integer }
               size_human: { type: string }
+
+    TagDiff:
+      type: object
+      properties:
+        a: { $ref: "#/components/schemas/ManifestDetails" }
+        b: { $ref: "#/components/schemas/ManifestDetails" }
+        layers_only_a:
+          type: array
+          items: { type: string }
+        layers_only_b:
+          type: array
+          items: { type: string }
+        layers_common:
+          type: array
+          items: { type: string }
+        size_delta_bytes:
+          type: integer
+          description: b's total size minus a's.
 
     RetentionPolicyInput:
       type: object
