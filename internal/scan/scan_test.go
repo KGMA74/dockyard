@@ -177,3 +177,39 @@ func TestDispatcherDedupIgnoresDisabledWindow(t *testing.T) {
 	}
 	waitForStatus(t, st, second.Scan.ID, "succeeded")
 }
+
+// TestDispatcherDedupAcrossRepos verifies the scan cache is keyed by digest
+// alone, not by (name, digest) — the same content pushed under two
+// different tags/repos (e.g. a shared base image) reuses one scan.
+func TestDispatcherDedupAcrossRepos(t *testing.T) {
+	st := openTestStore(t)
+	t.Setenv("HELPER_MODE", "report")
+	t.Setenv("HELPER_REPORT", `{"Results":[{"Vulnerabilities":[{"Severity":"MEDIUM"}]}]}`)
+
+	d := newTestDispatcher(t, st, nil)
+
+	first, err := d.Enqueue("library/nginx", "latest", "sha256:shared", "admin")
+	if err != nil {
+		t.Fatalf("Enqueue: %v", err)
+	}
+	waitForStatus(t, st, first.Scan.ID, "succeeded")
+
+	second, err := d.Enqueue("mirror/nginx-copy", "v1", "sha256:shared", "someone-else")
+	if err != nil {
+		t.Fatalf("Enqueue (different repo, same digest): %v", err)
+	}
+	if !second.Cached {
+		t.Fatal("expected the second repo to reuse the cached scan for the shared digest")
+	}
+	if second.Scan.ID != first.Scan.ID {
+		t.Fatalf("cached scan id = %d, want %d", second.Scan.ID, first.Scan.ID)
+	}
+
+	all, total, err := st.ListScans("", "sha256:shared", 0, 0)
+	if err != nil {
+		t.Fatalf("ListScans: %v", err)
+	}
+	if total != 1 || len(all) != 1 {
+		t.Fatalf("expected exactly one scan row shared across repos, got total=%d len=%d", total, len(all))
+	}
+}

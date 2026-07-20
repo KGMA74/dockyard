@@ -14,7 +14,19 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+
+	"dockyard/internal/store"
 )
+
+func openTestStore(t *testing.T) *store.Store {
+	t.Helper()
+	s, err := store.Open(filepath.Join(t.TempDir(), "dockyard.db"))
+	if err != nil {
+		t.Fatalf("store.Open: %v", err)
+	}
+	t.Cleanup(func() { _ = s.Close() })
+	return s
+}
 
 // fakeFetcher is an in-memory Fetcher for tests — keyed by "name/reference".
 type fakeFetcher struct {
@@ -229,6 +241,84 @@ func TestPolicyNilIsPermissive(t *testing.T) {
 	}
 	if err := p.Enforce(newFakeFetcher(), "team/app", "sha256:abc"); err != nil {
 		t.Fatalf("nil Policy Enforce = %v, want nil", err)
+	}
+}
+
+// TestPolicyRequiredPerRepoOverrideMatrix covers the accept/reject matrix
+// for every combination of global default and a per-repo override: the
+// first matching override always wins over the global default.
+func TestPolicyRequiredPerRepoOverrideMatrix(t *testing.T) {
+	cases := []struct {
+		name            string
+		globalDefault   bool
+		overridePattern string
+		overrideValue   bool
+		repo            string
+		want            bool
+	}{
+		{"no override, default off", false, "", false, "team/app", false},
+		{"no override, default on", true, "", false, "team/app", true},
+		{"override forces on despite default off", false, "team/*", true, "team/app", true},
+		{"override forces off despite default on", true, "team/*", false, "team/app", false},
+		{"override doesn't match other repos", true, "team/*", false, "other/app", true},
+		{"wildcard override applies to everything", false, "*", true, "anything/goes", true},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			st := openTestStore(t)
+			if c.overridePattern != "" {
+				if _, err := st.CreateSigningPolicy(c.overridePattern, c.overrideValue); err != nil {
+					t.Fatal(err)
+				}
+			}
+			p := NewPolicy(c.globalDefault, nil, st)
+			if got := p.Required(c.repo); got != c.want {
+				t.Errorf("Required(%q) = %v, want %v", c.repo, got, c.want)
+			}
+		})
+	}
+}
+
+// TestPolicyRequiredFirstMatchWins verifies overrides are evaluated in
+// creation order and the first pattern matching the repo wins, even if a
+// later, more specific pattern also matches.
+func TestPolicyRequiredFirstMatchWins(t *testing.T) {
+	st := openTestStore(t)
+	if _, err := st.CreateSigningPolicy("team/*", true); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := st.CreateSigningPolicy("team/app", false); err != nil {
+		t.Fatal(err)
+	}
+	p := NewPolicy(false, nil, st)
+	if !p.Required("team/app") {
+		t.Fatal("expected the first-created override (team/*, required) to win over the later, more specific one")
+	}
+}
+
+// TestPolicyEnforceMultipleKeysAnyMatch verifies a signature is accepted if
+// it verifies against ANY configured key, not just the first one.
+func TestPolicyEnforceMultipleKeysAnyMatch(t *testing.T) {
+	dir := t.TempDir()
+	unrelated := genKey(t)
+	signer := genKey(t)
+	writePublicKeyPEM(t, dir, "key1.pem", &unrelated.PublicKey)
+	writePublicKeyPEM(t, dir, "key2.pem", &signer.PublicKey)
+	keys, err := LoadPublicKeys(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(keys) != 2 {
+		t.Fatalf("got %d keys, want 2", len(keys))
+	}
+
+	f := newFakeFetcher()
+	digest := "sha256:" + fmt.Sprintf("%064x", 7)
+	signedFixture(t, f, signer, "team/app", digest)
+
+	p := NewPolicy(true, keys, nil)
+	if err := p.Enforce(f, "team/app", digest); err != nil {
+		t.Fatalf("Enforce = %v, want nil (signature matches the second configured key)", err)
 	}
 }
 
