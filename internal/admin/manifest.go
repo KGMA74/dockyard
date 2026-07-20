@@ -2,12 +2,19 @@ package admin
 
 import (
 	"encoding/json"
+	"errors"
 	"sort"
 )
 
 const (
 	mediaTypeManifestList = "application/vnd.docker.distribution.manifest.list.v2+json"
 	mediaTypeOCIIndex     = "application/vnd.oci.image.index.v1+json"
+
+	// maxManifestListDepth bounds nested manifest-list resolution (index of
+	// indices). Real images never nest this deep — this exists to turn a
+	// crafted or cyclic reference chain (list A → list B → list A) into an
+	// error instead of unbounded recursion.
+	maxManifestListDepth = 8
 )
 
 type layerDetail struct {
@@ -53,6 +60,17 @@ func parseManifestDetails(
 	getBlob func(digest string) ([]byte, error),
 	getManifest func(digest string) ([]byte, error),
 ) (map[string]any, error) {
+	return parseManifestDetailsRec(raw, digest, getBlob, getManifest, map[string]bool{}, 0)
+}
+
+func parseManifestDetailsRec(
+	raw []byte,
+	digest string,
+	getBlob func(digest string) ([]byte, error),
+	getManifest func(digest string) ([]byte, error),
+	seen map[string]bool,
+	depth int,
+) (map[string]any, error) {
 	var probe struct {
 		MediaType string              `json:"mediaType"`
 		Manifests []manifestListEntry `json:"manifests"`
@@ -62,7 +80,14 @@ func parseManifestDetails(
 	}
 
 	if probe.MediaType == mediaTypeManifestList || probe.MediaType == mediaTypeOCIIndex || len(probe.Manifests) > 0 {
-		return parseManifestList(probe.MediaType, digest, probe.Manifests, getBlob, getManifest)
+		if depth >= maxManifestListDepth {
+			return nil, errors.New("manifest list nesting too deep")
+		}
+		if seen[digest] {
+			return nil, errors.New("manifest list reference cycle detected")
+		}
+		seen[digest] = true
+		return parseManifestList(probe.MediaType, digest, probe.Manifests, getBlob, getManifest, seen, depth+1)
 	}
 	return parseSingleManifest(raw, digest, getBlob)
 }
@@ -126,6 +151,8 @@ func parseManifestList(
 	entries []manifestListEntry,
 	getBlob func(string) ([]byte, error),
 	getManifest func(string) ([]byte, error),
+	seen map[string]bool,
+	depth int,
 ) (map[string]any, error) {
 	seenLayers := make(map[string]bool)
 	mergedLayers := make([]layerDetail, 0)
@@ -137,7 +164,15 @@ func parseManifestList(
 		if err != nil {
 			continue
 		}
-		child, err := parseManifestDetails(childRaw, entry.Digest, getBlob, getManifest)
+		// Each sibling gets its own copy of the ancestor-path set: `seen`
+		// tracks digests on the current root-to-node path (to catch cycles),
+		// not every digest visited anywhere in the tree — two independent
+		// platform entries are allowed to reference the same digest.
+		branchSeen := make(map[string]bool, len(seen)+1)
+		for d := range seen {
+			branchSeen[d] = true
+		}
+		child, err := parseManifestDetailsRec(childRaw, entry.Digest, getBlob, getManifest, branchSeen, depth)
 		if err != nil {
 			continue
 		}

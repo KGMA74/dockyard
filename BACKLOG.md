@@ -54,15 +54,16 @@
 | P7.6 — Terraform + Artifact Hub | #43 | ✅ fait | (ce commit) | `terraform/` : module AWS+K8s (bucket S3 chiffré SSE-S3 + accès public bloqué + lifecycle multipart, IAM user scopé exactement au bucket, `helm_release` oci://ghcr.io/kgma74/charts/dockyard, `extra_helm_values` pour tout override non couvert) ; pas de `terraform init/apply` lancé (pas d'accès cloud) ; Artifact Hub : `Chart.yaml` enrichi (`category`, 3 `screenshots` sous `assets/screenshots/` — captures navigateur réelles), changelog auto-généré dans `helm-release.yml` depuis les notes de la release GitHub (`gh release view` → puces markdown → bloc `artifacthub.io/changes`, fallback générique si vide) |
 | P7.7 — Réplication | #44 | ⬜ à faire | | après P4.4 + P1.4 |
 | P7.8 — Quotas | #45 | ✅ fait | (ce commit) | `internal/store/quotas.go` : tables `quotas`/`quota_usage` (migration 0008), `ReserveQuota` transactionnel (check + incrément atomiques multi-scopes, all-or-nothing — un scope bloqué n'enregistre l'usage d'aucun scope) ; usage = octets poussés cumulés (pas la taille dédupliquée sur disque), jamais décrémenté automatiquement (reset manuel) ; enforcement dans `internal/v2/handler.go` à la complétion d'upload (monolithique + chunked), embedded/mirror uniquement (proxy ne possède pas l'écriture storage) ; event `quota_warning` (SSE + webhooks) au franchissement du seuil d'alerte ; `internal/quota` : CRUD admin `/api/admin/quotas` (toujours actif, comme signing) ; UI `QuotasSection.tsx` dans Settings ; testé en navigateur réel (blocage 507, alerte à 54%, création/suppression) |
-| P7.9 — Hardening (fuzz/load) | #46 | ⬜ à faire | | |
+| P7.9 — Hardening (fuzz/load) | #46 | ✅ fait | (ce commit) | Fuzzing (`internal/admin/manifest_fuzz_test.go`) sur `parseManifestDetails`/`diffManifests` a mis au jour un vrai bug : `parseManifestList` récursait dans `parseManifestDetails` sans limite de profondeur ni détection de cycle — deux manifest lists se référençant l'une l'autre par digest (poussables par n'importe quel client, digests connus à l'avance) causaient une récursion infinie (DoS). Corrigé avec un ensemble de digests visités par chemin (pas global — deux entrées sœurs peuvent référencer le même digest) + profondeur max 8 ; testé par régression + fuzz CI (20s/target). CI : job `multiarch` (QEMU + buildx, push/pull linux/amd64+arm64, vérifie le manifest list résultant). Load test : `scripts/loadtest/{push,pull-load}.sh` (vegeta), méthodologie documentée dans `scripts/loadtest/README.md` — pas de chiffres de baseline committés (dépendent trop de la machine/backend), juste la méthode pour les produire soi-même |
 | P7.10 — zstd LayerBrowser | #47 | ✅ fait | `333ee7a` | klauspost/compress/zstd dans parseLayerEntries, test des 3 formats (plain/gzip/zstd) |
 
 ## Prochaine étape
 
-**Phases 1, 2, 4, 5 et 6 complètes** (reste P3.4 OTel, optionnel). P7.1, P7.2, P7.3, P7.5, P7.6 et
-P7.8 faits.
+**Phases 1, 2, 4, 5 et 6 complètes** (reste P3.4 OTel, optionnel). P7.1, P7.2, P7.3, P7.5, P7.6,
+P7.8 et P7.9 faits.
 Suite recommandée : **P7.4 — i18n FR/EN** (#41, gros chantier transversal — react-i18next +
-extraction de toutes les chaînes UI) ou **P7.7 — Réplication** (#44).
+extraction de toutes les chaînes UI) ou **P7.7 — Réplication** (#44, le dernier gros morceau de la
+phase 7).
 
 ## Notes de reprise
 

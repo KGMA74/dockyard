@@ -31,6 +31,67 @@ jobs:
       - name: Test
         run: go test ./... -race -cover
 
+      - name: Fuzz smoke test (manifest parsing)
+        run: |
+          go test ./internal/admin/... -fuzz FuzzParseManifestDetails -fuzztime 20s
+          go test ./internal/admin/... -fuzz FuzzDiffManifests -fuzztime 20s
+
+  multiarch:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Set up QEMU
+        uses: docker/setup-qemu-action@v3
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build dockyard
+        run: go build -o dockyard ./cmd/dockyard
+
+      - name: Start dockyard (embedded, local storage, insecure)
+        run: |
+          REGISTRY_STORAGE_BACKEND=local REGISTRY_STORAGE_PATH=/tmp/dockyard-data \
+          AUTH_USERNAME=admin AUTH_PASSWORD=changeme123 PORT=5000 \
+          ./dockyard &
+          for i in $(seq 1 30); do curl -sf http://localhost:5000/health && break; sleep 1; done
+
+      - name: Configure Docker for the insecure local registry
+        run: |
+          echo '{"insecure-registries":["localhost:5000"]}' | sudo tee /etc/docker/daemon.json
+          sudo systemctl restart docker
+
+      - name: Log in
+        run: docker login localhost:5000 -u admin -p changeme123
+
+      - name: Build and push a multi-arch image (linux/amd64 + linux/arm64)
+        run: |
+          docker buildx create --use
+          cat > Dockerfile.multiarch-smoke <<'EOF'
+          FROM alpine:3.20
+          RUN echo "dockyard multi-arch CI smoke test" > /marker.txt
+          EOF
+          docker buildx build --platform linux/amd64,linux/arm64 \
+            -f Dockerfile.multiarch-smoke \
+            -t localhost:5000/ci/multiarch-smoke:latest \
+            --push .
+
+      - name: Pull each platform and verify the manifest list
+        run: |
+          docker pull --platform linux/amd64 localhost:5000/ci/multiarch-smoke:latest
+          docker pull --platform linux/arm64 localhost:5000/ci/multiarch-smoke:latest
+          curl -sf -u admin:changeme123 \
+            "http://localhost:5000/v2/ci/multiarch-smoke/manifests/latest" \
+            -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
+            | grep -q '"architecture":"arm64"'
+
   ui:
     runs-on: ubuntu-latest
     defaults:
