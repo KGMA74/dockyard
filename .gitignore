@@ -43,3 +43,11 @@ ui/node_modules/
 
 # Local dev registry data (SQLite db, blobs)
 data/
+
+# Terraform
+terraform/.terraform/
+terraform/*.tfstate
+terraform/*.tfstate.*
+terraform/terraform.tfvars
+terraform/*.tfplan
+terraform/.terraform.lock.hcl

@@ -27,6 +27,36 @@ jobs:
       - name: Install ORAS
         uses: oras-project/setup-oras@v1
 
+      - name: Install yq
+        run: |
+          sudo curl -fsSL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/local/bin/yq
+          sudo chmod +x /usr/local/bin/yq
+
+      - name: Populate Artifact Hub changelog from the GitHub release notes
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          NOTES=$(gh release view "$GITHUB_REF_NAME" --json body -q .body 2>/dev/null || true)
+          CHANGES=""
+          while IFS= read -r line; do
+            case "$line" in
+              "* "*|"- "*)
+                text="${line#??}"
+                text="${text//\"/\\\"}"
+                CHANGES="${CHANGES}- kind: changed
+  description: \"${text}\"
+"
+                ;;
+            esac
+          done <<< "$NOTES"
+          if [ -z "$CHANGES" ]; then
+            CHANGES="- kind: changed
+  description: \"Release ${GITHUB_REF_NAME}\"
+"
+          fi
+          export CHANGES
+          yq e -i '.annotations."artifacthub.io/changes" = strenv(CHANGES)' helm/dockyard/Chart.yaml
+
       - name: Log in to GHCR
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ghcr.io \

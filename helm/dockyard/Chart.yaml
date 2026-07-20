@@ -16,9 +16,20 @@ maintainers:
     email: marmelkambou2@gmail.com
 annotations:
   artifacthub.io/license: MIT
+  artifacthub.io/category: storage
   artifacthub.io/links: |
     - name: Source
       url: https://github.com/kgma74/dockyard
+  artifacthub.io/screenshots: |
+    - title: Images list
+      url: https://raw.githubusercontent.com/kgma74/dockyard/main/assets/screenshots/images-list.jpg
+    - title: Image details — layers, size, signature status
+      url: https://raw.githubusercontent.com/kgma74/dockyard/main/assets/screenshots/image-details.jpg
+    - title: Storage insights — growth history and largest repositories
+      url: https://raw.githubusercontent.com/kgma74/dockyard/main/assets/screenshots/storage-insights.jpg
+  # Overwritten by .github/workflows/helm-release.yml before packaging, from
+  # the GitHub release notes of the tag being published — this placeholder
+  # only shows up if that step is ever skipped.
   artifacthub.io/changes: |
     - kind: added
       description: Initial release

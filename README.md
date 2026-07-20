@@ -96,6 +96,8 @@ helm upgrade --install dockyard oci://ghcr.io/kgma74/charts/dockyard \
 
 See `helm/dockyard/values.yaml` for the full set of options (storage backend, S3, ingress, proxy mode, autoscaling, PodDisruptionBudget, cert-manager, etc.).
 
+A Terraform module (`terraform/`) provisions an S3 bucket + scoped IAM user and deploys this chart into an existing Kubernetes cluster in one `terraform apply` — see `terraform/README.md`.
+
 ---
 
 ## Configuration
@@ -524,6 +526,8 @@ helm upgrade --install dockyard oci://ghcr.io/kgma74/charts/dockyard \
 ```
 
 Voir `helm/dockyard/values.yaml` pour l'ensemble des options (backend de stockage, S3, ingress, mode proxy, autoscaling, PodDisruptionBudget, cert-manager, etc.).
+
+Un module Terraform (`terraform/`) provisionne un bucket S3 + un utilisateur IAM scopé et déploie ce chart sur un cluster Kubernetes existant en un `terraform apply` — voir `terraform/README.md`.
 
 ---
 

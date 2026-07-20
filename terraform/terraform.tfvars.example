@@ -1,0 +1,24 @@
+# Copy to terraform.tfvars and fill in — never commit the real file
+# (it will contain your admin password once you set auth_password).
+
+aws_region  = "us-east-1"
+bucket_name = "my-org-dockyard-registry" # must be globally unique across all of S3
+
+namespace     = "registry"
+release_name  = "dockyard"
+auth_username = "admin"
+auth_password = "changeme-then-rotate-it" # required, no default on purpose
+
+# Uncomment to expose Dockyard through an Ingress.
+# ingress_enabled    = true
+# ingress_host       = "registry.example.com"
+# ingress_class_name = "nginx"
+
+# Anything not covered by a variable above can go here, deep-merged over the
+# module's own values — see helm/dockyard/values.yaml for the full schema.
+# extra_helm_values = {
+#   resources = {
+#     requests = { cpu = "250m", memory = "256Mi" }
+#     limits   = { memory = "512Mi" }
+#   }
+# }
