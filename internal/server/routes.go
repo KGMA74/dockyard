@@ -187,11 +187,12 @@ func (s *Server) RegisterRoutes() http.Handler {
 	// ── Admin API ─────────────────────────────────────────────────────────────
 	api := e.Group("/api/admin", s.auth.Middleware(), auditor.AdminMiddleware())
 	if s.mode == modeProxy {
-		h := admin.NewRemote(s.proxy, s.signingPolicy)
+		h := admin.NewRemote(s.proxy, s.signingPolicy, s.store)
 		api.GET("/repositories", h.GetRepositories)
 		api.GET("/repositories/tags", h.GetTags)
 		api.GET("/repositories/manifest", h.GetManifestDetails)
 		api.GET("/repositories/diff", h.GetTagDiff)
+		api.GET("/repositories/search", h.Search)
 		api.GET("/repositories/layer", h.GetLayerEntries)
 		api.DELETE("/repositories/manifests", h.DeleteManifest, auth.RequireAdmin)
 		api.DELETE("/repositories", h.DeleteRepository, auth.RequireAdmin)
@@ -199,11 +200,12 @@ func (s *Server) RegisterRoutes() http.Handler {
 		api.GET("/storage/tree", admin.NotSupported)
 		api.POST("/gc", admin.NotSupported)
 	} else {
-		h := admin.New(s.backend, s.signingPolicy)
+		h := admin.New(s.backend, s.signingPolicy, s.store)
 		api.GET("/repositories", h.GetRepositories)
 		api.GET("/repositories/tags", h.GetTags)
 		api.GET("/repositories/manifest", h.GetManifestDetails)
 		api.GET("/repositories/diff", h.GetTagDiff)
+		api.GET("/repositories/search", h.Search)
 		api.GET("/repositories/layer", h.GetLayerEntries)
 		api.DELETE("/repositories/manifests", h.DeleteManifest, auth.RequireAdmin)
 		api.DELETE("/repositories", h.DeleteRepository, auth.RequireAdmin)

@@ -1,7 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
-import { Search, RefreshCw } from 'lucide-react'
-import { logout, getRepositories, getStorageStats, subscribeToPushEvents, StorageStats, RepoSummary } from '../api'
+import { LayoutGrid, List, Search, RefreshCw } from 'lucide-react'
+import { logout, getRepositories, getStorageStats, subscribeToPushEvents, StorageStats, RepoSummary, TagInfo } from '../api'
+import DenseRepoView from '../components/DenseRepoView'
+import ImageDetailsPanel from '../components/ImageDetailsPanel'
 import RepoList from '../components/RepoList'
 import Sidebar, { Tab } from '../components/Sidebar'
 import StorageTab from '../components/StorageTab'
@@ -33,6 +35,8 @@ export default function Dashboard({ onLogout }: Props) {
   const [error, setError] = useState('')
   const [search, setSearch] = useState('')
   const [sort, setSort] = useState<SortKey>('name')
+  const [dense, setDense] = useState(false)
+  const [details, setDetails] = useState<{ name: string; tag: TagInfo } | null>(null)
   const [showPasswordModal, setShowPasswordModal] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
 
@@ -110,7 +114,7 @@ export default function Dashboard({ onLogout }: Props) {
             <div className="flex items-center gap-3 mb-3">
               <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest shrink-0">
                 Images
-                {!loading && repos.length > 0 && (
+                {!loading && !dense && repos.length > 0 && (
                   <span className="ml-2 text-muted-foreground/60 normal-case tracking-normal font-normal">
                     ({filtered.length}{filtered.length !== repos.length && `/${repos.length}`})
                   </span>
@@ -122,23 +126,36 @@ export default function Dashboard({ onLogout }: Props) {
                 <Input
                   ref={searchRef}
                   type="text"
-                  placeholder="Filter images…  ( / )"
+                  placeholder={dense ? 'Search name or tag…  ( / )' : 'Filter images…  ( / )'}
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   className="pl-8 h-8 text-xs bg-card"
                 />
               </div>
 
-              <Select value={sort} onValueChange={v => setSort(v as SortKey)}>
-                <SelectTrigger size="sm" className="shrink-0 text-xs bg-card" title="Sort images">
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="name">Name A→Z</SelectItem>
-                  <SelectItem value="tags">Most tags</SelectItem>
-                  <SelectItem value="pushed">Recently pushed</SelectItem>
-                </SelectContent>
-              </Select>
+              {!dense && (
+                <Select value={sort} onValueChange={v => setSort(v as SortKey)}>
+                  <SelectTrigger size="sm" className="shrink-0 text-xs bg-card" title="Sort images">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="name">Name A→Z</SelectItem>
+                    <SelectItem value="tags">Most tags</SelectItem>
+                    <SelectItem value="pushed">Recently pushed</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={() => setDense(v => !v)}
+                className="shrink-0 text-xs"
+                title={dense ? 'Switch to card view' : 'Switch to dense view (searches by repo or tag, across the whole registry)'}
+              >
+                {dense ? <LayoutGrid /> : <List />}
+                {dense ? 'Cards' : 'Dense'}
+              </Button>
 
               <Button
                 variant="ghost"
@@ -151,7 +168,9 @@ export default function Dashboard({ onLogout }: Props) {
               </Button>
             </div>
 
-            {loading ? (
+            {dense ? (
+              <DenseRepoView query={search} onShowDetails={(name, tag) => setDetails({ name, tag })} />
+            ) : loading ? (
               <div className="space-y-2">
                 <Skeleton className="h-12 rounded-xl" />
                 <Skeleton className="h-12 rounded-xl" />
@@ -169,6 +188,14 @@ export default function Dashboard({ onLogout }: Props) {
               </div>
             ) : (
               <RepoList repos={filtered} onRefresh={loadData} />
+            )}
+
+            {details && (
+              <ImageDetailsPanel
+                imageName={details.name}
+                tag={details.tag}
+                onClose={() => setDetails(null)}
+              />
             )}
           </div>
         )}

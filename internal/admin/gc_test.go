@@ -31,7 +31,7 @@ func TestGarbageCollectDryRun(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := New(backend, nil)
+	h := New(backend, nil, nil)
 	e := echo.New()
 	call := func(query string) gcResponse {
 		t.Helper()

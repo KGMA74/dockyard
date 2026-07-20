@@ -6,6 +6,7 @@ import (
 
 	"dockyard/internal/cosign"
 	"dockyard/internal/registry"
+	"dockyard/internal/store"
 
 	"github.com/labstack/echo/v4"
 )
@@ -15,10 +16,11 @@ import (
 type RemoteHandler struct {
 	client  *registry.Client
 	signing *cosign.Policy
+	db      *store.Store // SQLite — scan results, used by Search
 }
 
-func NewRemote(client *registry.Client, signing *cosign.Policy) *RemoteHandler {
-	return &RemoteHandler{client: client, signing: signing}
+func NewRemote(client *registry.Client, signing *cosign.Policy, db *store.Store) *RemoteHandler {
+	return &RemoteHandler{client: client, signing: signing, db: db}
 }
 
 // GET /api/admin/repositories

@@ -602,6 +602,53 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/repositories/search": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Search repo:tag pairs by name/tag substring, optionally filtered by signed status */
+        get: {
+            parameters: {
+                query?: {
+                    /** @description Case-insensitive substring match on repo name or tag */
+                    q?: string;
+                    /** @description Only present when cosign public keys are configured */
+                    signed?: "true" | "false";
+                    limit?: number;
+                    offset?: number;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Matches */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            items?: components["schemas"]["SearchResult"][];
+                            total?: number;
+                            count?: number;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/repositories/layer": {
         parameters: {
             query?: never;
@@ -1891,6 +1938,22 @@ export interface components {
                 size_bytes?: number;
                 size_human?: string;
             }[];
+        };
+        SearchResult: {
+            name?: string;
+            tag?: string;
+            digest?: string;
+            /** Format: date-time */
+            pushed_at?: string;
+            /** @description Present only when cosign public keys are configured. */
+            signed?: boolean;
+            /** @description Present only when a scan has completed for this digest. */
+            scan?: {
+                /** @enum {string} */
+                status?: "queued" | "running" | "succeeded" | "failed";
+                critical_count?: number;
+                high_count?: number;
+            } | null;
         };
         TagDiff: {
             a?: components["schemas"]["ManifestDetails"];

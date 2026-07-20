@@ -119,7 +119,7 @@ func TestGetTagDiffHTTP(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	h := New(backend, cosign.NewPolicy(false, nil, nil))
+	h := New(backend, cosign.NewPolicy(false, nil, nil), nil)
 	e := echo.New()
 
 	t.Run("v1 vs v2", func(t *testing.T) {

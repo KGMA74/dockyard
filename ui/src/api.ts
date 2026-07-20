@@ -218,6 +218,30 @@ export async function getTagDiff(name: string, referenceA: string, referenceB: s
   return req(`/repositories/diff?name=${encodeURIComponent(name)}&reference_a=${encodeURIComponent(referenceA)}&reference_b=${encodeURIComponent(referenceB)}`)
 }
 
+export interface SearchResult {
+  name: string
+  tag: string
+  digest: string
+  pushed_at?: string
+  signed?: boolean
+  scan?: { status: string; critical_count: number; high_count: number }
+}
+
+export async function searchRepositories(params: {
+  q?: string
+  signed?: boolean
+  limit?: number
+  offset?: number
+} = {}): Promise<{ items: SearchResult[]; total: number; count: number }> {
+  const qs = new URLSearchParams()
+  if (params.q) qs.set('q', params.q)
+  if (params.signed !== undefined) qs.set('signed', String(params.signed))
+  if (params.limit) qs.set('limit', String(params.limit))
+  if (params.offset) qs.set('offset', String(params.offset))
+  const suffix = qs.toString()
+  return req(`/repositories/search${suffix ? `?${suffix}` : ''}`)
+}
+
 export interface LayerEntry {
   path: string
   type: 'file' | 'dir' | 'symlink' | 'hardlink' | 'other'

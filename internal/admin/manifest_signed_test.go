@@ -126,7 +126,7 @@ func TestGetManifestDetailsSignedStatus(t *testing.T) {
 
 	t.Run("no keys configured: signed field absent", func(t *testing.T) {
 		backend := newBackendWithManifest(t)
-		h := New(backend, cosign.NewPolicy(false, nil, nil))
+		h := New(backend, cosign.NewPolicy(false, nil, nil), nil)
 		result := call(t, h)
 		if _, ok := result["signed"]; ok {
 			t.Fatalf("signed field should be absent when no cosign keys are configured, got %v", result["signed"])
@@ -141,7 +141,7 @@ func TestGetManifestDetailsSignedStatus(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		h := New(backend, cosign.NewPolicy(false, keys, nil))
+		h := New(backend, cosign.NewPolicy(false, keys, nil), nil)
 		result := call(t, h)
 		if signed, _ := result["signed"].(bool); signed {
 			t.Fatal("expected signed=false for an unsigned image")
@@ -158,7 +158,7 @@ func TestGetManifestDetailsSignedStatus(t *testing.T) {
 			t.Fatal(err)
 		}
 		pushSignatureManifest(t, backend, name, manifestDgst, priv)
-		h := New(backend, cosign.NewPolicy(false, keys, nil))
+		h := New(backend, cosign.NewPolicy(false, keys, nil), nil)
 		result := call(t, h)
 		if signed, _ := result["signed"].(bool); !signed {
 			t.Fatal("expected signed=true for a validly signed image")

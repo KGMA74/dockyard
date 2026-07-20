@@ -47,7 +47,7 @@
 | P6.3 — Signatures cosign | #36 | ✅ fait | (ce commit) | internal/cosign : vérification serveur uniquement contre clés publiques statiques (pas de keyless/Fulcio — décision de scope), signature toujours côté client (cosign CLI) ; REQUIRE_SIGNED_PUSH + overrides par repo (table signing_policies), enforcement au PUT manifest dans v2/handler.go (exempte push par digest + tags .sig/.att/.sbom, sinon le premier push casserait le flux cosign) ; statut `signed` dans GetManifestDetails (embedded+proxy) ; UI : badge Signed/Unsigned dans ImageDetailsPanel + SigningPoliciesSection dans Settings ; referrers API non implémentée (cosign fallback automatiquement sur la convention par tag, donc pas nécessaire au fonctionnement) ; Helm signing.* (secret de clés publiques monté, à valider côté user) |
 | P6.4 — Tests P6 | #37 | ✅ fait | (ce commit) | matrice accept/reject cosign étendue (overrides par repo : force on/off, premier match gagne, plusieurs clés dont une seule valide), dédoublonnage du cache de scan vérifié cross-repo (même digest, noms différents → même scan réutilisé), nouveau test du statut `signed` dans GetManifestDetails (absent sans clé, false si non signé, true si signature valide) |
 | P7.1 — Diff de tags | #38 | ✅ fait | (ce commit) | `GET /api/admin/repositories/diff?name=&reference_a=&reference_b=` (embedded+proxy) réutilise `parseManifestDetails` des deux côtés, diff par ensemble de digests de layers (pas le JSON brut → un rebuild qui réutilise les mêmes layers de base ressort « inchangé »), delta de taille ; UI : cases à cocher sur les tags dans RepoList (max 2), bouton Compare → `TagDiff.tsx` (taille/arch/OS/signed côte à côte + layers exclusifs par tag) ; testé en navigateur réel (alpine:3.19 vs 3.20, delta +210 537 octets, 1 layer exclusif de chaque côté) |
-| P7.2 — Recherche serveur | #39 | ⬜ à faire | | |
+| P7.2 — Recherche serveur | #39 | ✅ fait | (ce commit) | `GET /api/admin/repositories/search?q=&signed=&limit=&offset=` (embedded+proxy) : correspond sur nom de repo OU tag, filtre `signed` résolu seulement sur les résultats matchés (pas tout le registre), infos scan (statut+critical/high) jointes par digest, tags cosign (.sig/.att/.sbom) exclus des résultats, pagination triée nom+tag ; nouveau champ `db *store.Store` sur `admin.Handler`/`RemoteHandler` (accès aux scans) ; UI : toggle Cards/Dense dans Dashboard, `DenseRepoView.tsx` (table plate paginée, filtre Signed, ouverture du panneau détails), réutilise la barre de recherche existante ; testé en navigateur réel (recherche par nom et par tag, ouverture détails depuis la vue dense) |
 | P7.3 — Notifications in-app | #40 | ⬜ à faire | | |
 | P7.4 — i18n FR/EN | #41 | ⬜ à faire | | après P7.1/P7.2 |
 | P7.5 — Helm HPA/PDB | #42 | ⬜ à faire | | HPA gated backend S3 |
@@ -59,7 +59,9 @@
 
 ## Prochaine étape
 
-**Phases 1, 2, 4, 5 et 6 complètes** (reste P3.4 OTel, optionnel). P7.1 (diff de tags) fait. Suite recommandée : **P7.2 — Recherche serveur** (#39) ; P7.4 i18n dépend de P7.1/P7.2.
+**Phases 1, 2, 4, 5 et 6 complètes** (reste P3.4 OTel, optionnel). P7.1 et P7.2 faits. Suite
+recommandée : **P7.3 — Notifications in-app** (#40), ou **P7.4 — i18n FR/EN** (#41, dépend de
+P7.1/P7.2, maintenant débloqué).
 
 ## Notes de reprise
 

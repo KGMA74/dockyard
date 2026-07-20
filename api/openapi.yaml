@@ -314,6 +314,29 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/admin/repositories/search:
+    get:
+      tags: [repositories]
+      summary: Search repo:tag pairs by name/tag substring, optionally filtered by signed status
+      parameters:
+        - { name: q, in: query, schema: { type: string }, description: Case-insensitive substring match on repo name or tag }
+        - { name: signed, in: query, schema: { type: string, enum: ["true", "false"] }, description: Only present when cosign public keys are configured }
+        - { name: limit, in: query, schema: { type: integer, default: 50, maximum: 200 } }
+        - { name: offset, in: query, schema: { type: integer, default: 0 } }
+      responses:
+        "200":
+          description: Matches
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  items:
+                    type: array
+                    items: { $ref: "#/components/schemas/SearchResult" }
+                  total: { type: integer }
+                  count: { type: integer }
+
   /api/admin/repositories/layer:
     get:
       tags: [repositories]
@@ -1000,6 +1023,25 @@ components:
               digest: { type: string }
               size_bytes: { type: integer }
               size_human: { type: string }
+
+    SearchResult:
+      type: object
+      properties:
+        name: { type: string }
+        tag: { type: string }
+        digest: { type: string }
+        pushed_at: { type: string, format: date-time }
+        signed:
+          type: boolean
+          description: Present only when cosign public keys are configured.
+        scan:
+          type: object
+          nullable: true
+          description: Present only when a scan has completed for this digest.
+          properties:
+            status: { type: string, enum: [queued, running, succeeded, failed] }
+            critical_count: { type: integer }
+            high_count: { type: integer }
 
     TagDiff:
       type: object
