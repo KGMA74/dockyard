@@ -29,6 +29,7 @@ tags:
   - name: scan
   - name: signing
   - name: quota
+  - name: replication
   - name: audit
   - name: system
 
@@ -882,6 +883,71 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
+  /api/admin/replication/targets:
+    get:
+      tags: [replication]
+      summary: List replication targets (admin only, embedded/mirror mode)
+      responses:
+        "200":
+          description: Targets
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  targets:
+                    type: array
+                    items: { $ref: "#/components/schemas/ReplicationTarget" }
+                  count: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [replication]
+      summary: Create a replication target (admin only, embedded/mirror mode)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, base_url]
+              properties:
+                name: { type: string }
+                base_url: { type: string }
+                username: { type: string }
+                password: { type: string }
+                repo_pattern: { type: string, default: "*" }
+      responses:
+        "201":
+          description: Created target
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/ReplicationTarget" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/admin/replication/targets/{id}:
+    delete:
+      tags: [replication]
+      summary: Delete a replication target (admin only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/admin/replication/targets/{id}/test:
+    post:
+      tags: [replication]
+      summary: Ping a replication target to check reachability (admin only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+        "502": { description: Target unreachable }
+
   /api/admin/audit:
     get:
       tags: [audit]
@@ -1194,6 +1260,17 @@ components:
         scope_type: { type: string, enum: [repo, user] }
         scope_value: { type: string }
         bytes_used: { type: integer, format: int64 }
+
+    ReplicationTarget:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+        base_url: { type: string }
+        username: { type: string }
+        repo_pattern: { type: string }
+        enabled: { type: boolean }
+        created_at: { type: string, format: date-time }
 
     ScanResult:
       type: object

@@ -19,6 +19,7 @@ A lightweight, self-hosted Docker Registry V2 server written in Go. Ships as a *
 - **Server-side search + dense view** — search by repo or tag name and filter by signed status across the whole registry, with a flat paginated table for repos with many tags
 - **In-app notifications** — toasts and a notification bell for pushes, deletions, retention, GC, scans, imports and quota warnings, over the same SSE feed
 - **Byte quotas** — per-repo/per-user push limits enforced at blob-upload commit (embedded/mirror mode), with a configurable warn threshold before the hard block
+- **Replication** — push-based copy of every tagged push to other registries (multi-arch aware, blob-deduplicating), with per-target repo pattern filtering and retry/backoff (embedded/mirror mode)
 - **JWT auth** on the admin API, optional Basic Auth on `/v2/*`
 - **Structured JSON logging** via `log/slog`
 - **Single Docker image** — multi-stage build, final image from `scratch`
@@ -451,6 +452,7 @@ Un serveur Docker Registry V2 léger, écrit en Go. Livré sous forme d'un **bin
 - **Recherche serveur + vue dense** — rechercher par nom de repo ou de tag et filtrer par statut signé sur tout le registre, avec un tableau plat paginé pour les repos à nombreux tags
 - **Notifications in-app** — toasts et cloche de notifications pour push, suppressions, rétention, GC, scans, imports et alertes de quota, sur le même flux SSE
 - **Quotas en octets** — limites de push par dépôt/utilisateur appliquées à la complétion d'un upload de blob (mode embarqué/mirror), avec un seuil d'alerte configurable avant le blocage
+- **Réplication** — copie push-based de chaque push de tag vers d'autres registries (multi-arch, dédup des blobs), filtrage par pattern de dépôt par cible, retry/backoff (mode embarqué/mirror)
 - **Auth JWT** sur l'API admin, Basic Auth optionnelle sur `/v2/*`
 - **Logs structurés JSON** via `log/slog`
 - **Image Docker unique** — build multi-stage, image finale depuis `scratch`

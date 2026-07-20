@@ -1,6 +1,7 @@
 package registry
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -322,4 +323,118 @@ func (c *Client) DeleteManifest(name, digest string) error {
 	}
 	_ = resp.Body.Close()
 	return nil
+}
+
+// ── Push (used by replication) ──────────────────────────────────────────────
+
+// HasBlob checks whether the target already stores a blob, so PushBlob can
+// skip re-uploading content it already has (blobs are content-addressed and
+// immutable, so a HEAD 200 is a definitive "no work to do").
+func (c *Client) HasBlob(name, digest string) (bool, error) {
+	resp, err := c.roundTrip(http.MethodHead, "/v2/"+name+"/blobs/"+digest, "", c.cachedToken(name))
+	if err != nil {
+		return false, err
+	}
+	if resp.StatusCode == http.StatusUnauthorized {
+		challenge := resp.Header.Get("Www-Authenticate")
+		_ = resp.Body.Close()
+		token, err := c.fetchBearerToken(challenge)
+		if err != nil {
+			return false, fmt.Errorf("registry auth: HEAD %s → %w", name, err)
+		}
+		resp, err = c.roundTrip(http.MethodHead, "/v2/"+name+"/blobs/"+digest, "", token)
+		if err != nil {
+			return false, err
+		}
+	}
+	_ = resp.Body.Close()
+	return resp.StatusCode == http.StatusOK, nil
+}
+
+// PushBlob uploads a blob unless the target already has it. open must
+// return a fresh, independently closable stream each call — it may be
+// called twice, since a 401 challenge requires resending the body against a
+// freshly obtained token.
+func (c *Client) PushBlob(name, digest string, size int64, open func() (io.ReadCloser, error)) error {
+	has, err := c.HasBlob(name, digest)
+	if err != nil {
+		return err
+	}
+	if has {
+		return nil
+	}
+	resp, err := c.doBody(http.MethodPost, "/v2/"+name+"/blobs/uploads/?digest="+digest, "application/octet-stream", size, open)
+	if err != nil {
+		return err
+	}
+	_ = resp.Body.Close()
+	return nil
+}
+
+// PushManifest uploads a manifest under the given reference (tag or digest).
+func (c *Client) PushManifest(name, ref, mediaType string, content []byte) error {
+	resp, err := c.doBody(http.MethodPut, "/v2/"+name+"/manifests/"+ref, mediaType, int64(len(content)), func() (io.ReadCloser, error) {
+		return io.NopCloser(bytes.NewReader(content)), nil
+	})
+	if err != nil {
+		return err
+	}
+	_ = resp.Body.Close()
+	return nil
+}
+
+func (c *Client) roundTripBody(method, path, contentType string, size int64, body io.ReadCloser, bearer string) (*http.Response, error) {
+	req, err := http.NewRequest(method, c.baseURL+path, body)
+	if err != nil {
+		return nil, err
+	}
+	req.ContentLength = size
+	if contentType != "" {
+		req.Header.Set("Content-Type", contentType)
+	}
+	switch {
+	case bearer != "":
+		req.Header.Set("Authorization", "Bearer "+bearer)
+	case c.username != "":
+		req.SetBasicAuth(c.username, c.password)
+	}
+	return c.httpClient.Do(req)
+}
+
+// doBody is do()'s counterpart for requests with a body: same 401-retry
+// dance, but the body must be re-opened for the retry since the first
+// attempt already consumed it.
+func (c *Client) doBody(method, path, contentType string, size int64, open func() (io.ReadCloser, error)) (*http.Response, error) {
+	body, err := open()
+	if err != nil {
+		return nil, err
+	}
+	resp, err := c.roundTripBody(method, path, contentType, size, body, c.cachedToken(repoFromPath(path)))
+	if err != nil {
+		return nil, err
+	}
+
+	if resp.StatusCode == http.StatusUnauthorized {
+		challenge := resp.Header.Get("Www-Authenticate")
+		_ = resp.Body.Close()
+		token, err := c.fetchBearerToken(challenge)
+		if err != nil {
+			return nil, fmt.Errorf("registry auth: %s %s → %w", method, path, err)
+		}
+		body, err = open()
+		if err != nil {
+			return nil, err
+		}
+		resp, err = c.roundTripBody(method, path, contentType, size, body, token)
+		if err != nil {
+			return nil, err
+		}
+	}
+
+	if resp.StatusCode >= 400 {
+		detail, _ := io.ReadAll(io.LimitReader(resp.Body, 512))
+		_ = resp.Body.Close()
+		return nil, fmt.Errorf("registry error: %s %s → %d: %s", method, path, resp.StatusCode, string(detail))
+	}
+	return resp, nil
 }

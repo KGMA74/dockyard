@@ -12,16 +12,17 @@ import (
 	"dockyard/internal/audit"
 	"dockyard/internal/auth"
 	"dockyard/internal/cosign"
-	"dockyard/internal/quota"
 	"dockyard/internal/export"
 	"dockyard/internal/metrics"
+	"dockyard/internal/quota"
+	"dockyard/internal/replication"
 	"dockyard/internal/retention"
 	"dockyard/internal/scan"
 	"dockyard/internal/store"
-	"dockyard/internal/webhooks"
 	uiassets "dockyard/internal/ui"
 	"dockyard/internal/v2"
 	"dockyard/internal/version"
+	"dockyard/internal/webhooks"
 
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -263,6 +264,18 @@ func (s *Server) RegisterRoutes() http.Handler {
 	api.POST("/webhooks", wh.Create, auth.RequireAdmin)
 	api.DELETE("/webhooks/:id", wh.Delete, auth.RequireAdmin)
 	api.POST("/webhooks/:id/test", wh.Test, auth.RequireAdmin)
+
+	// Replication — push-based copy to other registries on tag push,
+	// embedded/mirror only (needs local storage to read what was pushed).
+	if s.backend != nil {
+		replicator := replication.NewReplicator(s.store, s.backend)
+		replicator.Subscribe(s.events)
+		rh := replication.NewHandler(s.store, replicator)
+		api.GET("/replication/targets", rh.List, auth.RequireAdmin)
+		api.POST("/replication/targets", rh.Create, auth.RequireAdmin)
+		api.DELETE("/replication/targets/:id", rh.Delete, auth.RequireAdmin)
+		api.POST("/replication/targets/:id/test", rh.Test, auth.RequireAdmin)
+	}
 
 	// Vulnerability scanning — shells out to the `trivy` binary bundled in
 	// Dockyard's own image. Standalone by default (TRIVY_SERVER_URL unset:

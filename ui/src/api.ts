@@ -554,6 +554,37 @@ export async function resetQuotaUsage(scopeType: QuotaScopeType, scopeValue: str
   return req('/quotas/usage/reset', { method: 'POST', body: JSON.stringify({ scope_type: scopeType, scope_value: scopeValue }) })
 }
 
+export interface ReplicationTarget {
+  id: number
+  name: string
+  base_url: string
+  username: string
+  repo_pattern: string
+  enabled: boolean
+  created_at: string
+}
+
+export async function listReplicationTargets(): Promise<{ targets: ReplicationTarget[]; count: number }> {
+  return req('/replication/targets')
+}
+
+export async function createReplicationTarget(
+  name: string, baseUrl: string, username: string, password: string, repoPattern: string,
+): Promise<ReplicationTarget> {
+  return req('/replication/targets', {
+    method: 'POST',
+    body: JSON.stringify({ name, base_url: baseUrl, username, password, repo_pattern: repoPattern }),
+  })
+}
+
+export async function deleteReplicationTarget(id: number): Promise<void> {
+  return req(`/replication/targets/${id}`, { method: 'DELETE' })
+}
+
+export async function testReplicationTarget(id: number): Promise<void> {
+  return req(`/replication/targets/${id}/test`, { method: 'POST' })
+}
+
 export interface StatsSample {
   at: string
   total_size: number
