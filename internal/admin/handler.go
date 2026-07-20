@@ -10,7 +10,9 @@ import (
 	"strings"
 	"time"
 
+	"dockyard/internal/auth"
 	"dockyard/internal/cosign"
+	"dockyard/internal/events"
 	"dockyard/internal/metrics"
 	"dockyard/internal/storage"
 	"dockyard/internal/store"
@@ -37,6 +39,7 @@ type Handler struct {
 	treeStore treeBackend // non-nil for local only
 	signing   *cosign.Policy
 	db        *store.Store // SQLite — scan results, used by Search
+	hub       *events.Hub  // optional; manual GC publishes a "gc" event when set
 }
 
 func New(backend storage.Backend, signing *cosign.Policy, db *store.Store) *Handler {
@@ -44,6 +47,9 @@ func New(backend storage.Backend, signing *cosign.Policy, db *store.Store) *Hand
 	tree, _ := backend.(treeBackend)
 	return &Handler{store: backend, gcStore: gc, treeStore: tree, signing: signing, db: db}
 }
+
+// SetHub makes manual GC (POST /gc) publish a "gc" event on completion (SSE + webhooks).
+func (h *Handler) SetHub(hub *events.Hub) { h.hub = hub }
 
 // GET /api/admin/repositories
 func (h *Handler) GetRepositories(c echo.Context) error {
@@ -272,6 +278,13 @@ func (h *Handler) GarbageCollect(c echo.Context) error {
 	}
 	if !dryRun {
 		metrics.ObserveGC(freed, time.Since(start))
+		if h.hub != nil {
+			actor := ""
+			if p, ok := auth.CurrentPrincipal(c); ok {
+				actor = p.Username
+			}
+			h.hub.Publish(events.Event{Type: "gc", Actor: actor})
+		}
 	}
 	return c.JSON(http.StatusOK, map[string]any{
 		"removed":     removed,

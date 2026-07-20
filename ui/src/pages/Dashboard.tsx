@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import { LayoutGrid, List, Search, RefreshCw } from 'lucide-react'
-import { logout, getRepositories, getStorageStats, subscribeToPushEvents, StorageStats, RepoSummary, TagInfo } from '../api'
+import { logout, getRepositories, getStorageStats, subscribeToEvents, formatEventMessage, RegistryEvent, StorageStats, RepoSummary, TagInfo } from '../api'
 import DenseRepoView from '../components/DenseRepoView'
 import ImageDetailsPanel from '../components/ImageDetailsPanel'
+import { NotificationItem } from '../components/NotificationBell'
 import RepoList from '../components/RepoList'
 import Sidebar, { Tab } from '../components/Sidebar'
 import StorageTab from '../components/StorageTab'
@@ -38,7 +39,11 @@ export default function Dashboard({ onLogout }: Props) {
   const [dense, setDense] = useState(false)
   const [details, setDetails] = useState<{ name: string; tag: TagInfo } | null>(null)
   const [showPasswordModal, setShowPasswordModal] = useState(false)
+  const [notifications, setNotifications] = useState<NotificationItem[]>([])
+  const [unreadCount, setUnreadCount] = useState(0)
+  const [notifOpen, setNotifOpen] = useState(false)
   const searchRef = useRef<HTMLInputElement>(null)
+  const notifId = useRef(0)
 
   const loadData = useCallback(async () => {
     setError('')
@@ -57,11 +62,24 @@ export default function Dashboard({ onLogout }: Props) {
 
   useEffect(() => { loadData() }, [loadData])
 
-  // Live-refresh the list when an image is pushed elsewhere (docker push, CI, …)
+  // Live-refresh the list and surface a toast + notification-bell entry when
+  // something happens elsewhere (docker push, CI, scheduled GC, a scan
+  // completing, …). Events that change what the repo list shows trigger a
+  // reload; scan doesn't (it doesn't add/remove tags), so it's notify-only.
+  const REFRESH_ON: RegistryEvent['type'][] = ['push', 'delete', 'retention', 'gc', 'import']
   useEffect(() => {
-    return subscribeToPushEvents(event => {
-      toast.success(`${event.name}${event.tag ? `:${event.tag}` : ''} was pushed`)
-      loadData()
+    return subscribeToEvents(event => {
+      const message = formatEventMessage(event)
+      if (event.type === 'push') toast.success(message)
+      else toast.info(message)
+
+      setNotifications(items => [
+        { id: notifId.current++, event, at: new Date().toISOString() },
+        ...items,
+      ].slice(0, 20))
+      setUnreadCount(n => n + 1)
+
+      if (REFRESH_ON.includes(event.type)) loadData()
     })
   }, [loadData])
 
@@ -87,6 +105,11 @@ export default function Dashboard({ onLogout }: Props) {
     onLogout()
   }
 
+  function handleNotifOpenChange(open: boolean) {
+    setNotifOpen(open)
+    if (open) setUnreadCount(0)
+  }
+
   const filtered = repos
     .filter(r => r.name.toLowerCase().includes(search.toLowerCase()))
     .sort((a, b) => {
@@ -106,6 +129,10 @@ export default function Dashboard({ onLogout }: Props) {
         onTabChange={setTab}
         onChangePassword={() => setShowPasswordModal(true)}
         onLogout={handleLogout}
+        notifications={notifications}
+        unreadCount={unreadCount}
+        notifOpen={notifOpen}
+        onNotifOpenChange={handleNotifOpenChange}
       />
 
       <main className="flex-1 min-w-0 px-6 py-6">

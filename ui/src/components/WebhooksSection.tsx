@@ -6,7 +6,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 
-const EVENT_TYPES = ['push', 'delete', 'retention', 'gc', 'scan'] as const
+const EVENT_TYPES = ['push', 'delete', 'retention', 'gc', 'scan', 'import'] as const
 
 // WebhooksSection lives in the Settings tab; hidden for non-admins (403).
 export default function WebhooksSection() {

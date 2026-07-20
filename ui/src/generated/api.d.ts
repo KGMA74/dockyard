@@ -1227,7 +1227,7 @@ export interface paths {
                         url: string;
                         /** @description HMAC-SHA256 signing secret for X-Dockyard-Signature. */
                         secret?: string;
-                        events?: ("push" | "delete" | "retention" | "gc" | "scan")[];
+                        events?: ("push" | "delete" | "retention" | "gc" | "scan" | "import")[];
                         /** @enum {string} */
                         format?: "generic" | "slack" | "discord";
                     };
@@ -1707,7 +1707,7 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description SSE stream of events: push, delete, retention, gc, scan */
+                /** @description SSE stream of events: push, delete, retention, gc, scan, import */
                 200: {
                     headers: {
                         [name: string]: unknown;
@@ -1985,7 +1985,7 @@ export interface components {
             id?: number;
             /** Format: uri */
             url?: string;
-            events?: ("push" | "delete" | "retention" | "gc" | "scan")[];
+            events?: ("push" | "delete" | "retention" | "gc" | "scan" | "import")[];
             /** @enum {string} */
             format?: "generic" | "slack" | "discord";
             enabled?: boolean;

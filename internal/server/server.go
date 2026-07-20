@@ -160,7 +160,7 @@ func NewServer() *http.Server {
 	// Daily maintenance (retention then GC) needs both the backend and the
 	// policy store, hence scheduled after both exist.
 	if srv.backend != nil {
-		scheduleMaintenance(srv.backend, retention.New(st, srv.backend))
+		scheduleMaintenance(srv.backend, retention.New(st, srv.backend), srv.events)
 		go srv.sampleStatsLoop()
 	}
 

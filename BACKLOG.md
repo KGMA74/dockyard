@@ -48,7 +48,7 @@
 | P6.4 — Tests P6 | #37 | ✅ fait | (ce commit) | matrice accept/reject cosign étendue (overrides par repo : force on/off, premier match gagne, plusieurs clés dont une seule valide), dédoublonnage du cache de scan vérifié cross-repo (même digest, noms différents → même scan réutilisé), nouveau test du statut `signed` dans GetManifestDetails (absent sans clé, false si non signé, true si signature valide) |
 | P7.1 — Diff de tags | #38 | ✅ fait | (ce commit) | `GET /api/admin/repositories/diff?name=&reference_a=&reference_b=` (embedded+proxy) réutilise `parseManifestDetails` des deux côtés, diff par ensemble de digests de layers (pas le JSON brut → un rebuild qui réutilise les mêmes layers de base ressort « inchangé »), delta de taille ; UI : cases à cocher sur les tags dans RepoList (max 2), bouton Compare → `TagDiff.tsx` (taille/arch/OS/signed côte à côte + layers exclusifs par tag) ; testé en navigateur réel (alpine:3.19 vs 3.20, delta +210 537 octets, 1 layer exclusif de chaque côté) |
 | P7.2 — Recherche serveur | #39 | ✅ fait | (ce commit) | `GET /api/admin/repositories/search?q=&signed=&limit=&offset=` (embedded+proxy) : correspond sur nom de repo OU tag, filtre `signed` résolu seulement sur les résultats matchés (pas tout le registre), infos scan (statut+critical/high) jointes par digest, tags cosign (.sig/.att/.sbom) exclus des résultats, pagination triée nom+tag ; nouveau champ `db *store.Store` sur `admin.Handler`/`RemoteHandler` (accès aux scans) ; UI : toggle Cards/Dense dans Dashboard, `DenseRepoView.tsx` (table plate paginée, filtre Signed, ouverture du panneau détails), réutilise la barre de recherche existante ; testé en navigateur réel (recherche par nom et par tag, ouverture détails depuis la vue dense) |
-| P7.3 — Notifications in-app | #40 | ⬜ à faire | | |
+| P7.3 — Notifications in-app | #40 | ✅ fait | (ce commit) | événements `gc` et `import` ajoutés (n'existaient pas avant : GC manuel/planifié et import n'émettaient rien) ; GC planifié ne publie que si des blobs ont été supprimés (évite le bruit quotidien), GC manuel publie toujours (feedback de l'action déclenchée) ; `subscribeToPushEvents` généralisé en `subscribeToEvents`/`RegistryEvent` (tous types) ; UI : cloche dans Sidebar (Popover radix-ui, badge non-lus, historique 20 derniers événements en mémoire de session), toasts sonner pour tous les types ; testé en navigateur réel (GC + push vus en direct) |
 | P7.4 — i18n FR/EN | #41 | ⬜ à faire | | après P7.1/P7.2 |
 | P7.5 — Helm HPA/PDB | #42 | ⬜ à faire | | HPA gated backend S3 |
 | P7.6 — Terraform + Artifact Hub | #43 | ⬜ à faire | | |
@@ -59,9 +59,8 @@
 
 ## Prochaine étape
 
-**Phases 1, 2, 4, 5 et 6 complètes** (reste P3.4 OTel, optionnel). P7.1 et P7.2 faits. Suite
-recommandée : **P7.3 — Notifications in-app** (#40), ou **P7.4 — i18n FR/EN** (#41, dépend de
-P7.1/P7.2, maintenant débloqué).
+**Phases 1, 2, 4, 5 et 6 complètes** (reste P3.4 OTel, optionnel). P7.1, P7.2 et P7.3 faits. Suite
+recommandée : **P7.4 — i18n FR/EN** (#41), ou **P7.5 — Helm HPA/PDB** (#42).
 
 ## Notes de reprise
 

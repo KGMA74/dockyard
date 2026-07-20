@@ -1,6 +1,7 @@
 import { Box, HardDrive, KeyRound, LogOut, Settings, Users } from 'lucide-react'
 import { getRole } from '../api'
 import { ThemeSwitcher } from '../theme'
+import NotificationBell, { NotificationItem } from './NotificationBell'
 import { Button } from '@/components/ui/button'
 
 export type Tab = 'images' | 'storage' | 'users' | 'settings'
@@ -10,6 +11,10 @@ interface Props {
   onTabChange: (tab: Tab) => void
   onChangePassword: () => void
   onLogout: () => void
+  notifications: NotificationItem[]
+  unreadCount: number
+  notifOpen: boolean
+  onNotifOpenChange: (open: boolean) => void
 }
 
 const navItems: { tab: Tab; label: string; icon: typeof Box; adminOnly?: boolean }[] = [
@@ -19,13 +24,28 @@ const navItems: { tab: Tab; label: string; icon: typeof Box; adminOnly?: boolean
   { tab: 'settings', label: 'Settings', icon: Settings },
 ]
 
-export default function Sidebar({ tab, onTabChange, onChangePassword, onLogout }: Props) {
+export default function Sidebar({
+  tab,
+  onTabChange,
+  onChangePassword,
+  onLogout,
+  notifications,
+  unreadCount,
+  notifOpen,
+  onNotifOpenChange,
+}: Props) {
   const isAdmin = getRole() === 'admin'
   return (
     <aside className="w-56 shrink-0 h-screen sticky top-0 border-r bg-card flex flex-col">
       <div className="h-14 flex items-center gap-2.5 px-4 border-b">
         <Box className="size-5 text-blue-500 dark:text-blue-400" strokeWidth={1.5} />
-        <span className="font-semibold text-sm tracking-tight">Dockyard</span>
+        <span className="font-semibold text-sm tracking-tight flex-1">Dockyard</span>
+        <NotificationBell
+          items={notifications}
+          unreadCount={unreadCount}
+          open={notifOpen}
+          onOpenChange={onNotifOpenChange}
+        />
       </div>
 
       <nav className="flex-1 px-3 py-4 space-y-1">

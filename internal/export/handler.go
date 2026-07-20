@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"net/http"
 
+	"dockyard/internal/auth"
+	"dockyard/internal/events"
 	"dockyard/internal/storage"
 
 	"github.com/labstack/echo/v4"
@@ -12,9 +14,13 @@ import (
 // Handler exposes repository export/import (admin only, embedded/mirror).
 type Handler struct {
 	backend storage.Backend
+	hub     *events.Hub // optional; import completion is published when set
 }
 
 func NewHandler(backend storage.Backend) *Handler { return &Handler{backend: backend} }
+
+// SetHub makes Import publish an "import" event on completion (SSE + webhooks).
+func (h *Handler) SetHub(hub *events.Hub) { h.hub = hub }
 
 // Export — GET /api/admin/repositories/export?name=<repo>
 // Streams an OCI image-layout tarball.
@@ -48,6 +54,13 @@ func (h *Handler) Import(c echo.Context) error {
 	tags, err := Import(c.Request().Body, h.backend, name)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": err.Error()})
+	}
+	if h.hub != nil {
+		actor := ""
+		if p, ok := auth.CurrentPrincipal(c); ok {
+			actor = p.Username
+		}
+		h.hub.Publish(events.Event{Type: "import", Name: name, Actor: actor})
 	}
 	return c.JSON(http.StatusOK, map[string]any{"message": "import complete", "tags": tags})
 }

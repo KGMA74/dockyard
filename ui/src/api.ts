@@ -70,21 +70,47 @@ async function req<T>(path: string, opts?: RequestInit, retried = false): Promis
   return res.json() as Promise<T>
 }
 
-export interface PushEvent {
-  type: 'push'
+export type RegistryEventType = 'push' | 'delete' | 'retention' | 'gc' | 'scan' | 'import'
+
+export interface RegistryEvent {
+  type: RegistryEventType
   name: string
   tag?: string
+  actor?: string
 }
 
-// Subscribes to the SSE push feed. EventSource can't set an Authorization
-// header, so the token travels as a query param instead — the browser
-// reconnects automatically on drop, no manual retry logic needed here.
-export function subscribeToPushEvents(onPush: (event: PushEvent) => void): () => void {
+// formatEventMessage turns a RegistryEvent into a short human sentence,
+// shared between the push/completion toasts and the notification bell so
+// the wording stays consistent.
+export function formatEventMessage(event: RegistryEvent): string {
+  const ref = event.name + (event.tag ? `:${event.tag}` : '')
+  switch (event.type) {
+    case 'push':
+      return `${ref} was pushed`
+    case 'delete':
+      return `${ref} was deleted`
+    case 'retention':
+      return `Retention policy deleted ${ref}`
+    case 'gc':
+      return event.actor === 'scheduler' ? 'Scheduled garbage collection completed' : 'Garbage collection completed'
+    case 'scan':
+      return `Scan completed for ${ref}`
+    case 'import':
+      return `Import completed for ${event.name}`
+    default:
+      return `${event.type}: ${ref}`
+  }
+}
+
+// Subscribes to the SSE feed of registry events. EventSource can't set an
+// Authorization header, so the token travels as a query param instead — the
+// browser reconnects automatically on drop, no manual retry logic needed
+// here.
+export function subscribeToEvents(onEvent: (event: RegistryEvent) => void): () => void {
   const es = new EventSource(`${BASE}/events?token=${encodeURIComponent(token())}`)
   es.onmessage = e => {
     try {
-      const data = JSON.parse(e.data) as PushEvent
-      if (data.type === 'push') onPush(data)
+      onEvent(JSON.parse(e.data) as RegistryEvent)
     } catch {
       // ignore malformed payloads
     }

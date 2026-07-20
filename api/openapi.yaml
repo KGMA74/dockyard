@@ -622,7 +622,7 @@ paths:
                   description: HMAC-SHA256 signing secret for X-Dockyard-Signature.
                 events:
                   type: array
-                  items: { type: string, enum: [push, delete, retention, gc, scan] }
+                  items: { type: string, enum: [push, delete, retention, gc, scan, import] }
                 format: { type: string, enum: [generic, slack, discord] }
       responses:
         "201":
@@ -841,7 +841,7 @@ paths:
       parameters:
         - { name: token, in: query, schema: { type: string } }
       responses:
-        "200": { description: "SSE stream of events: push, delete, retention, gc, scan" }
+        "200": { description: "SSE stream of events: push, delete, retention, gc, scan, import" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
   /health:
@@ -1091,7 +1091,7 @@ components:
         url: { type: string, format: uri }
         events:
           type: array
-          items: { type: string, enum: [push, delete, retention, gc, scan] }
+          items: { type: string, enum: [push, delete, retention, gc, scan, import] }
         format: { type: string, enum: [generic, slack, discord] }
         enabled: { type: boolean }
         created_at: { type: string, format: date-time }

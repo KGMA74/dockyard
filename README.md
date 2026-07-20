@@ -17,6 +17,7 @@ A lightweight, self-hosted Docker Registry V2 server written in Go. Ships as a *
 - **Signed-push enforcement** — reject tag pushes without a valid cosign signature (`REQUIRE_SIGNED_PUSH` + per-repo overrides), verified server-side against configured public keys
 - **Tag diff** — compare layers, size and config between any two tags of the same image, right from the UI
 - **Server-side search + dense view** — search by repo or tag name and filter by signed status across the whole registry, with a flat paginated table for repos with many tags
+- **In-app notifications** — toasts and a notification bell for pushes, deletions, retention, GC, scans and imports, over the same SSE feed
 - **JWT auth** on the admin API, optional Basic Auth on `/v2/*`
 - **Structured JSON logging** via `log/slog`
 - **Single Docker image** — multi-stage build, final image from `scratch`
@@ -445,6 +446,7 @@ Un serveur Docker Registry V2 léger, écrit en Go. Livré sous forme d'un **bin
 - **Application des push signés** — rejette les push de tags sans signature cosign valide (`REQUIRE_SIGNED_PUSH` + overrides par repo), vérifiée côté serveur contre des clés publiques configurées
 - **Diff de tags** — comparer layers, taille et config entre deux tags d'une même image, directement depuis l'UI
 - **Recherche serveur + vue dense** — rechercher par nom de repo ou de tag et filtrer par statut signé sur tout le registre, avec un tableau plat paginé pour les repos à nombreux tags
+- **Notifications in-app** — toasts et cloche de notifications pour push, suppressions, rétention, GC, scans et imports, sur le même flux SSE
 - **Auth JWT** sur l'API admin, Basic Auth optionnelle sur `/v2/*`
 - **Logs structurés JSON** via `log/slog`
 - **Image Docker unique** — build multi-stage, image finale depuis `scratch`

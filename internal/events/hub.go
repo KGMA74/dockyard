@@ -5,7 +5,7 @@ package events
 import "sync"
 
 type Event struct {
-	Type  string `json:"type"` // push | delete | retention | gc | scan
+	Type  string `json:"type"` // push | delete | retention | gc | scan | import
 	Name  string `json:"name"`
 	Tag   string `json:"tag,omitempty"`
 	Actor string `json:"actor,omitempty"`

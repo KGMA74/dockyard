@@ -5,6 +5,7 @@ import (
 	"log/slog"
 	"time"
 
+	"dockyard/internal/events"
 	"dockyard/internal/metrics"
 	"dockyard/internal/storage"
 )
@@ -20,7 +21,7 @@ type gcable interface {
 // scheduleMaintenance runs retention then garbage collection every day at
 // midnight UTC — retention first, so the blobs it orphans are reclaimed in
 // the same pass. No-op if the backend does not implement GC (proxy mode).
-func scheduleMaintenance(backend storage.Backend, retention interface{ Run() }) {
+func scheduleMaintenance(backend storage.Backend, retention interface{ Run() }, hub *events.Hub) {
 	gc, ok := backend.(gcable)
 	if !ok {
 		return
@@ -32,12 +33,12 @@ func scheduleMaintenance(backend storage.Backend, retention interface{ Run() }) 
 			if retention != nil {
 				retention.Run()
 			}
-			runGC(gc)
+			runGC(gc, hub)
 		}
 	}()
 }
 
-func runGC(gc gcable) {
+func runGC(gc gcable, hub *events.Hub) {
 	slog.Info("gc: starting scheduled garbage collection")
 	start := time.Now()
 	referenced, err := gc.ReferencedBlobs()
@@ -64,6 +65,9 @@ func runGC(gc gcable) {
 	}
 	metrics.ObserveGC(freed, time.Since(start))
 	slog.Info("gc: done", "removed", count, "freed", gcHumanSize(freed))
+	if hub != nil && count > 0 {
+		hub.Publish(events.Event{Type: "gc", Actor: "scheduler"})
+	}
 }
 
 func timeUntilMidnightUTC() time.Duration {

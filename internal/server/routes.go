@@ -201,6 +201,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 		api.POST("/gc", admin.NotSupported)
 	} else {
 		h := admin.New(s.backend, s.signingPolicy, s.store)
+		h.SetHub(s.events)
 		api.GET("/repositories", h.GetRepositories)
 		api.GET("/repositories/tags", h.GetTags)
 		api.GET("/repositories/manifest", h.GetManifestDetails)
@@ -237,6 +238,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 		// Repository export/import (OCI image-layout tarballs).
 		eh := export.NewHandler(s.backend)
+		eh.SetHub(s.events)
 		api.GET("/repositories/export", eh.Export, auth.RequireAdmin)
 		api.POST("/repositories/import", eh.Import, auth.RequireAdmin)
 	}
