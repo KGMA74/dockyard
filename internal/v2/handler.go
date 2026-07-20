@@ -17,6 +17,7 @@ import (
 	"dockyard/internal/cosign"
 	"dockyard/internal/events"
 	"dockyard/internal/storage"
+	"dockyard/internal/store"
 )
 
 // Handler implements http.Handler for the Docker Registry V2 protocol.
@@ -26,10 +27,11 @@ type Handler struct {
 	hub     *events.Hub
 	onPull  func(name, reference string)
 	signing *cosign.Policy // nil = signed-push enforcement off
+	db      *store.Store   // used for quota enforcement; nil disables it
 }
 
-func New(backend storage.Backend, hub *events.Hub, signing *cosign.Policy) *Handler {
-	return &Handler{store: backend, hub: hub, signing: signing}
+func New(backend storage.Backend, hub *events.Hub, signing *cosign.Policy, db *store.Store) *Handler {
+	return &Handler{store: backend, hub: hub, signing: signing, db: db}
 }
 
 // OnPull registers a callback fired after each successful manifest GET — the
@@ -216,6 +218,20 @@ func (h *Handler) getBlob(w http.ResponseWriter, r *http.Request, name, digest s
 func (h *Handler) initUpload(w http.ResponseWriter, r *http.Request, name string) {
 	// Monolithic push: digest provided in the POST query string
 	if digest := r.URL.Query().Get("digest"); digest != "" {
+		// Content-Length is unset for chunked-transfer requests — quota is
+		// only enforced when the size is known up front. Chunked uploads are
+		// covered at commit time in patchOrCommitUpload instead.
+		if r.ContentLength > 0 {
+			if blocked, warnings, err := h.reserveQuota(name, requestActor(r), r.ContentLength); err != nil {
+				registryError(w, http.StatusInternalServerError, "UNKNOWN", err.Error())
+				return
+			} else if blocked != nil {
+				registryError(w, http.StatusInsufficientStorage, "DENIED", blocked.Error())
+				return
+			} else {
+				h.publishQuotaWarnings(warnings, requestActor(r))
+			}
+		}
 		if err := h.store.PutBlob(digest, r.Body, r.ContentLength); err != nil {
 			registryError(w, http.StatusBadRequest, "DIGEST_INVALID", err.Error())
 			return
@@ -266,6 +282,18 @@ func (h *Handler) patchOrCommitUpload(w http.ResponseWriter, r *http.Request, na
 				return
 			}
 		}
+		if size, sizeErr := h.store.GetUploadSize(id); sizeErr == nil && size > 0 {
+			if blocked, warnings, err := h.reserveQuota(name, requestActor(r), size); err != nil {
+				registryError(w, http.StatusInternalServerError, "UNKNOWN", err.Error())
+				return
+			} else if blocked != nil {
+				_ = h.store.DeleteUpload(id)
+				registryError(w, http.StatusInsufficientStorage, "DENIED", blocked.Error())
+				return
+			} else {
+				h.publishQuotaWarnings(warnings, requestActor(r))
+			}
+		}
 		if err := h.store.CommitUpload(id, digest); err != nil {
 			registryError(w, http.StatusBadRequest, "DIGEST_INVALID", err.Error())
 			return
@@ -276,6 +304,34 @@ func (h *Handler) patchOrCommitUpload(w http.ResponseWriter, r *http.Request, na
 
 	default:
 		registryError(w, http.StatusMethodNotAllowed, "UNSUPPORTED", "method not allowed")
+	}
+}
+
+// reserveQuota checks the incoming blob's size against any configured
+// repo/user quota and, if both have room, atomically records the usage. A
+// nil db (quotas not wired up, e.g. proxy mode) makes every push unlimited.
+func (h *Handler) reserveQuota(name, username string, size int64) (*store.QuotaExceeded, []store.QuotaWarning, error) {
+	if h.db == nil {
+		return nil, nil, nil
+	}
+	scopes := []store.QuotaScope{{Type: "repo", Value: name}}
+	if username != "" {
+		scopes = append(scopes, store.QuotaScope{Type: "user", Value: username})
+	}
+	return h.db.ReserveQuota(size, scopes...)
+}
+
+func (h *Handler) publishQuotaWarnings(warnings []store.QuotaWarning, actor string) {
+	if h.hub == nil {
+		return
+	}
+	for _, w := range warnings {
+		h.hub.Publish(events.Event{
+			Type:  "quota_warning",
+			Name:  w.ScopeType + ":" + w.ScopeValue,
+			Tag:   fmt.Sprintf("%d%%", w.Percent),
+			Actor: actor,
+		})
 	}
 }
 

@@ -43,16 +43,12 @@ jobs:
               "* "*|"- "*)
                 text="${line#??}"
                 text="${text//\"/\\\"}"
-                CHANGES="${CHANGES}- kind: changed
-  description: \"${text}\"
-"
+                CHANGES="${CHANGES}$(printf -- '- kind: changed\n  description: "%s"' "$text")"$'\n'
                 ;;
             esac
           done <<< "$NOTES"
           if [ -z "$CHANGES" ]; then
-            CHANGES="- kind: changed
-  description: \"Release ${GITHUB_REF_NAME}\"
-"
+            CHANGES=$(printf -- '- kind: changed\n  description: "Release %s"\n' "$GITHUB_REF_NAME")
           fi
           export CHANGES
           yq e -i '.annotations."artifacthub.io/changes" = strenv(CHANGES)' helm/dockyard/Chart.yaml

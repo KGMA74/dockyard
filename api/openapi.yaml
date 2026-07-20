@@ -28,6 +28,7 @@ tags:
   - name: webhooks
   - name: scan
   - name: signing
+  - name: quota
   - name: audit
   - name: system
 
@@ -622,7 +623,7 @@ paths:
                   description: HMAC-SHA256 signing secret for X-Dockyard-Signature.
                 events:
                   type: array
-                  items: { type: string, enum: [push, delete, retention, gc, scan, import] }
+                  items: { type: string, enum: [push, delete, retention, gc, scan, import, quota_warning] }
                 format: { type: string, enum: [generic, slack, discord] }
       responses:
         "201":
@@ -807,6 +808,79 @@ paths:
         "200": { $ref: "#/components/responses/Message" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/admin/quotas:
+    get:
+      tags: [quota]
+      summary: List configured byte quotas and current usage per scope (admin only)
+      responses:
+        "200":
+          description: Quotas and usage
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  quotas:
+                    type: array
+                    items: { $ref: "#/components/schemas/Quota" }
+                  usage:
+                    type: array
+                    items: { $ref: "#/components/schemas/QuotaUsage" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    put:
+      tags: [quota]
+      summary: Create or update a byte quota for a repo or user (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scope_type, scope_value, max_bytes]
+              properties:
+                scope_type: { type: string, enum: [repo, user] }
+                scope_value: { type: string }
+                max_bytes: { type: integer, format: int64 }
+                warn_percent: { type: integer, default: 90 }
+      responses:
+        "200":
+          description: Quota
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/Quota" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
+  /api/admin/quotas/{id}:
+    delete:
+      tags: [quota]
+      summary: Delete a quota (admin only)
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/admin/quotas/usage/reset:
+    post:
+      tags: [quota]
+      summary: Reset recorded usage for one scope (admin only)
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [scope_type, scope_value]
+              properties:
+                scope_type: { type: string, enum: [repo, user] }
+                scope_value: { type: string }
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   /api/admin/audit:
     get:
@@ -1091,7 +1165,7 @@ components:
         url: { type: string, format: uri }
         events:
           type: array
-          items: { type: string, enum: [push, delete, retention, gc, scan, import] }
+          items: { type: string, enum: [push, delete, retention, gc, scan, import, quota_warning] }
         format: { type: string, enum: [generic, slack, discord] }
         enabled: { type: boolean }
         created_at: { type: string, format: date-time }
@@ -1103,6 +1177,23 @@ components:
         repo_pattern: { type: string }
         required: { type: boolean }
         created_at: { type: string, format: date-time }
+
+    Quota:
+      type: object
+      properties:
+        id: { type: integer }
+        scope_type: { type: string, enum: [repo, user] }
+        scope_value: { type: string }
+        max_bytes: { type: integer, format: int64 }
+        warn_percent: { type: integer }
+        created_at: { type: string, format: date-time }
+
+    QuotaUsage:
+      type: object
+      properties:
+        scope_type: { type: string, enum: [repo, user] }
+        scope_value: { type: string }
+        bytes_used: { type: integer, format: int64 }
 
     ScanResult:
       type: object

@@ -70,7 +70,7 @@ async function req<T>(path: string, opts?: RequestInit, retried = false): Promis
   return res.json() as Promise<T>
 }
 
-export type RegistryEventType = 'push' | 'delete' | 'retention' | 'gc' | 'scan' | 'import'
+export type RegistryEventType = 'push' | 'delete' | 'retention' | 'gc' | 'scan' | 'import' | 'quota_warning'
 
 export interface RegistryEvent {
   type: RegistryEventType
@@ -97,6 +97,8 @@ export function formatEventMessage(event: RegistryEvent): string {
       return `Scan completed for ${ref}`
     case 'import':
       return `Import completed for ${event.name}`
+    case 'quota_warning':
+      return `Quota warning: ${event.name} at ${event.tag ?? 'threshold'} of its limit`
     default:
       return `${event.type}: ${ref}`
   }
@@ -514,6 +516,42 @@ export async function createSigningPolicy(repoPattern: string, required: boolean
 
 export async function deleteSigningPolicy(id: number): Promise<void> {
   return req(`/signing/policies/${id}`, { method: 'DELETE' })
+}
+
+export type QuotaScopeType = 'repo' | 'user'
+
+export interface Quota {
+  id: number
+  scope_type: QuotaScopeType
+  scope_value: string
+  max_bytes: number
+  warn_percent: number
+  created_at: string
+}
+
+export interface QuotaUsage {
+  scope_type: QuotaScopeType
+  scope_value: string
+  bytes_used: number
+}
+
+export async function listQuotas(): Promise<{ quotas: Quota[]; usage: QuotaUsage[] }> {
+  return req('/quotas')
+}
+
+export async function setQuota(scopeType: QuotaScopeType, scopeValue: string, maxBytes: number, warnPercent: number): Promise<Quota> {
+  return req('/quotas', {
+    method: 'PUT',
+    body: JSON.stringify({ scope_type: scopeType, scope_value: scopeValue, max_bytes: maxBytes, warn_percent: warnPercent }),
+  })
+}
+
+export async function deleteQuota(id: number): Promise<void> {
+  return req(`/quotas/${id}`, { method: 'DELETE' })
+}
+
+export async function resetQuotaUsage(scopeType: QuotaScopeType, scopeValue: string): Promise<void> {
+  return req('/quotas/usage/reset', { method: 'POST', body: JSON.stringify({ scope_type: scopeType, scope_value: scopeValue }) })
 }
 
 export interface StatsSample {

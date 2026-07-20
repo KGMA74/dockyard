@@ -51,7 +51,7 @@ func requireSignedServer(t *testing.T, priv *ecdsa.PrivateKey) *httptest.Server 
 		t.Fatal(err)
 	}
 	policy := cosign.NewPolicy(true, keys, nil) // required for every repo, no store = no overrides
-	srv := httptest.NewServer(New(backend, events.NewHub(), policy))
+	srv := httptest.NewServer(New(backend, events.NewHub(), policy, nil))
 	t.Cleanup(srv.Close)
 	return srv
 }

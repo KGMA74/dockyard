@@ -1227,7 +1227,7 @@ export interface paths {
                         url: string;
                         /** @description HMAC-SHA256 signing secret for X-Dockyard-Signature. */
                         secret?: string;
-                        events?: ("push" | "delete" | "retention" | "gc" | "scan" | "import")[];
+                        events?: ("push" | "delete" | "retention" | "gc" | "scan" | "import" | "quota_warning")[];
                         /** @enum {string} */
                         format?: "generic" | "slack" | "discord";
                     };
@@ -1639,6 +1639,150 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/quotas": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List configured byte quotas and current usage per scope (admin only) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Quotas and usage */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            quotas?: components["schemas"]["Quota"][];
+                            usage?: components["schemas"]["QuotaUsage"][];
+                        };
+                    };
+                };
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        /** Create or update a byte quota for a repo or user (admin only) */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        scope_type: "repo" | "user";
+                        scope_value: string;
+                        /** Format: int64 */
+                        max_bytes: number;
+                        /** @default 90 */
+                        warn_percent?: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Quota */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Quota"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/quotas/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Delete a quota (admin only) */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                200: components["responses"]["Message"];
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/quotas/usage/reset": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /** Reset recorded usage for one scope (admin only) */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @enum {string} */
+                        scope_type: "repo" | "user";
+                        scope_value: string;
+                    };
+                };
+            };
+            responses: {
+                200: components["responses"]["Message"];
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/audit": {
         parameters: {
             query?: never;
@@ -1985,7 +2129,7 @@ export interface components {
             id?: number;
             /** Format: uri */
             url?: string;
-            events?: ("push" | "delete" | "retention" | "gc" | "scan" | "import")[];
+            events?: ("push" | "delete" | "retention" | "gc" | "scan" | "import" | "quota_warning")[];
             /** @enum {string} */
             format?: "generic" | "slack" | "discord";
             enabled?: boolean;
@@ -1998,6 +2142,24 @@ export interface components {
             required?: boolean;
             /** Format: date-time */
             created_at?: string;
+        };
+        Quota: {
+            id?: number;
+            /** @enum {string} */
+            scope_type?: "repo" | "user";
+            scope_value?: string;
+            /** Format: int64 */
+            max_bytes?: number;
+            warn_percent?: number;
+            /** Format: date-time */
+            created_at?: string;
+        };
+        QuotaUsage: {
+            /** @enum {string} */
+            scope_type?: "repo" | "user";
+            scope_value?: string;
+            /** Format: int64 */
+            bytes_used?: number;
         };
         ScanResult: {
             id?: number;

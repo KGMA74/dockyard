@@ -12,6 +12,7 @@ import (
 	"dockyard/internal/audit"
 	"dockyard/internal/auth"
 	"dockyard/internal/cosign"
+	"dockyard/internal/quota"
 	"dockyard/internal/export"
 	"dockyard/internal/metrics"
 	"dockyard/internal/retention"
@@ -123,11 +124,11 @@ func (s *Server) RegisterRoutes() http.Handler {
 		}
 		v2h = ph
 	case modeMirror:
-		mirror = v2.NewMirror(s.backend, s.events, s.proxy, s.mirrorTagTTL, s.signingPolicy)
+		mirror = v2.NewMirror(s.backend, s.events, s.proxy, s.mirrorTagTTL, s.signingPolicy, s.store)
 		mirror.OnPull(store.NewPullTracker(s.store).Record)
 		v2h = mirror
 	default:
-		h := v2.New(s.backend, s.events, s.signingPolicy)
+		h := v2.New(s.backend, s.events, s.signingPolicy, s.store)
 		h.OnPull(store.NewPullTracker(s.store).Record)
 		v2h = h
 	}
@@ -303,6 +304,14 @@ func (s *Server) RegisterRoutes() http.Handler {
 	api.GET("/signing/policies", cosignHandler.List, auth.RequireAdmin)
 	api.POST("/signing/policies", cosignHandler.Create, auth.RequireAdmin)
 	api.DELETE("/signing/policies/:id", cosignHandler.Delete, auth.RequireAdmin)
+
+	// Byte quotas per repo/user + usage (admin only). Enforcement happens in
+	// internal/v2 (embedded/mirror modes only); this is just the policy CRUD.
+	quotaHandler := quota.NewHandler(s.store)
+	api.GET("/quotas", quotaHandler.List, auth.RequireAdmin)
+	api.PUT("/quotas", quotaHandler.Set, auth.RequireAdmin)
+	api.DELETE("/quotas/:id", quotaHandler.Delete, auth.RequireAdmin)
+	api.POST("/quotas/usage/reset", quotaHandler.ResetUsage, auth.RequireAdmin)
 
 	// SSE feed of registry pushes. Registered outside the /api/admin group
 	// because EventSource can't set an Authorization header — it authenticates

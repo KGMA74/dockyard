@@ -53,13 +53,14 @@
 | P7.5 — Helm HPA/PDB | #42 | ✅ fait | (ce commit) | `templates/hpa.yaml` (autoscaling/v2, `{{ fail }}` si `registry.storage.backend != s3` — PVC local RWO non partageable entre replicas), `templates/pdb.yaml` (minAvailable/maxUnavailable), `deployment.yaml` : `replicas` omis quand l'HPA est actif (sinon Helm et l'HPA se battent à chaque reconciliation) + sondes liveness/readiness configurables (`values.probes.*`), `ingress.yaml` : annotation `cert-manager.io/cluster-issuer` auto via `ingress.certManager.clusterIssuer` ; pas de `helm template` possible depuis cette machine (pas d'accès cluster) — à valider côté user |
 | P7.6 — Terraform + Artifact Hub | #43 | ✅ fait | (ce commit) | `terraform/` : module AWS+K8s (bucket S3 chiffré SSE-S3 + accès public bloqué + lifecycle multipart, IAM user scopé exactement au bucket, `helm_release` oci://ghcr.io/kgma74/charts/dockyard, `extra_helm_values` pour tout override non couvert) ; pas de `terraform init/apply` lancé (pas d'accès cloud) ; Artifact Hub : `Chart.yaml` enrichi (`category`, 3 `screenshots` sous `assets/screenshots/` — captures navigateur réelles), changelog auto-généré dans `helm-release.yml` depuis les notes de la release GitHub (`gh release view` → puces markdown → bloc `artifacthub.io/changes`, fallback générique si vide) |
 | P7.7 — Réplication | #44 | ⬜ à faire | | après P4.4 + P1.4 |
-| P7.8 — Quotas | #45 | ⬜ à faire | | après P1.2 + P3.2 |
+| P7.8 — Quotas | #45 | ✅ fait | (ce commit) | `internal/store/quotas.go` : tables `quotas`/`quota_usage` (migration 0008), `ReserveQuota` transactionnel (check + incrément atomiques multi-scopes, all-or-nothing — un scope bloqué n'enregistre l'usage d'aucun scope) ; usage = octets poussés cumulés (pas la taille dédupliquée sur disque), jamais décrémenté automatiquement (reset manuel) ; enforcement dans `internal/v2/handler.go` à la complétion d'upload (monolithique + chunked), embedded/mirror uniquement (proxy ne possède pas l'écriture storage) ; event `quota_warning` (SSE + webhooks) au franchissement du seuil d'alerte ; `internal/quota` : CRUD admin `/api/admin/quotas` (toujours actif, comme signing) ; UI `QuotasSection.tsx` dans Settings ; testé en navigateur réel (blocage 507, alerte à 54%, création/suppression) |
 | P7.9 — Hardening (fuzz/load) | #46 | ⬜ à faire | | |
 | P7.10 — zstd LayerBrowser | #47 | ✅ fait | `333ee7a` | klauspost/compress/zstd dans parseLayerEntries, test des 3 formats (plain/gzip/zstd) |
 
 ## Prochaine étape
 
-**Phases 1, 2, 4, 5 et 6 complètes** (reste P3.4 OTel, optionnel). P7.1, P7.2, P7.3, P7.5 et P7.6 faits.
+**Phases 1, 2, 4, 5 et 6 complètes** (reste P3.4 OTel, optionnel). P7.1, P7.2, P7.3, P7.5, P7.6 et
+P7.8 faits.
 Suite recommandée : **P7.4 — i18n FR/EN** (#41, gros chantier transversal — react-i18next +
 extraction de toutes les chaînes UI) ou **P7.7 — Réplication** (#44).
 

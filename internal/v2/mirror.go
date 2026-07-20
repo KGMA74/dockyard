@@ -13,6 +13,7 @@ import (
 	"dockyard/internal/events"
 	"dockyard/internal/registry"
 	"dockyard/internal/storage"
+	"dockyard/internal/store"
 )
 
 // Mirror is a pull-through cache: reads are served from local storage and
@@ -36,9 +37,9 @@ type Mirror struct {
 	misses     uint64
 }
 
-func NewMirror(backend storage.Backend, hub *events.Hub, client *registry.Client, ttl time.Duration, signing *cosign.Policy) *Mirror {
+func NewMirror(backend storage.Backend, hub *events.Hub, client *registry.Client, ttl time.Duration, signing *cosign.Policy, db *store.Store) *Mirror {
 	return &Mirror{
-		inner:      New(backend, hub, signing),
+		inner:      New(backend, hub, signing, db),
 		store:      backend,
 		client:     client,
 		hub:        hub,
