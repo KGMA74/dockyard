@@ -96,10 +96,21 @@ jobs:
         run: |
           docker pull --platform linux/amd64 localhost:5000/ci/multiarch-smoke:latest
           docker pull --platform linux/arm64 localhost:5000/ci/multiarch-smoke:latest
-          curl -sf -u admin:changeme123 \
+
+          HTTP_STATUS=$(curl -s -u admin:changeme123 -o body.json -w "%{http_code}" \
             "http://localhost:5000/v2/ci/multiarch-smoke/manifests/latest" \
-            -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json" \
-            | grep -q '"architecture":"arm64"'
+            -H "Accept: application/vnd.docker.distribution.manifest.list.v2+json, application/vnd.oci.image.index.v1+json")
+          echo "GET manifest list -> HTTP $HTTP_STATUS"
+          cat body.json
+          echo
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "expected HTTP 200, got $HTTP_STATUS" >&2
+            exit 1
+          fi
+          if ! grep -q '"architecture":"arm64"' body.json; then
+            echo "no arm64 platform entry found in the manifest list body above" >&2
+            exit 1
+          fi
 
   ui:
     runs-on: ubuntu-latest
