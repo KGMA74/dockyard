@@ -75,9 +75,60 @@ This does not delete the PVC created for local storage; remove it manually if yo
 | ------------------------- | --------------------------------------------------------------------------- | -------------- |
 | `auth.username`            | Admin UI/API username                                                       | `admin`       |
 | `auth.password`            | Admin UI/API password (only used on first install)                          | `changeme`    |
-| `auth.v2Enabled`           | Require Basic Auth on `/v2/*` (Docker push/pull)                             | `false`       |
+| `auth.v2Enabled`           | Require auth (Docker token auth + Basic fallback) on `/v2/*` (Docker push/pull) | `true`     |
+| `auth.v2AnonymousPull`     | Allow unauthenticated pulls while pushes still require login (public-read registry). Only relevant when `v2Enabled` is true | `false` |
 | `auth.jwtSecret`           | JWT signing secret — auto-generated on first install if left empty          | `""`           |
 | `auth.existingSecret`      | Name of an existing Secret holding `jwt-secret`/`auth-password` (and optionally S3 keys) | `""`           |
+
+### Signed push (cosign)
+
+| Name                        | Description                                                                          | Value  |
+| ----------------------------- | ----------------------------------------------------------------------------------------- | -------- |
+| `signing.enabled`              | Reject tag pushes without a valid cosign signature, verified against configured public keys. Signing itself always happens client-side (cosign CLI) — Dockyard never holds private keys, and does not support keyless (Fulcio/Rekor) verification | `false` |
+| `signing.publicKeysSecret`     | Name of an existing Secret whose keys (one or more `*.pem` files) get mounted read-only and scanned for public keys to verify against | `""` |
+
+### Vulnerability scanning (Trivy)
+
+| Name                        | Description                                                                          | Value      |
+| ----------------------------- | ----------------------------------------------------------------------------------------- | ------------ |
+| `scan.enabled`                 | Enable on-demand Trivy scans via the admin API                                            | `false`     |
+| `scan.trivyServerURL`          | External `trivy server --listen` to defer to (shared DB / air-gapped). Empty = standalone, Trivy manages its own DB under `cacheDir` (needs outbound internet on first scan) | `""` |
+| `scan.cacheDir`                | Trivy vulnerability DB cache path. Empty = computed automatically under `<registry.storage.path>/trivy-cache` | `""` |
+| `scan.timeout`                 | Per-scan timeout                                                                           | `5m`        |
+| `scan.maxReportBytes`          | Max stored report size                                                                     | `20971520`  |
+| `scan.dedupWindow`             | Re-use a recent scan result for the same digest instead of re-scanning                     | `1h`        |
+| `scan.insecureRegistry`        | Trivy pulls the scanned image from Dockyard's own `/v2` on localhost — plain HTTP unless `tls.mode` is set | `true` |
+
+### TLS
+
+| Name                      | Description                                                                         | Value    |
+| ---------------------------- | ------------------------------------------------------------------------------------- | ---------- |
+| `tls.mode`                    | `off` \| `static` \| `self-signed` \| `acme` — served natively by Dockyard             | `off`     |
+| `tls.domain`                  | Domain name (required for `acme`)                                                     | `""`       |
+| `tls.acmeEmail`                | ACME account email (`acme` mode only)                                                 | `""`       |
+| `tls.existingCertSecret`       | `kubernetes.io/tls` Secret (`tls.crt`/`tls.key`) mounted read-only (`static` mode)     | `""`       |
+
+### Autoscaling and availability
+
+| Name                                     | Description                                                                                     | Value  |
+| ------------------------------------------- | --------------------------------------------------------------------------------------------------- | -------- |
+| `autoscaling.enabled`                        | Horizontal Pod Autoscaler. Requires `registry.storage.backend: s3` — local storage uses a ReadWriteOnce PVC that only one pod can mount, so the chart refuses to render the HPA otherwise | `false` |
+| `autoscaling.minReplicas`                    | Minimum replicas                                                                                    | `2`     |
+| `autoscaling.maxReplicas`                    | Maximum replicas                                                                                    | `10`    |
+| `autoscaling.targetCPUUtilizationPercentage` | Target CPU utilization                                                                              | `75`    |
+| `autoscaling.targetMemoryUtilizationPercentage` | Target memory utilization. Empty = no memory-based scaling target                               | `""`    |
+| `podDisruptionBudget.enabled`                | Protect against voluntary disruptions (node drains, cluster upgrades) evicting too many replicas at once | `false` |
+| `podDisruptionBudget.minAvailable`           | Minimum available replicas (takes precedence over `maxUnavailable` if both are set)                 | `1`     |
+| `podDisruptionBudget.maxUnavailable`         | Maximum unavailable replicas                                                                        | `""`    |
+| `probes.liveness.*` / `probes.readiness.*`   | `initialDelaySeconds`/`periodSeconds`/`timeoutSeconds`/`failureThreshold` — tune for slower storage backends (S3) or resource-constrained nodes | see values.yaml |
+
+### Metrics
+
+| Name                             | Description                                                                 | Value   |
+| ----------------------------------- | -------------------------------------------------------------------------------- | --------- |
+| `metrics.serviceMonitor.enabled`     | Create a Prometheus Operator `ServiceMonitor` (requires the CRDs, e.g. `kube-prometheus-stack`). Dockyard itself serves `/metrics` whenever `METRICS_ENABLED=true` | `false` |
+| `metrics.serviceMonitor.interval`    | Scrape interval                                                                   | `30s`    |
+| `metrics.serviceMonitor.labels`      | Extra labels for Prometheus instance selection (e.g. `release: kps`)              | `{}`     |
 
 ### Ingress
 
@@ -86,6 +137,7 @@ This does not delete the PVC created for local storage; remove it manually if yo
 | `ingress.enabled`             | Enable ingress                                                                                       | `false`   |
 | `ingress.className`           | `traefik` (streams large blob uploads out of the box) or `nginx`                              | `""`       |
 | `ingress.annotations`         | Extra ingress annotations. For `nginx`, set `proxy-body-size: "0"` and `proxy-request-buffering: "off"` to allow large blob uploads | `{}`       |
+| `ingress.certManager.clusterIssuer` | Cluster-issuer name (e.g. `letsencrypt-prod`) — adds the `cert-manager.io/cluster-issuer` annotation automatically; requires cert-manager already installed. Leave empty to manage TLS yourself, or use `tls.mode: acme` instead (no ingress controller or cert-manager needed) | `""` |
 | `ingress.hosts`               | Ingress hosts/paths                                                                                   | see values.yaml |
 | `ingress.tls`                 | Ingress TLS configuration                                                                             | `[]`       |
 
@@ -99,7 +151,9 @@ This does not delete the PVC created for local storage; remove it manually if yo
 | `persistence.size`                | PVC size                                    | `10Gi`         |
 | `persistence.existingClaim`       | Use an existing PVC instead of creating one | `""`           |
 
-See [`values.yaml`](./values.yaml) for the complete list of configurable parameters, including `replicaCount`, `resources`, `podAnnotations`, `securityContext`, `nodeSelector`, `tolerations` and `affinity`.
+See [`values.yaml`](./values.yaml) for the complete list of configurable parameters, including `replicaCount`, `resources`, `podAnnotations`, `securityContext`, `nodeSelector`, `tolerations`, `affinity` and `serviceAccount.*`.
+
+Byte quotas (per-repo/per-user) and push-based replication to other registries are configured at runtime through the admin API/UI (Settings), not through Helm values — there is nothing to set here for those.
 
 ## Large blob uploads behind an ingress
 
