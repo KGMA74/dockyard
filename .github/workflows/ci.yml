@@ -107,7 +107,7 @@ jobs:
             echo "expected HTTP 200, got $HTTP_STATUS" >&2
             exit 1
           fi
-          if ! grep -q '"architecture":"arm64"' body.json; then
+          if ! grep -q '"architecture":[[:space:]]*"arm64"' body.json; then
             echo "no arm64 platform entry found in the manifest list body above" >&2
             exit 1
           fi
