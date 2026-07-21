@@ -79,7 +79,10 @@ jobs:
 
       - name: Build and push a multi-arch image (linux/amd64 + linux/arm64)
         run: |
-          docker buildx create --use
+          # --driver-opt network=host: the docker-container driver otherwise
+          # runs BuildKit in its own container on the default bridge network,
+          # where "localhost:5000" doesn't resolve to the runner's dockyard.
+          docker buildx create --use --driver-opt network=host
           cat > Dockerfile.multiarch-smoke <<'EOF'
           FROM alpine:3.20
           RUN echo "dockyard multi-arch CI smoke test" > /marker.txt
