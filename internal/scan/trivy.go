@@ -113,8 +113,12 @@ func buildTrivyArgs(server, cacheDir, imageRef string, insecure bool) []string {
 func runTrivy(ctx context.Context, bin, server, cacheDir, imageRef, user, pass string, insecure bool, maxBytes int64) ([]byte, error) {
 	args := buildTrivyArgs(server, cacheDir, imageRef, insecure)
 	cmd := exec.CommandContext(ctx, bin, args...) //nolint:gosec // bin/server/imageRef are operator/config-controlled, not end-user input
+	// TMPDIR: the final image runs FROM scratch, which has no /tmp — trivy's
+	// own DB download and layer extraction need a writable temp dir, so point
+	// it at cacheDir (already created by the server at startup).
+	cmd.Env = append(cmd.Environ(), "TMPDIR="+cacheDir)
 	if user != "" {
-		cmd.Env = append(cmd.Environ(), "DOCKER_USERNAME="+user, "DOCKER_PASSWORD="+pass)
+		cmd.Env = append(cmd.Env, "DOCKER_USERNAME="+user, "DOCKER_PASSWORD="+pass)
 	}
 	return runTrivyWithCmd(cmd, maxBytes)
 }
