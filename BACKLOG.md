@@ -29,7 +29,7 @@
 | P3.1 — /metrics Prometheus | #18 | ✅ fait | `048b695` | internal/metrics (registre par défaut, sources swappables anti-double-register), HTTP par route normalisée (garde anti-cardinalité testée), jauges storage, compteurs GC (scheduler+admin), hits/misses mirror, échecs auth ; METRICS_ENABLED=true par défaut |
 | P3.2 — /health enrichi | #19 | ✅ fait | `5d16f5c` | probe storage (latence, degraded), stats cachées 30 s (les jauges Prometheus ne full-listent plus S3 à chaque scrape), free_bytes disque en local (win+unix) |
 | P3.3 — Dashboard insights | #20 | ✅ fait | `567d13f` | migration 0005 stats_history (échantillon 6 h, purge 90 j), GET /api/admin/insights (historique + top repos par taille avec dédup de digests), InsightsSection dans StorageTab (barres top repos + table de croissance) |
-| P3.4 — OpenTelemetry | #21 | ⬜ à faire | | optionnel |
+| P3.4 — OpenTelemetry | #21 | ✅ fait | `7b0dc43` | otelecho (root span par requête, admin+v2), spans enfants sur GetBlob/PutBlob/CommitUpload/Get·Put·DeleteManifest ; activé uniquement par OTEL_EXPORTER_OTLP_ENDPOINT, sinon tracer no-op donc zéro overhead ; Helm tracing.otlpEndpoint. Bonus (`a58a0be`) : bug trouvé en testant le scan Trivy via l'image Docker réelle — TMPDIR jamais positionné, `/tmp` absent sur `scratch` → le téléchargement de la DB trivy échouait toujours ; corrigé + scan e2e vérifié (alpine:3.19, 0 critical/2 high/5 medium/3 low) |
 | P3.5 — Helm ServiceMonitor | #22 | ✅ fait | `2707507` | serviceaccount.yaml (create/name/annotations) + servicemonitor.yaml (gated metrics.serviceMonitor.enabled, scheme https si tls) — `helm template` à valider côté user |
 | P4.1 — Pull tracking | #23 | ✅ fait | `167e77d` | migration 0002 last_pulls (repo, reference, last_pulled_at, pull_count), PullTracker async (batch 3 s/256, drop si saturé), hook OnPull sur GET manifest (embedded + mirror) |
 | P4.2 — Moteur rétention | #24 | ✅ fait | `49b4ef2` | internal/retention : keep-N, unpulled_days (pulls > push), keep_patterns globs, protected_tags, garde digest partagé (skip + raison), CRUD + /retention/run?dryRun, planifié avant le GC quotidien |
@@ -59,10 +59,9 @@
 
 ## Prochaine étape
 
-**Phases 1, 2, 4, 5 et 6 complètes** (reste P3.4 OTel, optionnel). P7.1, P7.2, P7.3, P7.5, P7.6,
-P7.7, P7.8 et P7.9 faits — seule **P7.4 — i18n FR/EN** (#41) reste ouverte dans la phase 7.
-Suite recommandée : **P7.4** (gros chantier transversal — react-i18next + extraction de toutes les
-chaînes UI) ou **P3.4 — Tracing OpenTelemetry** (#21, optionnel, le seul autre ticket ouvert).
+**Toutes les phases sont complètes sauf P7.4.** Seule **P7.4 — i18n FR/EN** (#41) reste ouverte
+sur les 47 issues — gros chantier transversal (react-i18next + extraction de toutes les chaînes
+UI dans ui/src/, ~20 composants).
 
 ## Notes de reprise
 
