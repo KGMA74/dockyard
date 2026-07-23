@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ArrowRight } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { getTagDiff, TagDiff as TagDiffResult } from '../api'
 import { Badge } from '@/components/ui/badge'
 import {
@@ -18,6 +19,7 @@ interface Props {
 }
 
 export default function TagDiff({ imageName, tagA, tagB, onClose }: Props) {
+  const { t } = useTranslation()
   const [diff, setDiff] = useState<TagDiffResult | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -28,10 +30,10 @@ export default function TagDiff({ imageName, tagA, tagB, onClose }: Props) {
     setError('')
     getTagDiff(imageName, tagA, tagB)
       .then(d => { if (!cancelled) setDiff(d) })
-      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load diff') })
+      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : t('tagDiff.loadFailed')) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [imageName, tagA, tagB])
+  }, [imageName, tagA, tagB, t])
 
   return (
     <Dialog open onOpenChange={open => { if (!open) onClose() }}>
@@ -44,28 +46,28 @@ export default function TagDiff({ imageName, tagA, tagB, onClose }: Props) {
         </DialogHeader>
 
         {loading ? (
-          <p className="text-sm text-muted-foreground py-10 text-center">Loading…</p>
+          <p className="text-sm text-muted-foreground py-10 text-center">{t('common.loading')}</p>
         ) : error ? (
           <p className="text-sm text-destructive py-10 text-center">{error}</p>
         ) : diff ? (
           <div className="flex-1 min-h-0 overflow-y-auto space-y-5">
             <div className="grid grid-cols-2 gap-3">
-              <ColumnField label="Size" value={diff.a.total_size_human} />
-              <ColumnField label="Size" value={diff.b.total_size_human} />
-              <ColumnField label="Architecture" value={diff.a.architecture} diff={diff.a.architecture !== diff.b.architecture} />
-              <ColumnField label="Architecture" value={diff.b.architecture} diff={diff.a.architecture !== diff.b.architecture} />
-              <ColumnField label="OS" value={diff.a.os} diff={diff.a.os !== diff.b.os} />
-              <ColumnField label="OS" value={diff.b.os} diff={diff.a.os !== diff.b.os} />
+              <ColumnField label={t('tagDiff.size')} value={diff.a.total_size_human} />
+              <ColumnField label={t('tagDiff.size')} value={diff.b.total_size_human} />
+              <ColumnField label={t('tagDiff.architecture')} value={diff.a.architecture} diff={diff.a.architecture !== diff.b.architecture} />
+              <ColumnField label={t('tagDiff.architecture')} value={diff.b.architecture} diff={diff.a.architecture !== diff.b.architecture} />
+              <ColumnField label={t('tagDiff.os')} value={diff.a.os} diff={diff.a.os !== diff.b.os} />
+              <ColumnField label={t('tagDiff.os')} value={diff.b.os} diff={diff.a.os !== diff.b.os} />
               {diff.a.signed !== undefined && (
                 <>
-                  <ColumnField label="Signed" value={diff.a.signed ? 'yes' : 'no'} />
-                  <ColumnField label="Signed" value={diff.b.signed ? 'yes' : 'no'} />
+                  <ColumnField label={t('tagDiff.signed')} value={diff.a.signed ? t('common.yes') : t('common.no')} />
+                  <ColumnField label={t('tagDiff.signed')} value={diff.b.signed ? t('common.yes') : t('common.no')} />
                 </>
               )}
             </div>
 
             <div>
-              <p className="text-xs text-muted-foreground font-medium mb-2">Size delta</p>
+              <p className="text-xs text-muted-foreground font-medium mb-2">{t('tagDiff.sizeDelta')}</p>
               <Badge
                 variant="outline"
                 className={
@@ -77,24 +79,29 @@ export default function TagDiff({ imageName, tagA, tagB, onClose }: Props) {
                 }
               >
                 {diff.size_delta_bytes > 0 ? '+' : ''}
-                {diff.size_delta_bytes.toLocaleString()} bytes
+                {t('tagDiff.bytes', { count: diff.size_delta_bytes.toLocaleString() })}
               </Badge>
             </div>
 
             <div>
               <p className="text-xs text-muted-foreground font-medium mb-2">
-                Layers — {diff.layers_common.length} shared, {diff.layers_only_a.length} only in {tagA},{' '}
-                {diff.layers_only_b.length} only in {tagB}
+                {t('tagDiff.layersSummary', {
+                  shared: diff.layers_common.length,
+                  onlyACount: diff.layers_only_a.length,
+                  tagA,
+                  onlyBCount: diff.layers_only_b.length,
+                  tagB,
+                })}
               </p>
               {diff.layers_only_a.length === 0 && diff.layers_only_b.length === 0 ? (
-                <p className="text-xs text-muted-foreground/70">All layers are identical between the two tags.</p>
+                <p className="text-xs text-muted-foreground/70">{t('tagDiff.identical')}</p>
               ) : (
                 <div className="space-y-1.5">
                   {diff.layers_only_a.map(d => (
-                    <LayerRow key={`a-${d}`} digest={d} label={`only in ${tagA}`} tone="destructive" />
+                    <LayerRow key={`a-${d}`} digest={d} label={t('tagDiff.onlyIn', { tag: tagA })} tone="destructive" />
                   ))}
                   {diff.layers_only_b.map(d => (
-                    <LayerRow key={`b-${d}`} digest={d} label={`only in ${tagB}`} tone="success" />
+                    <LayerRow key={`b-${d}`} digest={d} label={t('tagDiff.onlyIn', { tag: tagB })} tone="success" />
                   ))}
                 </div>
               )}

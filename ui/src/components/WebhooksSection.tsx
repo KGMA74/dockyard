@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Plus, Send, Trash2, Webhook, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { createWebhook, deleteWebhook, listWebhooks, testWebhook, WebhookInfo } from '../api'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -10,6 +11,7 @@ const EVENT_TYPES = ['push', 'delete', 'retention', 'gc', 'scan', 'import', 'quo
 
 // WebhooksSection lives in the Settings tab; hidden for non-admins (403).
 export default function WebhooksSection() {
+  const { t } = useTranslation()
   const [hooks, setHooks] = useState<WebhookInfo[] | null>(null)
   const [showCreate, setShowCreate] = useState(false)
 
@@ -26,19 +28,19 @@ export default function WebhooksSection() {
   async function handleDelete(id: number) {
     try {
       await deleteWebhook(id)
-      toast.success('Webhook deleted')
+      toast.success(t('webhooks.deleted'))
       load()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Delete failed')
+      toast.error(err instanceof Error ? err.message : t('webhooks.deleteFailed'))
     }
   }
 
   async function handleTest(id: number) {
     try {
       await testWebhook(id)
-      toast.success('Test event delivered')
+      toast.success(t('webhooks.testDelivered'))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Test delivery failed')
+      toast.error(err instanceof Error ? err.message : t('webhooks.testFailed'))
     }
   }
 
@@ -46,11 +48,11 @@ export default function WebhooksSection() {
     <div>
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest">
-          Webhooks
+          {t('webhooks.title')}
         </h2>
         <Button variant="outline" size="sm" onClick={() => setShowCreate(v => !v)}>
           {showCreate ? <X /> : <Plus />}
-          {showCreate ? 'Cancel' : 'New webhook'}
+          {showCreate ? t('common.cancel') : t('webhooks.newWebhook')}
         </Button>
       </div>
 
@@ -69,13 +71,12 @@ export default function WebhooksSection() {
             <Webhook className="size-4 text-muted-foreground" strokeWidth={1.5} />
           </div>
           <p className="text-xs text-muted-foreground">
-            HTTP notifications on registry events, retried with backoff. Payloads are signed
-            with <span className="font-mono">X-Dockyard-Signature</span> when a secret is set.
+            {t('webhooks.descriptionPrefix')} <span className="font-mono">X-Dockyard-Signature</span> {t('webhooks.descriptionSuffix')}
           </p>
         </div>
 
         {hooks.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No webhook configured.</p>
+          <p className="text-xs text-muted-foreground">{t('webhooks.noWebhook')}</p>
         ) : (
           <div className="space-y-2">
             {hooks.map(h => (
@@ -85,10 +86,10 @@ export default function WebhooksSection() {
                 {h.format !== 'generic' && (
                   <Badge variant="outline" className="text-muted-foreground capitalize">{h.format}</Badge>
                 )}
-                <Button variant="ghost" size="icon-sm" onClick={() => handleTest(h.id)} title="Send a test event">
+                <Button variant="ghost" size="icon-sm" onClick={() => handleTest(h.id)} title={t('webhooks.sendTest')}>
                   <Send className="size-4" />
                 </Button>
-                <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(h.id)} title="Delete webhook">
+                <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(h.id)} title={t('webhooks.deleteWebhook')}>
                   <Trash2 className="size-4" />
                 </Button>
               </div>
@@ -101,6 +102,7 @@ export default function WebhooksSection() {
 }
 
 function CreateWebhookForm({ onCreated }: { onCreated: () => void }) {
+  const { t } = useTranslation()
   const [url, setUrl] = useState('')
   const [secret, setSecret] = useState('')
   const [format, setFormat] = useState('generic')
@@ -116,10 +118,10 @@ function CreateWebhookForm({ onCreated }: { onCreated: () => void }) {
     setBusy(true)
     try {
       await createWebhook({ url, secret, events: selected, format })
-      toast.success('Webhook created')
+      toast.success(t('webhooks.created'))
       onCreated()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Creation failed')
+      toast.error(err instanceof Error ? err.message : t('webhooks.createFailed'))
     } finally {
       setBusy(false)
     }
@@ -130,9 +132,9 @@ function CreateWebhookForm({ onCreated }: { onCreated: () => void }) {
     <Card className="p-4 rounded-xl mb-3">
       <form onSubmit={submit} className="grid gap-2 sm:grid-cols-2">
         <input className={inputClass} type="url" placeholder="https://hooks.example.com/…" value={url} onChange={e => setUrl(e.target.value)} required />
-        <input className={inputClass} placeholder="Signing secret (optional)" value={secret} onChange={e => setSecret(e.target.value)} />
+        <input className={inputClass} placeholder={t('webhooks.secretPlaceholder')} value={secret} onChange={e => setSecret(e.target.value)} />
         <select className={inputClass} value={format} onChange={e => setFormat(e.target.value)}>
-          <option value="generic">Generic JSON</option>
+          <option value="generic">{t('webhooks.formatGeneric')}</option>
           <option value="slack">Slack</option>
           <option value="discord">Discord</option>
         </select>
@@ -146,7 +148,7 @@ function CreateWebhookForm({ onCreated }: { onCreated: () => void }) {
         </div>
         <Button type="submit" size="sm" disabled={busy || selected.length === 0} className="justify-self-start">
           <Plus />
-          Create webhook
+          {t('webhooks.createWebhook')}
         </Button>
       </form>
     </Card>

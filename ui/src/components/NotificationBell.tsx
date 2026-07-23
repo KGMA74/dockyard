@@ -1,4 +1,5 @@
 import { Bell } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { formatEventMessage, RegistryEvent } from '../api'
 import { relativeTime } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -23,10 +24,11 @@ interface Props {
 // kept here as a short history so a completion isn't missed if the toast
 // wasn't seen.
 export default function NotificationBell({ items, unreadCount, open, onOpenChange }: Props) {
+  const { t } = useTranslation()
   return (
     <Popover open={open} onOpenChange={onOpenChange}>
       <PopoverTrigger asChild>
-        <Button variant="ghost" size="icon-sm" className="relative text-muted-foreground" title="Recent activity">
+        <Button variant="ghost" size="icon-sm" className="relative text-muted-foreground" title={t('notificationBell.title')}>
           <Bell strokeWidth={1.5} />
           {unreadCount > 0 && (
             <Badge
@@ -40,10 +42,10 @@ export default function NotificationBell({ items, unreadCount, open, onOpenChang
       </PopoverTrigger>
       <PopoverContent align="end" className="max-h-96 overflow-y-auto">
         <div className="px-3 py-2.5 border-b">
-          <p className="text-xs font-medium text-muted-foreground uppercase tracking-widest">Activity</p>
+          <p className="text-xs font-medium text-muted-foreground uppercase tracking-widest">{t('notificationBell.activity')}</p>
         </div>
         {items.length === 0 ? (
-          <p className="px-3 py-6 text-xs text-muted-foreground text-center">Nothing yet this session.</p>
+          <p className="px-3 py-6 text-xs text-muted-foreground text-center">{t('notificationBell.empty')}</p>
         ) : (
           <div className="divide-y">
             {items.map(item => (

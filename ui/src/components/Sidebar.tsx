@@ -1,6 +1,8 @@
 import { Box, HardDrive, KeyRound, LogOut, Settings, Users } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { getRole } from '../api'
 import { ThemeSwitcher } from '../theme'
+import { LanguageSwitcher } from '../i18nSwitcher'
 import NotificationBell, { NotificationItem } from './NotificationBell'
 import { Button } from '@/components/ui/button'
 
@@ -17,11 +19,11 @@ interface Props {
   onNotifOpenChange: (open: boolean) => void
 }
 
-const navItems: { tab: Tab; label: string; icon: typeof Box; adminOnly?: boolean }[] = [
-  { tab: 'images', label: 'Images', icon: Box },
-  { tab: 'storage', label: 'Storage', icon: HardDrive },
-  { tab: 'users', label: 'Users', icon: Users, adminOnly: true },
-  { tab: 'settings', label: 'Settings', icon: Settings },
+const navItems: { tab: Tab; labelKey: string; icon: typeof Box; adminOnly?: boolean }[] = [
+  { tab: 'images', labelKey: 'sidebar.images', icon: Box },
+  { tab: 'storage', labelKey: 'sidebar.storage', icon: HardDrive },
+  { tab: 'users', labelKey: 'sidebar.users', icon: Users, adminOnly: true },
+  { tab: 'settings', labelKey: 'sidebar.settings', icon: Settings },
 ]
 
 export default function Sidebar({
@@ -34,6 +36,7 @@ export default function Sidebar({
   notifOpen,
   onNotifOpenChange,
 }: Props) {
+  const { t } = useTranslation()
   const isAdmin = getRole() === 'admin'
   return (
     <aside className="w-56 shrink-0 h-screen sticky top-0 border-r bg-card flex flex-col">
@@ -60,14 +63,15 @@ export default function Sidebar({
             }`}
           >
             <item.icon className="size-4" strokeWidth={1.5} />
-            {item.label}
+            {t(item.labelKey)}
           </button>
         ))}
       </nav>
 
       <div className="px-3 py-4 border-t space-y-1">
-        <div className="px-3 pb-2">
+        <div className="px-3 pb-2 space-y-1.5">
           <ThemeSwitcher />
+          <LanguageSwitcher />
         </div>
         <Button
           variant="ghost"
@@ -75,7 +79,7 @@ export default function Sidebar({
           className="w-full justify-start gap-2.5 px-3 text-muted-foreground font-normal"
         >
           <KeyRound strokeWidth={1.5} />
-          Change password
+          {t('sidebar.changePassword')}
         </Button>
         <Button
           variant="ghost"
@@ -83,7 +87,7 @@ export default function Sidebar({
           className="w-full justify-start gap-2.5 px-3 text-muted-foreground font-normal"
         >
           <LogOut strokeWidth={1.5} />
-          Sign out
+          {t('sidebar.signOut')}
         </Button>
       </div>
     </aside>

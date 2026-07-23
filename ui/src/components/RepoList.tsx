@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react'
 import { toast } from 'sonner'
 import { Box, ChevronDown, Copy, Check, GitCompare, Info, Trash2 } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { getTags, deleteManifest, deleteRepository, TagInfo, RepoSummary } from '../api'
 import DeleteModal from './DeleteModal'
 import ImageDetailsPanel from './ImageDetailsPanel'
@@ -67,6 +68,7 @@ function RepoCard({
   onRefresh: () => void
   onShowDetails: (tag: TagInfo) => void
 }) {
+  const { t } = useTranslation()
   const [open, setOpen] = useState(false)
   const [tags, setTags] = useState<TagInfo[]>([])
   const [loadingTags, setLoadingTags] = useState(false)
@@ -102,14 +104,14 @@ function RepoCard({
     await deleteManifest(repo.name, tag.digest)
     setTags(ts => ts.filter(t => t.digest !== tag.digest))
     setToDelete(null)
-    toast.success(`Deleted ${repo.name}:${tag.tag}`)
+    toast.success(t('repoList.deletedTag', { ref: `${repo.name}:${tag.tag}` }))
     onRefresh()
   }
 
   async function handleDeleteRepo() {
     await deleteRepository(repo.name)
     setDeleteRepo(false)
-    toast.success(`Deleted repository ${repo.name}`)
+    toast.success(t('repoList.deletedRepo', { name: repo.name }))
     onRefresh()
   }
 
@@ -125,11 +127,11 @@ function RepoCard({
               <Box className="size-4 text-muted-foreground/60 shrink-0" strokeWidth={1.5} />
               <span className="font-mono text-sm truncate">{repo.name}</span>
               <Badge variant="secondary" className="shrink-0 rounded-full text-muted-foreground">
-                {repo.total} {repo.total === 1 ? 'tag' : 'tags'}
+                {t('repoList.tagCount', { count: repo.total })}
               </Badge>
               {repo.last_pushed && (
                 <span className="shrink-0 text-xs text-muted-foreground/60">
-                  pushed {relativeTime(repo.last_pushed)}
+                  {t('repoList.pushedAt', { time: relativeTime(repo.last_pushed) })}
                 </span>
               )}
             </div>
@@ -141,7 +143,7 @@ function RepoCard({
             variant="ghost"
             size="icon-sm"
             onClick={() => setDeleteRepo(true)}
-            title="Delete repository"
+            title={t('repoList.deleteRepository')}
             className="shrink-0 mr-3 text-muted-foreground/40 hover:text-destructive hover:bg-destructive/10 transition-colors"
           >
             <Trash2 className="size-3.5" strokeWidth={1.5} />
@@ -151,27 +153,27 @@ function RepoCard({
         {open && (
           <div className="border-t">
             {loadingTags ? (
-              <p className="px-4 py-3 text-sm text-muted-foreground">Loading…</p>
+              <p className="px-4 py-3 text-sm text-muted-foreground">{t('common.loading')}</p>
             ) : tags.length === 0 ? (
-              <p className="px-4 py-3 text-sm text-muted-foreground">No tags found</p>
+              <p className="px-4 py-3 text-sm text-muted-foreground">{t('repoList.noTags')}</p>
             ) : (
               <>
                 {selected.length > 0 && (
                   <div className="flex items-center justify-between gap-3 px-4 py-2 bg-muted/50 border-b text-xs">
                     <span className="text-muted-foreground">
                       {selected.length === 1
-                        ? `${selected[0].tag} selected — pick one more tag to compare`
-                        : `Comparing ${selected[0].tag} and ${selected[1].tag}`}
+                        ? t('repoList.oneSelected', { tag: selected[0].tag })
+                        : t('repoList.comparing', { tagA: selected[0].tag, tagB: selected[1].tag })}
                     </span>
                     <div className="flex items-center gap-2 shrink-0">
                       {selected.length === 2 && (
                         <Button variant="outline" size="sm" onClick={() => setDiffing(true)}>
                           <GitCompare />
-                          Compare
+                          {t('repoList.compare')}
                         </Button>
                       )}
                       <Button variant="ghost" size="sm" onClick={() => setSelected([])}>
-                        Clear
+                        {t('repoList.clear')}
                       </Button>
                     </div>
                   </div>
@@ -180,10 +182,10 @@ function RepoCard({
                   <TableHeader>
                     <TableRow>
                       <TableHead className="px-4 w-10" />
-                      <TableHead className="px-4 text-xs">Tag</TableHead>
-                      <TableHead className="px-4 text-xs hidden sm:table-cell">Digest</TableHead>
-                      <TableHead className="px-4 text-xs hidden md:table-cell">Pull</TableHead>
-                      <TableHead className="px-4 text-xs hidden lg:table-cell">Pushed</TableHead>
+                      <TableHead className="px-4 text-xs">{t('denseRepoView.tag')}</TableHead>
+                      <TableHead className="px-4 text-xs hidden sm:table-cell">{t('denseRepoView.digest')}</TableHead>
+                      <TableHead className="px-4 text-xs hidden md:table-cell">{t('repoList.pull')}</TableHead>
+                      <TableHead className="px-4 text-xs hidden lg:table-cell">{t('denseRepoView.pushed')}</TableHead>
                       <TableHead className="px-4 w-16" />
                     </TableRow>
                   </TableHeader>
@@ -218,15 +220,15 @@ function RepoCard({
 
       {toDelete && (
         <DeleteModal
-          title="Delete tag"
+          title={t('repoList.deleteTagTitle')}
           resourceName={`${repo.name}:${toDelete.tag}`}
           description={
             <>
-              This removes the manifest for{' '}
+              {t('repoList.deleteTagDescriptionPrefix')}{' '}
               <span className="font-mono text-foreground text-xs">
                 {repo.name}:{toDelete.tag}
               </span>
-              . Unreferenced blobs are freed on the next GC run.
+              {t('repoList.deleteTagDescriptionSuffix')}
             </>
           }
           detail={toDelete.digest}
@@ -237,15 +239,14 @@ function RepoCard({
 
       {deleteRepo && (
         <DeleteModal
-          title="Delete repository"
+          title={t('repoList.deleteRepoTitle')}
           resourceName={repo.name}
-          confirmLabel="Delete repository"
+          confirmLabel={t('repoList.deleteRepository')}
           description={
             <>
-              This removes{' '}
+              {t('repoList.deleteRepoDescriptionPrefix')}{' '}
               <span className="font-mono text-foreground text-xs">{repo.name}</span>{' '}
-              and all its {repo.total} {repo.total === 1 ? 'tag' : 'tags'}. Unreferenced blobs are
-              freed on the next GC run. This cannot be undone.
+              {t('repoList.deleteRepoDescriptionSuffix', { count: repo.total })}
             </>
           }
           onConfirm={handleDeleteRepo}
@@ -271,6 +272,7 @@ function TagRow({
   onDelete: () => void
   onShowDetails: () => void
 }) {
+  const { t } = useTranslation()
   const [copiedDigest, setCopiedDigest] = useState(false)
   const [copiedPull, setCopiedPull] = useState(false)
 
@@ -285,9 +287,9 @@ function TagRow({
   const copyPull = useCallback(() => {
     navigator.clipboard.writeText(pullCmd)
     setCopiedPull(true)
-    toast.info('Pull command copied')
+    toast.info(t('repoList.pullCopied'))
     setTimeout(() => setCopiedPull(false), 1500)
-  }, [pullCmd])
+  }, [pullCmd, t])
 
   return (
     <TableRow className="group/row">
@@ -296,7 +298,7 @@ function TagRow({
           type="checkbox"
           checked={selected}
           onChange={onToggleSelect}
-          title="Select for diff"
+          title={t('repoList.selectForDiff')}
           className="size-3.5 cursor-pointer align-middle"
         />
       </TableCell>
@@ -310,7 +312,7 @@ function TagRow({
           title={tag.digest}
           className="group/digest flex items-center gap-1.5 font-mono text-xs text-muted-foreground/70 hover:text-foreground transition-colors"
         >
-          <span>{copiedDigest ? 'Copied!' : `${tag.digest.slice(0, 7)}…${tag.digest.slice(-6)}`}</span>
+          <span>{copiedDigest ? t('repoList.copied') : `${tag.digest.slice(0, 7)}…${tag.digest.slice(-6)}`}</span>
           {copiedDigest
             ? <Check className="size-3 text-emerald-500" />
             : <Copy className="size-3 opacity-0 group-hover/digest:opacity-100 transition-opacity" />}
@@ -323,7 +325,7 @@ function TagRow({
           title={pullCmd}
           className="group/pull flex items-center gap-1.5 font-mono text-xs text-muted-foreground/70 hover:text-foreground transition-colors max-w-55"
         >
-          <span className="truncate">{copiedPull ? 'Copied!' : pullCmd}</span>
+          <span className="truncate">{copiedPull ? t('repoList.copied') : pullCmd}</span>
           {copiedPull
             ? <Check className="size-3 shrink-0 text-emerald-500" />
             : <Copy className="size-3 shrink-0 opacity-0 group-hover/pull:opacity-100 transition-opacity" />}
@@ -342,7 +344,7 @@ function TagRow({
             variant="ghost"
             size="icon-xs"
             onClick={onShowDetails}
-            title="View details"
+            title={t('denseRepoView.viewDetails')}
             className="text-muted-foreground/60 hover:text-blue-500 dark:hover:text-blue-400"
           >
             <Info strokeWidth={1.5} />
@@ -351,7 +353,7 @@ function TagRow({
             variant="ghost"
             size="icon-xs"
             onClick={onDelete}
-            title="Delete tag"
+            title={t('repoList.deleteTag')}
             className="text-muted-foreground/60 hover:text-destructive"
           >
             <Trash2 strokeWidth={1.5} />

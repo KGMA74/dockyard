@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { TriangleAlert } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import {
@@ -26,15 +27,17 @@ export default function DeleteModal({
   resourceName,
   description,
   detail,
-  confirmLabel = 'Delete',
+  confirmLabel,
   onConfirm,
   onCancel,
 }: Props) {
+  const { t } = useTranslation()
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
   const [confirmText, setConfirmText] = useState('')
 
   const matches = confirmText === resourceName
+  const resolvedConfirmLabel = confirmLabel ?? t('common.delete')
 
   async function handleConfirm() {
     if (!matches) return
@@ -43,7 +46,7 @@ export default function DeleteModal({
     try {
       await onConfirm()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Delete failed')
+      setError(err instanceof Error ? err.message : t('deleteModal.failed'))
       setLoading(false)
     }
   }
@@ -71,7 +74,9 @@ export default function DeleteModal({
 
         <label className="block">
           <span className="text-xs text-muted-foreground">
-            Type <span className="font-mono text-foreground">{resourceName}</span> to confirm
+            {t('deleteModal.typePrefix')}{' '}
+            <span className="font-mono text-foreground">{resourceName}</span>
+            {' '}{t('deleteModal.typeSuffix')}
           </span>
           <Input
             type="text"
@@ -91,14 +96,14 @@ export default function DeleteModal({
 
         <DialogFooter>
           <Button variant="ghost" onClick={onCancel} disabled={loading}>
-            Cancel
+            {t('common.cancel')}
           </Button>
           <Button
             onClick={handleConfirm}
             disabled={loading || !matches}
             className="bg-destructive text-white hover:bg-destructive/90"
           >
-            {loading ? 'Deleting…' : confirmLabel}
+            {loading ? t('common.deleting') : resolvedConfirmLabel}
           </Button>
         </DialogFooter>
       </DialogContent>

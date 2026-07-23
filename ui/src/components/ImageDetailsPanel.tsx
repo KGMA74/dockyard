@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Layers as LayersIcon, FolderOpen, ShieldAlert } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { getManifestDetails, listScans, triggerScan, ManifestDetails, ScanResult, TagInfo } from '../api'
 import LayerBrowser from './LayerBrowser'
 import { ScanStatusBadge, SeverityBadge } from './ScanBadges'
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
+  const { t } = useTranslation()
   const [details, setDetails] = useState<ManifestDetails | null>(null)
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(true)
@@ -36,10 +38,10 @@ export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
     setError('')
     getManifestDetails(imageName, tag.digest)
       .then(d => { if (!cancelled) setDetails(d) })
-      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : 'Failed to load details') })
+      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : t('imageDetails.loadFailed')) })
       .finally(() => { if (!cancelled) setLoading(false) })
     return () => { cancelled = true }
-  }, [imageName, tag.digest])
+  }, [imageName, tag.digest, t])
 
   useEffect(() => {
     let cancelled = false
@@ -66,9 +68,9 @@ export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
     try {
       const result = await triggerScan(imageName, tag.digest)
       setScan(result.scan)
-      if (result.cached) toast.info('Reusing a recent scan for this image')
+      if (result.cached) toast.info(t('imageDetails.reusingScan'))
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Failed to start scan')
+      toast.error(err instanceof Error ? err.message : t('imageDetails.scanStartFailed'))
     } finally {
       setTriggering(false)
     }
@@ -91,27 +93,27 @@ export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
 
           <div className="p-4 space-y-5">
             {loading ? (
-              <p className="text-sm text-muted-foreground py-10 text-center">Loading…</p>
+              <p className="text-sm text-muted-foreground py-10 text-center">{t('common.loading')}</p>
             ) : error ? (
               <p className="text-sm text-destructive py-10 text-center">{error}</p>
             ) : details ? (
               <>
                 <div className="grid grid-cols-2 gap-3">
-                  <Field label="Total size" value={details.total_size_human} />
+                  <Field label={t('imageDetails.totalSize')} value={details.total_size_human} />
                   <Field
-                    label={details.platforms ? 'Unique layers' : 'Layers'}
+                    label={details.platforms ? t('imageDetails.uniqueLayers') : t('imageDetails.layers')}
                     value={String(details.layers.length)}
                   />
-                  {details.os && <Field label="OS" value={details.os} />}
-                  {details.architecture && <Field label="Architecture" value={details.architecture} />}
+                  {details.os && <Field label={t('tagDiff.os')} value={details.os} />}
+                  {details.architecture && <Field label={t('tagDiff.architecture')} value={details.architecture} />}
                   {details.created && (
-                    <Field label="Created" value={new Date(details.created).toLocaleString()} wide />
+                    <Field label={t('imageDetails.created')} value={new Date(details.created).toLocaleString()} wide />
                   )}
                 </div>
 
                 <div>
                   <p className="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-1.5">
-                    Digest
+                    {t('imageDetails.digest')}
                     {details.signed !== undefined && (
                       <Badge
                         variant="outline"
@@ -121,7 +123,7 @@ export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
                             : 'text-muted-foreground'
                         }
                       >
-                        {details.signed ? 'Signed' : 'Unsigned'}
+                        {details.signed ? t('imageDetails.signed') : t('imageDetails.unsigned')}
                       </Badge>
                     )}
                   </p>
@@ -134,12 +136,12 @@ export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
                   <div>
                     <p className="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-1.5">
                       <ShieldAlert className="size-3.5" />
-                      Vulnerability scan
+                      {t('imageDetails.vulnScan')}
                     </p>
                     {scan === null ? (
                       <Button variant="outline" size="sm" onClick={handleScan} disabled={triggering}>
                         <ShieldAlert />
-                        {triggering ? 'Starting…' : 'Scan for vulnerabilities'}
+                        {triggering ? t('imageDetails.starting') : t('imageDetails.scanForVulns')}
                       </Button>
                     ) : (
                       <div className="bg-muted/50 border rounded-lg px-3 py-2 space-y-2">
@@ -147,16 +149,16 @@ export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
                           <ScanStatusBadge status={scan.status} />
                           {(scan.status === 'succeeded' || scan.status === 'failed') && (
                             <Button variant="outline" size="sm" onClick={handleScan} disabled={triggering}>
-                              {triggering ? 'Starting…' : 'Re-scan'}
+                              {triggering ? t('imageDetails.starting') : t('imageDetails.rescan')}
                             </Button>
                           )}
                         </div>
                         {scan.status === 'succeeded' && (
                           <div className="flex items-center gap-1.5 flex-wrap">
-                            <SeverityBadge label="Critical" count={scan.critical_count} tone="critical" />
-                            <SeverityBadge label="High" count={scan.high_count} tone="high" />
-                            <SeverityBadge label="Medium" count={scan.medium_count} tone="medium" />
-                            <SeverityBadge label="Low" count={scan.low_count} tone="low" />
+                            <SeverityBadge count={scan.critical_count} tone="critical" />
+                            <SeverityBadge count={scan.high_count} tone="high" />
+                            <SeverityBadge count={scan.medium_count} tone="medium" />
+                            <SeverityBadge count={scan.low_count} tone="low" />
                           </div>
                         )}
                         {scan.status === 'failed' && scan.error && (
@@ -170,7 +172,7 @@ export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
                 {details.platforms && details.platforms.length > 0 && (
                   <div>
                     <p className="text-xs text-muted-foreground font-medium mb-2">
-                      Platforms ({details.platforms.length})
+                      {t('imageDetails.platforms', { count: details.platforms.length })}
                     </p>
                     <div className="space-y-1.5">
                       {details.platforms.map(p => (
@@ -191,10 +193,10 @@ export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
                 <div>
                   <p className="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-1.5">
                     <LayersIcon className="size-3.5" />
-                    Layers ({details.layers.length})
+                    {t('imageDetails.layersCount', { count: details.layers.length })}
                   </p>
                   {details.layers.length === 0 ? (
-                    <p className="text-xs text-muted-foreground/70">No layers to show for this manifest.</p>
+                    <p className="text-xs text-muted-foreground/70">{t('imageDetails.noLayers')}</p>
                   ) : (
                     <div className="space-y-1.5">
                       {details.layers.map((layer, i) => (
@@ -210,7 +212,7 @@ export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
                             <Button
                               variant="ghost"
                               size="icon-xs"
-                              title="Browse layer contents"
+                              title={t('imageDetails.browseLayer')}
                               onClick={() => setBrowsingLayer(layer.digest)}
                               className="text-muted-foreground/60 hover:text-blue-500 dark:hover:text-blue-400"
                             >

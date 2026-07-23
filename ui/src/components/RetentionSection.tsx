@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { CalendarClock, Eye, Play, Plus, Trash2, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
+import type { TFunction } from 'i18next'
 import {
   createRetentionPolicy, deleteRetentionPolicy, listRetentionPolicies, runRetention,
   RetentionPlan, RetentionPolicy,
@@ -9,9 +11,19 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 
+function ruleSummary(p: RetentionPolicy, t: TFunction): string {
+  const rules: string[] = []
+  if (p.keep_n > 0) rules.push(t('retention.ruleKeepLast', { n: p.keep_n }))
+  if (p.unpulled_days > 0) rules.push(t('retention.ruleDropAfter', { days: p.unpulled_days }))
+  if (p.keep_patterns.length > 0) rules.push(t('retention.ruleAlwaysKeep', { patterns: p.keep_patterns.join(', ') }))
+  if (p.protected_tags.length > 0) rules.push(t('retention.ruleProtect', { tags: p.protected_tags.join(', ') }))
+  return rules.join(' · ')
+}
+
 // RetentionSection lives inside the Storage tab, next to the GC it feeds.
 // Hidden for non-admins (the list call 403s) and in proxy mode (501/404).
 export default function RetentionSection() {
+  const { t } = useTranslation()
   const [policies, setPolicies] = useState<RetentionPolicy[] | null>(null)
   const [plan, setPlan] = useState<RetentionPlan | null>(null)
   const [showCreate, setShowCreate] = useState(false)
@@ -35,14 +47,14 @@ export default function RetentionSection() {
       if (dryRun) {
         toast.info(
           result.plan.delete.length === 0
-            ? 'Nothing to clean — no tag matches the policies'
-            : `Preview — ${result.plan.delete.length} tag(s) would be deleted`,
+            ? t('retention.nothingToClean')
+            : t('retention.previewCount', { count: result.plan.delete.length }),
         )
       } else {
-        toast.success(`Retention applied — ${result.deleted} manifest(s) deleted (run GC to reclaim blobs)`)
+        toast.success(t('retention.applied', { count: result.deleted }))
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Retention run failed')
+      toast.error(err instanceof Error ? err.message : t('retention.runFailed'))
     } finally {
       setBusy(false)
     }
@@ -51,31 +63,22 @@ export default function RetentionSection() {
   async function handleDeletePolicy(id: number) {
     try {
       await deleteRetentionPolicy(id)
-      toast.success('Policy deleted')
+      toast.success(t('retention.deleted'))
       load()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Delete failed')
+      toast.error(err instanceof Error ? err.message : t('retention.deleteFailed'))
     }
-  }
-
-  const ruleSummary = (p: RetentionPolicy) => {
-    const rules: string[] = []
-    if (p.keep_n > 0) rules.push(`keep last ${p.keep_n}`)
-    if (p.unpulled_days > 0) rules.push(`drop after ${p.unpulled_days}d unpulled`)
-    if (p.keep_patterns.length > 0) rules.push(`always keep ${p.keep_patterns.join(', ')}`)
-    if (p.protected_tags.length > 0) rules.push(`protect ${p.protected_tags.join(', ')}`)
-    return rules.join(' · ')
   }
 
   return (
     <div>
       <div className="flex items-center justify-between mb-3">
         <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-widest">
-          Retention policies
+          {t('retention.title')}
         </h3>
         <Button variant="outline" size="sm" onClick={() => setShowCreate(v => !v)}>
           {showCreate ? <X /> : <Plus />}
-          {showCreate ? 'Cancel' : 'New policy'}
+          {showCreate ? t('common.cancel') : t('retention.newPolicy')}
         </Button>
       </div>
 
@@ -94,20 +97,19 @@ export default function RetentionSection() {
             <CalendarClock className="size-4 text-muted-foreground" strokeWidth={1.5} />
           </div>
           <p className="text-xs text-muted-foreground">
-            Policies run every night before the GC. The first policy matching a repository applies;
-            a tag whose digest is shared with a retained tag is never deleted.
+            {t('retention.description')}
           </p>
         </div>
 
         {policies.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No policy yet — tags are kept forever.</p>
+          <p className="text-xs text-muted-foreground">{t('retention.noPolicy')}</p>
         ) : (
           <div className="space-y-2">
             {policies.map(p => (
               <div key={p.id} className="flex items-center gap-3 bg-muted/50 border rounded-lg px-3 py-2">
                 <span className="font-mono text-xs shrink-0">{p.repo_pattern}</span>
-                <span className="text-xs text-muted-foreground flex-1 truncate">{ruleSummary(p)}</span>
-                <Button variant="ghost" size="icon-sm" onClick={() => handleDeletePolicy(p.id)} title="Delete policy">
+                <span className="text-xs text-muted-foreground flex-1 truncate">{ruleSummary(p, t)}</span>
+                <Button variant="ghost" size="icon-sm" onClick={() => handleDeletePolicy(p.id)} title={t('retention.deletePolicy')}>
                   <Trash2 className="size-4" />
                 </Button>
               </div>
@@ -119,11 +121,11 @@ export default function RetentionSection() {
           <div className="flex gap-2">
             <Button variant="outline" size="sm" onClick={() => handleRun(true)} disabled={busy}>
               <Eye />
-              Preview plan
+              {t('retention.previewPlan')}
             </Button>
             <Button variant="secondary" size="sm" onClick={() => handleRun(false)} disabled={busy}>
               <Play />
-              {busy ? 'Running…' : 'Apply now'}
+              {busy ? t('storageTab.running') : t('retention.applyNow')}
             </Button>
           </div>
         )}
@@ -133,10 +135,10 @@ export default function RetentionSection() {
             <table className="w-full text-xs">
               <thead>
                 <tr className="text-left text-muted-foreground border-b">
-                  <th className="py-1.5 pr-3 font-medium">Repository</th>
-                  <th className="py-1.5 pr-3 font-medium">Tag</th>
-                  <th className="py-1.5 pr-3 font-medium">Outcome</th>
-                  <th className="py-1.5 font-medium">Reason</th>
+                  <th className="py-1.5 pr-3 font-medium">{t('denseRepoView.repository')}</th>
+                  <th className="py-1.5 pr-3 font-medium">{t('denseRepoView.tag')}</th>
+                  <th className="py-1.5 pr-3 font-medium">{t('retention.outcome')}</th>
+                  <th className="py-1.5 font-medium">{t('retention.reason')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -146,7 +148,7 @@ export default function RetentionSection() {
                     <td className="py-1.5 pr-3 font-mono">{c.tag}</td>
                     <td className="py-1.5 pr-3">
                       <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10">
-                        delete
+                        {t('common.delete').toLowerCase()}
                       </Badge>
                     </td>
                     <td className="py-1.5 text-muted-foreground">{c.reason}</td>
@@ -157,7 +159,7 @@ export default function RetentionSection() {
                     <td className="py-1.5 pr-3 font-mono">{s.repo}</td>
                     <td className="py-1.5 pr-3 font-mono">{s.tag}</td>
                     <td className="py-1.5 pr-3">
-                      <Badge variant="outline" className="text-muted-foreground">skipped</Badge>
+                      <Badge variant="outline" className="text-muted-foreground">{t('retention.skipped')}</Badge>
                     </td>
                     <td className="py-1.5 text-muted-foreground">{s.reason}</td>
                   </tr>
@@ -172,6 +174,7 @@ export default function RetentionSection() {
 }
 
 function CreatePolicyForm({ onCreated }: { onCreated: () => void }) {
+  const { t } = useTranslation()
   const [pattern, setPattern] = useState('*')
   const [keepN, setKeepN] = useState('')
   const [unpulledDays, setUnpulledDays] = useState('')
@@ -191,10 +194,10 @@ function CreatePolicyForm({ onCreated }: { onCreated: () => void }) {
         keep_patterns: csv(keepPatterns),
         protected_tags: csv(protectedTags),
       })
-      toast.success('Policy created')
+      toast.success(t('retention.created'))
       onCreated()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Creation failed')
+      toast.error(err instanceof Error ? err.message : t('retention.createFailed'))
     } finally {
       setBusy(false)
     }
@@ -204,14 +207,14 @@ function CreatePolicyForm({ onCreated }: { onCreated: () => void }) {
   return (
     <Card className="p-4 rounded-xl mb-3">
       <form onSubmit={submit} className="grid gap-2 sm:grid-cols-2">
-        <input className={inputClass} placeholder="Repository pattern (team-a/*, * = all)" value={pattern} onChange={e => setPattern(e.target.value)} />
-        <input className={inputClass} type="number" min="0" placeholder="Keep last N tags (0 = off)" value={keepN} onChange={e => setKeepN(e.target.value)} />
-        <input className={inputClass} type="number" min="0" placeholder="Delete after N days unpulled (0 = off)" value={unpulledDays} onChange={e => setUnpulledDays(e.target.value)} />
-        <input className={inputClass} placeholder="Always-keep tag globs (v*, latest)" value={keepPatterns} onChange={e => setKeepPatterns(e.target.value)} />
-        <input className={inputClass} placeholder="Protected exact tags (prod, stable)" value={protectedTags} onChange={e => setProtectedTags(e.target.value)} />
+        <input className={inputClass} placeholder={t('retention.patternPlaceholder')} value={pattern} onChange={e => setPattern(e.target.value)} />
+        <input className={inputClass} type="number" min="0" placeholder={t('retention.keepNPlaceholder')} value={keepN} onChange={e => setKeepN(e.target.value)} />
+        <input className={inputClass} type="number" min="0" placeholder={t('retention.unpulledDaysPlaceholder')} value={unpulledDays} onChange={e => setUnpulledDays(e.target.value)} />
+        <input className={inputClass} placeholder={t('retention.keepPatternsPlaceholder')} value={keepPatterns} onChange={e => setKeepPatterns(e.target.value)} />
+        <input className={inputClass} placeholder={t('retention.protectedTagsPlaceholder')} value={protectedTags} onChange={e => setProtectedTags(e.target.value)} />
         <Button type="submit" size="sm" disabled={busy} className="justify-self-start self-center">
           <Plus />
-          Create policy
+          {t('retention.createPolicy')}
         </Button>
       </form>
     </Card>

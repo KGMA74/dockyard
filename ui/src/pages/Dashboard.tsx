@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
 import { LayoutGrid, List, Search, RefreshCw } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { logout, getRepositories, getStorageStats, subscribeToEvents, formatEventMessage, RegistryEvent, StorageStats, RepoSummary, TagInfo } from '../api'
 import DenseRepoView from '../components/DenseRepoView'
 import ImageDetailsPanel from '../components/ImageDetailsPanel'
@@ -29,6 +30,7 @@ interface Props {
 type SortKey = 'name' | 'tags' | 'pushed'
 
 export default function Dashboard({ onLogout }: Props) {
+  const { t } = useTranslation()
   const [tab, setTab] = useState<Tab>('images')
   const [repos, setRepos] = useState<RepoSummary[]>([])
   const [stats, setStats] = useState<StorageStats | null>(null)
@@ -53,12 +55,12 @@ export default function Dashboard({ onLogout }: Props) {
         getStorageStats(),
       ])
       if (reposRes.status === 'fulfilled') setRepos(reposRes.value.repositories)
-      else setError('Failed to load repositories')
+      else setError(t('dashboard.loadFailed'))
       if (statsRes.status === 'fulfilled') setStats(statsRes.value)
     } finally {
       setLoading(false)
     }
-  }, [])
+  }, [t])
 
   useEffect(() => { loadData() }, [loadData])
 
@@ -140,7 +142,7 @@ export default function Dashboard({ onLogout }: Props) {
           <div>
             <div className="flex items-center gap-3 mb-3">
               <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest shrink-0">
-                Images
+                {t('sidebar.images')}
                 {!loading && !dense && repos.length > 0 && (
                   <span className="ml-2 text-muted-foreground/60 normal-case tracking-normal font-normal">
                     ({filtered.length}{filtered.length !== repos.length && `/${repos.length}`})
@@ -153,7 +155,7 @@ export default function Dashboard({ onLogout }: Props) {
                 <Input
                   ref={searchRef}
                   type="text"
-                  placeholder={dense ? 'Search name or tag…  ( / )' : 'Filter images…  ( / )'}
+                  placeholder={dense ? t('dashboard.searchPlaceholder') : t('dashboard.filterPlaceholder')}
                   value={search}
                   onChange={e => setSearch(e.target.value)}
                   className="pl-8 h-8 text-xs bg-card"
@@ -162,13 +164,13 @@ export default function Dashboard({ onLogout }: Props) {
 
               {!dense && (
                 <Select value={sort} onValueChange={v => setSort(v as SortKey)}>
-                  <SelectTrigger size="sm" className="shrink-0 text-xs bg-card" title="Sort images">
+                  <SelectTrigger size="sm" className="shrink-0 text-xs bg-card" title={t('dashboard.sortImages')}>
                     <SelectValue />
                   </SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="name">Name A→Z</SelectItem>
-                    <SelectItem value="tags">Most tags</SelectItem>
-                    <SelectItem value="pushed">Recently pushed</SelectItem>
+                    <SelectItem value="name">{t('dashboard.sortNameAZ')}</SelectItem>
+                    <SelectItem value="tags">{t('dashboard.sortMostTags')}</SelectItem>
+                    <SelectItem value="pushed">{t('dashboard.sortRecentlyPushed')}</SelectItem>
                   </SelectContent>
                 </Select>
               )}
@@ -178,10 +180,10 @@ export default function Dashboard({ onLogout }: Props) {
                 size="sm"
                 onClick={() => setDense(v => !v)}
                 className="shrink-0 text-xs"
-                title={dense ? 'Switch to card view' : 'Switch to dense view (searches by repo or tag, across the whole registry)'}
+                title={dense ? t('dashboard.switchToCards') : t('dashboard.switchToDense')}
               >
                 {dense ? <LayoutGrid /> : <List />}
-                {dense ? 'Cards' : 'Dense'}
+                {dense ? t('dashboard.cards') : t('dashboard.dense')}
               </Button>
 
               <Button
@@ -191,7 +193,7 @@ export default function Dashboard({ onLogout }: Props) {
                 className="shrink-0 text-muted-foreground"
               >
                 <RefreshCw />
-                Refresh
+                {t('dashboard.refresh')}
               </Button>
             </div>
 
@@ -207,11 +209,11 @@ export default function Dashboard({ onLogout }: Props) {
               <div className="text-center py-20 text-destructive text-sm">{error}</div>
             ) : repos.length === 0 ? (
               <div className="text-center py-20">
-                <p className="text-muted-foreground text-sm">No images pushed yet</p>
+                <p className="text-muted-foreground text-sm">{t('dashboard.noImages')}</p>
               </div>
             ) : filtered.length === 0 ? (
               <div className="text-center py-20 text-muted-foreground text-sm">
-                No images match "{search}"
+                {t('dashboard.noMatch', { search })}
               </div>
             ) : (
               <RepoList repos={filtered} onRefresh={loadData} />

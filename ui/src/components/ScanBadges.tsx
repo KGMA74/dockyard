@@ -1,3 +1,4 @@
+import { useTranslation } from 'react-i18next'
 import { Badge } from '@/components/ui/badge'
 import type { ScanResult } from '../api'
 
@@ -9,9 +10,10 @@ const STATUS_STYLE: Record<ScanResult['status'], string> = {
 }
 
 export function ScanStatusBadge({ status }: { status: ScanResult['status'] }) {
+  const { t } = useTranslation()
   return (
     <Badge variant="outline" className={`capitalize ${STATUS_STYLE[status]}`}>
-      {status}
+      {t(`scanBadges.status.${status}`)}
     </Badge>
   )
 }
@@ -24,18 +26,17 @@ const SEVERITY_STYLE = {
 } as const
 
 export function SeverityBadge({
-  label,
   count,
   tone,
 }: {
-  label: string
   count: number
   tone: keyof typeof SEVERITY_STYLE
 }) {
+  const { t } = useTranslation()
   if (count === 0) return null
   return (
     <Badge variant="outline" className={SEVERITY_STYLE[tone]}>
-      {label} {count}
+      {t(`scanBadges.severity.${tone}`)} {count}
     </Badge>
   )
 }

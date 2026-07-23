@@ -1,5 +1,6 @@
 import { useState, FormEvent } from 'react'
 import { Box } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { login } from '../api'
 import { ThemeSwitcher } from '../theme'
 import { Button } from '@/components/ui/button'
@@ -12,6 +13,7 @@ interface Props {
 }
 
 export default function LoginPage({ onLogin }: Props) {
+  const { t } = useTranslation()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
@@ -25,7 +27,7 @@ export default function LoginPage({ onLogin }: Props) {
       await login(username, password)
       onLogin()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
+      setError(err instanceof Error ? err.message : t('loginPage.loginFailed'))
     } finally {
       setLoading(false)
     }
@@ -44,14 +46,14 @@ export default function LoginPage({ onLogin }: Props) {
             <Box className="size-6 text-blue-500 dark:text-blue-400" strokeWidth={1.5} />
           </div>
           <h1 className="text-xl font-semibold tracking-tight">Dockyard</h1>
-          <p className="text-muted-foreground text-sm mt-1">Docker Registry</p>
+          <p className="text-muted-foreground text-sm mt-1">{t('loginPage.subtitle')}</p>
         </div>
 
         <Card>
           <CardContent>
             <form onSubmit={handleSubmit} className="space-y-4">
               <div className="space-y-1.5">
-                <Label htmlFor="username">Username</Label>
+                <Label htmlFor="username">{t('loginPage.username')}</Label>
                 <Input
                   id="username"
                   type="text"
@@ -65,7 +67,7 @@ export default function LoginPage({ onLogin }: Props) {
               </div>
 
               <div className="space-y-1.5">
-                <Label htmlFor="password">Password</Label>
+                <Label htmlFor="password">{t('loginPage.password')}</Label>
                 <Input
                   id="password"
                   type="password"
@@ -84,7 +86,7 @@ export default function LoginPage({ onLogin }: Props) {
               )}
 
               <Button type="submit" disabled={loading} className="w-full">
-                {loading ? 'Signing in…' : 'Sign in'}
+                {loading ? t('loginPage.signingIn') : t('loginPage.signIn')}
               </Button>
             </form>
           </CardContent>

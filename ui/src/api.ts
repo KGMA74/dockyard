@@ -1,4 +1,5 @@
 import type { components } from './generated/api'
+import i18n from './i18n'
 
 // Types generated from api/openapi.yaml (npm run gen-api — CI fails on
 // drift). Hand-written interfaces below are being migrated progressively.
@@ -86,19 +87,19 @@ export function formatEventMessage(event: RegistryEvent): string {
   const ref = event.name + (event.tag ? `:${event.tag}` : '')
   switch (event.type) {
     case 'push':
-      return `${ref} was pushed`
+      return i18n.t('events.push', { ref })
     case 'delete':
-      return `${ref} was deleted`
+      return i18n.t('events.delete', { ref })
     case 'retention':
-      return `Retention policy deleted ${ref}`
+      return i18n.t('events.retention', { ref })
     case 'gc':
-      return event.actor === 'scheduler' ? 'Scheduled garbage collection completed' : 'Garbage collection completed'
+      return event.actor === 'scheduler' ? i18n.t('events.gcScheduled') : i18n.t('events.gcManual')
     case 'scan':
-      return `Scan completed for ${ref}`
+      return i18n.t('events.scan', { ref })
     case 'import':
-      return `Import completed for ${event.name}`
+      return i18n.t('events.import', { name: event.name })
     case 'quota_warning':
-      return `Quota warning: ${event.name} at ${event.tag ?? 'threshold'} of its limit`
+      return i18n.t('events.quotaWarning', { name: event.name, threshold: event.tag ?? i18n.t('events.threshold') })
     default:
       return `${event.type}: ${ref}`
   }

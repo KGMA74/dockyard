@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Plus, ShieldCheck, Trash2, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import {
   createSigningPolicy, deleteSigningPolicy, getSigningStatus, listSigningPolicies,
   SigningPolicy,
@@ -13,6 +14,7 @@ import { Card } from '@/components/ui/card'
 // (403). Signing itself always happens client-side (cosign CLI) — Dockyard
 // only verifies against configured public keys.
 export default function SigningPoliciesSection() {
+  const { t } = useTranslation()
   const [status, setStatus] = useState<{ enabled: boolean; keys_loaded: number } | null>(null)
   const [policies, setPolicies] = useState<SigningPolicy[] | null>(null)
   const [showCreate, setShowCreate] = useState(false)
@@ -31,10 +33,10 @@ export default function SigningPoliciesSection() {
   async function handleDelete(id: number) {
     try {
       await deleteSigningPolicy(id)
-      toast.success('Override deleted')
+      toast.success(t('signingPolicies.deleted'))
       load()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Delete failed')
+      toast.error(err instanceof Error ? err.message : t('signingPolicies.deleteFailed'))
     }
   }
 
@@ -42,11 +44,11 @@ export default function SigningPoliciesSection() {
     <div>
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest">
-          Signed push
+          {t('signingPolicies.title')}
         </h2>
         <Button variant="outline" size="sm" onClick={() => setShowCreate(v => !v)}>
           {showCreate ? <X /> : <Plus />}
-          {showCreate ? 'Cancel' : 'New override'}
+          {showCreate ? t('common.cancel') : t('signingPolicies.newOverride')}
         </Button>
       </div>
 
@@ -65,35 +67,33 @@ export default function SigningPoliciesSection() {
             <ShieldCheck className="size-4 text-muted-foreground" strokeWidth={1.5} />
           </div>
           <p className="text-xs text-muted-foreground">
-            Rejects tag pushes without a valid cosign signature, verified against configured
-            public keys. Pushes by digest and cosign's own signature tags are always allowed —
-            sign after pushing by digest, then push the tag.
+            {t('signingPolicies.description')}
           </p>
         </div>
 
         {status && (
           <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">Global default:</span>
+            <span className="text-xs text-muted-foreground">{t('signingPolicies.globalDefault')}</span>
             <Badge variant="outline" className={status.enabled ? 'text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10' : 'text-muted-foreground'}>
-              {status.enabled ? 'required' : 'not required'}
+              {status.enabled ? t('signingPolicies.required') : t('signingPolicies.notRequired')}
             </Badge>
             <span className="text-xs text-muted-foreground">
-              · {status.keys_loaded} public key{status.keys_loaded === 1 ? '' : 's'} configured
+              · {t('signingPolicies.keysConfigured', { count: status.keys_loaded })}
             </span>
           </div>
         )}
 
         {policies.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No per-repository override — the global default applies everywhere.</p>
+          <p className="text-xs text-muted-foreground">{t('signingPolicies.noOverride')}</p>
         ) : (
           <div className="space-y-2">
             {policies.map(p => (
               <div key={p.id} className="flex items-center gap-3 bg-muted/50 border rounded-lg px-3 py-2">
                 <span className="font-mono text-xs flex-1 truncate">{p.repo_pattern}</span>
                 <Badge variant="outline" className={p.required ? 'text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10' : 'text-muted-foreground'}>
-                  {p.required ? 'required' : 'not required'}
+                  {p.required ? t('signingPolicies.required') : t('signingPolicies.notRequired')}
                 </Badge>
-                <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(p.id)} title="Delete override">
+                <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(p.id)} title={t('signingPolicies.deleteOverride')}>
                   <Trash2 className="size-4" />
                 </Button>
               </div>
@@ -106,6 +106,7 @@ export default function SigningPoliciesSection() {
 }
 
 function CreateOverrideForm({ onCreated }: { onCreated: () => void }) {
+  const { t } = useTranslation()
   const [pattern, setPattern] = useState('*')
   const [required, setRequired] = useState(true)
   const [busy, setBusy] = useState(false)
@@ -115,10 +116,10 @@ function CreateOverrideForm({ onCreated }: { onCreated: () => void }) {
     setBusy(true)
     try {
       await createSigningPolicy(pattern || '*', required)
-      toast.success('Override created')
+      toast.success(t('signingPolicies.created'))
       onCreated()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Creation failed')
+      toast.error(err instanceof Error ? err.message : t('signingPolicies.createFailed'))
     } finally {
       setBusy(false)
     }
@@ -128,14 +129,14 @@ function CreateOverrideForm({ onCreated }: { onCreated: () => void }) {
   return (
     <Card className="p-4 rounded-xl mb-3">
       <form onSubmit={submit} className="grid gap-2 sm:grid-cols-2">
-        <input className={inputClass} placeholder="Repository pattern (team-a/*, * = all)" value={pattern} onChange={e => setPattern(e.target.value)} />
+        <input className={inputClass} placeholder={t('signingPolicies.patternPlaceholder')} value={pattern} onChange={e => setPattern(e.target.value)} />
         <select className={inputClass} value={required ? 'required' : 'not-required'} onChange={e => setRequired(e.target.value === 'required')}>
-          <option value="required">Require signature</option>
-          <option value="not-required">Do not require</option>
+          <option value="required">{t('signingPolicies.requireSignature')}</option>
+          <option value="not-required">{t('signingPolicies.doNotRequire')}</option>
         </select>
         <Button type="submit" size="sm" disabled={busy} className="justify-self-start self-center">
           <Plus />
-          Create override
+          {t('signingPolicies.createOverride')}
         </Button>
       </form>
     </Card>

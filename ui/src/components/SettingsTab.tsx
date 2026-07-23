@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { User, KeyRound, Server, CircleCheck, CircleAlert, GitFork, BookOpen, Bug, ScrollText } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { getAudit, getHealth, getUsername, AuditEntry, HealthInfo } from '../api'
 import QuotasSection from './QuotasSection'
 import ReplicationSection from './ReplicationSection'
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export default function SettingsTab({ onChangePassword }: Props) {
+  const { t } = useTranslation()
   const [health, setHealth] = useState<HealthInfo | null>(null)
   const [audit, setAudit] = useState<AuditEntry[] | null>(null)
   const username = getUsername()
@@ -32,7 +34,7 @@ export default function SettingsTab({ onChangePassword }: Props) {
     <div className="space-y-6">
       <div>
         <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">
-          Account
+          {t('settingsTab.account')}
         </h2>
         <Card className="p-4 rounded-xl gap-3">
           <div className="flex items-center gap-3">
@@ -40,20 +42,20 @@ export default function SettingsTab({ onChangePassword }: Props) {
               <User className="size-4 text-muted-foreground" strokeWidth={1.5} />
             </div>
             <div>
-              <p className="text-sm font-medium">{username ?? 'Unknown user'}</p>
-              <p className="text-xs text-muted-foreground">Registry administrator</p>
+              <p className="text-sm font-medium">{username ?? t('settingsTab.unknownUser')}</p>
+              <p className="text-xs text-muted-foreground">{t('settingsTab.registryAdmin')}</p>
             </div>
           </div>
           <Button variant="outline" size="sm" onClick={onChangePassword} className="self-start">
             <KeyRound />
-            Change password
+            {t('sidebar.changePassword')}
           </Button>
         </Card>
       </div>
 
       <div>
         <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">
-          Registry
+          {t('settingsTab.registry')}
         </h2>
         <Card className="p-4 rounded-xl gap-3">
           <div className="flex items-center gap-3">
@@ -61,11 +63,11 @@ export default function SettingsTab({ onChangePassword }: Props) {
               <Server className="size-4 text-muted-foreground" strokeWidth={1.5} />
             </div>
             <div>
-              <p className="text-sm font-medium capitalize">{health?.mode ?? '—'} mode</p>
+              <p className="text-sm font-medium capitalize">{t('settingsTab.modeLabel', { mode: health?.mode ?? '—' })}</p>
               <p className="text-xs text-muted-foreground">
                 {health?.mode === 'proxy'
-                  ? 'Forwarding requests to an upstream registry'
-                  : 'Storing blobs and manifests locally'}
+                  ? t('settingsTab.forwarding')
+                  : t('settingsTab.storingLocally')}
               </p>
             </div>
           </div>
@@ -82,8 +84,8 @@ export default function SettingsTab({ onChangePassword }: Props) {
                   : 'text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10 gap-1'}
               >
                 {proxyUnreachable
-                  ? <><CircleAlert className="size-3" /> Unreachable</>
-                  : <><CircleCheck className="size-3" /> Reachable</>}
+                  ? <><CircleAlert className="size-3" /> {t('settingsTab.unreachable')}</>
+                  : <><CircleCheck className="size-3" /> {t('settingsTab.reachable')}</>}
               </Badge>
             </div>
           )}
@@ -101,7 +103,7 @@ export default function SettingsTab({ onChangePassword }: Props) {
       {audit !== null && (
         <div>
           <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">
-            Audit log
+            {t('settingsTab.auditLog')}
           </h2>
           <Card className="p-4 rounded-xl gap-3">
             <div className="flex items-center gap-3">
@@ -109,22 +111,22 @@ export default function SettingsTab({ onChangePassword }: Props) {
                 <ScrollText className="size-4 text-muted-foreground" strokeWidth={1.5} />
               </div>
               <div>
-                <p className="text-sm font-medium">Recent sensitive actions</p>
-                <p className="text-xs text-muted-foreground">Logins, pushes, deletions, GC — last 30 events</p>
+                <p className="text-sm font-medium">{t('settingsTab.recentActions')}</p>
+                <p className="text-xs text-muted-foreground">{t('settingsTab.auditSubtitle')}</p>
               </div>
             </div>
             {audit.length === 0 ? (
-              <p className="text-xs text-muted-foreground">No events recorded yet.</p>
+              <p className="text-xs text-muted-foreground">{t('settingsTab.noEvents')}</p>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full text-xs">
                   <thead>
                     <tr className="text-left text-muted-foreground border-b">
-                      <th className="py-1.5 pr-3 font-medium">Date</th>
-                      <th className="py-1.5 pr-3 font-medium">Actor</th>
-                      <th className="py-1.5 pr-3 font-medium">Action</th>
-                      <th className="py-1.5 pr-3 font-medium">Repository</th>
-                      <th className="py-1.5 font-medium">Result</th>
+                      <th className="py-1.5 pr-3 font-medium">{t('insights.date')}</th>
+                      <th className="py-1.5 pr-3 font-medium">{t('settingsTab.actor')}</th>
+                      <th className="py-1.5 pr-3 font-medium">{t('settingsTab.action')}</th>
+                      <th className="py-1.5 pr-3 font-medium">{t('denseRepoView.repository')}</th>
+                      <th className="py-1.5 font-medium">{t('settingsTab.result')}</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -160,7 +162,7 @@ export default function SettingsTab({ onChangePassword }: Props) {
 
       <div>
         <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">
-          About
+          {t('settingsTab.about')}
         </h2>
         <Card className="p-4 rounded-xl gap-3">
           <div className="flex items-center gap-3">
@@ -171,7 +173,7 @@ export default function SettingsTab({ onChangePassword }: Props) {
               <p className="text-sm font-medium">
                 Dockyard {health?.version ? <span className="font-mono">{health.version}</span> : null}
               </p>
-              <p className="text-xs text-muted-foreground">Self-hosted Docker Registry V2</p>
+              <p className="text-xs text-muted-foreground">{t('settingsTab.tagline')}</p>
             </div>
           </div>
 
@@ -179,19 +181,19 @@ export default function SettingsTab({ onChangePassword }: Props) {
             <Button variant="outline" size="sm" asChild>
               <a href={REPO_URL} target="_blank" rel="noopener noreferrer">
                 <GitFork />
-                View source
+                {t('settingsTab.viewSource')}
               </a>
             </Button>
             <Button variant="outline" size="sm" asChild>
               <a href={`${REPO_URL}#contributing`} target="_blank" rel="noopener noreferrer">
                 <BookOpen />
-                Contribute
+                {t('settingsTab.contribute')}
               </a>
             </Button>
             <Button variant="outline" size="sm" asChild>
               <a href={`${REPO_URL}/issues`} target="_blank" rel="noopener noreferrer">
                 <Bug />
-                Report an issue
+                {t('settingsTab.reportIssue')}
               </a>
             </Button>
           </div>

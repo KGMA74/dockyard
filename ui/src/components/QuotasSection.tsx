@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Gauge, Plus, RotateCcw, Trash2, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import {
   deleteQuota, listQuotas, Quota, QuotaScopeType, QuotaUsage, resetQuotaUsage, setQuota,
 } from '../api'
@@ -24,6 +25,7 @@ function formatBytes(n: number): string {
 // doesn't own the storage writes, so quotas configured there are
 // informational only until pushes land through an embedded/mirror instance.
 export default function QuotasSection() {
+  const { t } = useTranslation()
   const [quotas, setQuotas] = useState<Quota[] | null>(null)
   const [usage, setUsage] = useState<QuotaUsage[]>([])
   const [showCreate, setShowCreate] = useState(false)
@@ -48,20 +50,20 @@ export default function QuotasSection() {
   async function handleDelete(id: number) {
     try {
       await deleteQuota(id)
-      toast.success('Quota deleted')
+      toast.success(t('quotas.deleted'))
       load()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Delete failed')
+      toast.error(err instanceof Error ? err.message : t('quotas.deleteFailed'))
     }
   }
 
   async function handleReset(scopeType: QuotaScopeType, scopeValue: string) {
     try {
       await resetQuotaUsage(scopeType, scopeValue)
-      toast.success('Usage reset')
+      toast.success(t('quotas.usageReset'))
       load()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Reset failed')
+      toast.error(err instanceof Error ? err.message : t('quotas.resetFailed'))
     }
   }
 
@@ -69,11 +71,11 @@ export default function QuotasSection() {
     <div>
       <div className="flex items-center justify-between mb-3">
         <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest">
-          Quotas
+          {t('quotas.title')}
         </h2>
         <Button variant="outline" size="sm" onClick={() => setShowCreate(v => !v)}>
           {showCreate ? <X /> : <Plus />}
-          {showCreate ? 'Cancel' : 'New quota'}
+          {showCreate ? t('common.cancel') : t('quotas.newQuota')}
         </Button>
       </div>
 
@@ -92,14 +94,12 @@ export default function QuotasSection() {
             <Gauge className="size-4 text-muted-foreground" strokeWidth={1.5} />
           </div>
           <p className="text-xs text-muted-foreground">
-            Byte limits per repository or per user, enforced when a blob upload completes.
-            Usage tracks cumulative pushed bytes (not deduplicated on-disk size) and is never
-            decremented automatically — reset it manually after cleaning up a repo.
+            {t('quotas.description')}
           </p>
         </div>
 
         {quotas.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No quota configured — pushes are unlimited.</p>
+          <p className="text-xs text-muted-foreground">{t('quotas.noQuota')}</p>
         ) : (
           <div className="space-y-2">
             {quotas.map(q => {
@@ -119,10 +119,10 @@ export default function QuotasSection() {
                   >
                     {pct}%
                   </Badge>
-                  <Button variant="ghost" size="icon-sm" onClick={() => handleReset(q.scope_type, q.scope_value)} title="Reset usage">
+                  <Button variant="ghost" size="icon-sm" onClick={() => handleReset(q.scope_type, q.scope_value)} title={t('quotas.resetUsage')}>
                     <RotateCcw className="size-4" />
                   </Button>
-                  <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(q.id)} title="Delete quota">
+                  <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(q.id)} title={t('quotas.deleteQuota')}>
                     <Trash2 className="size-4" />
                   </Button>
                 </div>
@@ -136,6 +136,7 @@ export default function QuotasSection() {
 }
 
 function CreateQuotaForm({ onCreated }: { onCreated: () => void }) {
+  const { t } = useTranslation()
   const [scopeType, setScopeType] = useState<QuotaScopeType>('repo')
   const [scopeValue, setScopeValue] = useState('')
   const [maxGB, setMaxGB] = useState('10')
@@ -145,21 +146,21 @@ function CreateQuotaForm({ onCreated }: { onCreated: () => void }) {
   async function submit(e: React.FormEvent) {
     e.preventDefault()
     if (!scopeValue.trim()) {
-      toast.error('Repository or username is required')
+      toast.error(t('quotas.scopeRequired'))
       return
     }
     const maxBytes = Math.round(parseFloat(maxGB) * 1024 * 1024 * 1024)
     if (!(maxBytes > 0)) {
-      toast.error('Limit must be a positive number of GB')
+      toast.error(t('quotas.invalidLimit'))
       return
     }
     setBusy(true)
     try {
       await setQuota(scopeType, scopeValue.trim(), maxBytes, parseInt(warnPercent, 10) || 90)
-      toast.success('Quota saved')
+      toast.success(t('quotas.saved'))
       onCreated()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Save failed')
+      toast.error(err instanceof Error ? err.message : t('quotas.saveFailed'))
     } finally {
       setBusy(false)
     }
@@ -170,8 +171,8 @@ function CreateQuotaForm({ onCreated }: { onCreated: () => void }) {
     <Card className="p-4 rounded-xl mb-3">
       <form onSubmit={submit} className="grid gap-2 sm:grid-cols-4">
         <select className={inputClass} value={scopeType} onChange={e => setScopeType(e.target.value as QuotaScopeType)}>
-          <option value="repo">Repository</option>
-          <option value="user">User</option>
+          <option value="repo">{t('quotas.repository')}</option>
+          <option value="user">{t('quotas.user')}</option>
         </select>
         <input
           className={inputClass}
@@ -179,11 +180,11 @@ function CreateQuotaForm({ onCreated }: { onCreated: () => void }) {
           value={scopeValue}
           onChange={e => setScopeValue(e.target.value)}
         />
-        <input className={inputClass} type="number" min="0.01" step="0.01" placeholder="Limit (GB)" value={maxGB} onChange={e => setMaxGB(e.target.value)} />
-        <input className={inputClass} type="number" min="1" max="100" placeholder="Warn %" value={warnPercent} onChange={e => setWarnPercent(e.target.value)} />
+        <input className={inputClass} type="number" min="0.01" step="0.01" placeholder={t('quotas.limitGB')} value={maxGB} onChange={e => setMaxGB(e.target.value)} />
+        <input className={inputClass} type="number" min="1" max="100" placeholder={t('quotas.warnPercent')} value={warnPercent} onChange={e => setWarnPercent(e.target.value)} />
         <Button type="submit" size="sm" disabled={busy} className="justify-self-start self-center sm:col-span-4">
           <Plus />
-          Save quota
+          {t('quotas.saveQuota')}
         </Button>
       </form>
     </Card>

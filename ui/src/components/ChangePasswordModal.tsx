@@ -1,5 +1,6 @@
 import { useState, FormEvent } from 'react'
 import { toast } from 'sonner'
+import { useTranslation } from 'react-i18next'
 import { changePassword } from '../api'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -17,6 +18,7 @@ interface Props {
 }
 
 export default function ChangePasswordModal({ onClose }: Props) {
+  const { t } = useTranslation()
   const [current, setCurrent] = useState('')
   const [next, setNext] = useState('')
   const [confirm, setConfirm] = useState('')
@@ -26,17 +28,17 @@ export default function ChangePasswordModal({ onClose }: Props) {
   async function handleSubmit(e: FormEvent) {
     e.preventDefault()
     if (next !== confirm) {
-      setError('Passwords do not match')
+      setError(t('changePasswordModal.mismatch'))
       return
     }
     setLoading(true)
     setError('')
     try {
       await changePassword(current, next)
-      toast.success('Password updated successfully')
+      toast.success(t('changePasswordModal.success'))
       onClose()
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to change password')
+      setError(err instanceof Error ? err.message : t('changePasswordModal.failed'))
     } finally {
       setLoading(false)
     }
@@ -46,12 +48,12 @@ export default function ChangePasswordModal({ onClose }: Props) {
     <Dialog open onOpenChange={open => { if (!open) onClose() }}>
       <DialogContent>
         <DialogHeader>
-          <DialogTitle className="text-sm">Change password</DialogTitle>
+          <DialogTitle className="text-sm">{t('changePasswordModal.title')}</DialogTitle>
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="current-password">Current password</Label>
+            <Label htmlFor="current-password">{t('changePasswordModal.current')}</Label>
             <Input
               id="current-password"
               type="password"
@@ -63,7 +65,7 @@ export default function ChangePasswordModal({ onClose }: Props) {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="new-password">New password</Label>
+            <Label htmlFor="new-password">{t('changePasswordModal.new')}</Label>
             <Input
               id="new-password"
               type="password"
@@ -75,7 +77,7 @@ export default function ChangePasswordModal({ onClose }: Props) {
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="confirm-password">Confirm new password</Label>
+            <Label htmlFor="confirm-password">{t('changePasswordModal.confirm')}</Label>
             <Input
               id="confirm-password"
               type="password"
@@ -93,10 +95,10 @@ export default function ChangePasswordModal({ onClose }: Props) {
 
           <DialogFooter className="pt-1">
             <Button type="button" variant="ghost" onClick={onClose} disabled={loading}>
-              Cancel
+              {t('common.cancel')}
             </Button>
             <Button type="submit" disabled={loading}>
-              {loading ? 'Saving…' : 'Update password'}
+              {loading ? t('common.saving') : t('changePasswordModal.update')}
             </Button>
           </DialogFooter>
         </form>

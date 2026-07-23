@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { MonitorSmartphone, Plus, ShieldCheck, Trash2, UserRound, X } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import {
   createUser, deleteUser, getUsername, listSessions, listUsers, revokeSession, updateUser,
   SessionInfo, UserInfo,
@@ -18,6 +19,7 @@ const roleBadgeClass: Record<string, string> = {
 }
 
 export default function UsersTab() {
+  const { t } = useTranslation()
   const [users, setUsers] = useState<UserInfo[]>([])
   const [sessions, setSessions] = useState<SessionInfo[]>([])
   const [currentSessionId, setCurrentSessionId] = useState(0)
@@ -37,33 +39,33 @@ export default function UsersTab() {
   useEffect(load, [load])
 
   async function handleDelete(username: string) {
-    if (!confirm(`Delete user "${username}"?`)) return
+    if (!confirm(t('usersTab.confirmDelete', { username }))) return
     try {
       await deleteUser(username)
-      toast.success(`User ${username} deleted`)
+      toast.success(t('usersTab.userDeleted', { username }))
       load()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Delete failed')
+      toast.error(err instanceof Error ? err.message : t('usersTab.deleteFailed'))
     }
   }
 
   async function handleRoleChange(username: string, role: string, patterns: string[]) {
     try {
       await updateUser(username, { role, repo_patterns: patterns })
-      toast.success(`${username} is now ${role}`)
+      toast.success(t('usersTab.roleChanged', { username, role }))
       load()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Update failed')
+      toast.error(err instanceof Error ? err.message : t('usersTab.updateFailed'))
     }
   }
 
   async function handleRevokeSession(id: number) {
     try {
       await revokeSession(id)
-      toast.success('Session revoked — its access token dies within 15 minutes')
+      toast.success(t('usersTab.sessionRevoked'))
       load()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Revoke failed')
+      toast.error(err instanceof Error ? err.message : t('usersTab.revokeFailed'))
     }
   }
 
@@ -72,11 +74,11 @@ export default function UsersTab() {
       <div>
         <div className="flex items-center justify-between mb-3">
           <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest">
-            Users
+            {t('sidebar.users')}
           </h2>
           <Button variant="outline" size="sm" onClick={() => setShowCreate(v => !v)}>
             {showCreate ? <X /> : <Plus />}
-            {showCreate ? 'Cancel' : 'New user'}
+            {showCreate ? t('common.cancel') : t('usersTab.newUser')}
           </Button>
         </div>
 
@@ -101,10 +103,10 @@ export default function UsersTab() {
                 <div className="flex-1 min-w-0">
                   <p className="text-sm font-medium truncate">
                     {u.username}
-                    {u.username === me && <span className="text-muted-foreground font-normal"> (you)</span>}
+                    {u.username === me && <span className="text-muted-foreground font-normal"> {t('usersTab.you')}</span>}
                   </p>
                   <p className="text-xs text-muted-foreground font-mono truncate">
-                    {u.repo_patterns.length > 0 ? u.repo_patterns.join(', ') : 'all repositories'}
+                    {u.repo_patterns.length > 0 ? u.repo_patterns.join(', ') : t('usersTab.allRepositories')}
                   </p>
                 </div>
                 <select
@@ -120,7 +122,7 @@ export default function UsersTab() {
                   size="icon-sm"
                   onClick={() => handleDelete(u.username)}
                   disabled={u.username === me}
-                  title={u.username === me ? 'You cannot delete your own account' : 'Delete user'}
+                  title={u.username === me ? t('usersTab.cannotDeleteSelf') : t('usersTab.deleteUser')}
                 >
                   <Trash2 className="size-4" />
                 </Button>
@@ -132,7 +134,7 @@ export default function UsersTab() {
 
       <div>
         <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">
-          Active sessions
+          {t('usersTab.activeSessions')}
         </h2>
         <Card className="p-4 rounded-xl gap-3">
           <div className="flex items-center gap-3">
@@ -140,20 +142,20 @@ export default function UsersTab() {
               <MonitorSmartphone className="size-4 text-muted-foreground" strokeWidth={1.5} />
             </div>
             <p className="text-xs text-muted-foreground">
-              Revoking a session kills its refresh token; the access token expires within 15 minutes.
+              {t('usersTab.revokeDescription')}
             </p>
           </div>
           {sessions.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No active session.</p>
+            <p className="text-xs text-muted-foreground">{t('usersTab.noSession')}</p>
           ) : (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
                   <tr className="text-left text-muted-foreground border-b">
-                    <th className="py-1.5 pr-3 font-medium">User</th>
+                    <th className="py-1.5 pr-3 font-medium">{t('usersTab.user')}</th>
                     <th className="py-1.5 pr-3 font-medium">IP</th>
-                    <th className="py-1.5 pr-3 font-medium">Client</th>
-                    <th className="py-1.5 pr-3 font-medium">Last seen</th>
+                    <th className="py-1.5 pr-3 font-medium">{t('usersTab.client')}</th>
+                    <th className="py-1.5 pr-3 font-medium">{t('usersTab.lastSeen')}</th>
                     <th className="py-1.5 font-medium"></th>
                   </tr>
                 </thead>
@@ -163,7 +165,7 @@ export default function UsersTab() {
                       <td className="py-1.5 pr-3 font-medium">
                         {s.username}
                         {s.id === currentSessionId && (
-                          <span className="text-muted-foreground font-normal"> (this session)</span>
+                          <span className="text-muted-foreground font-normal"> {t('usersTab.thisSession')}</span>
                         )}
                       </td>
                       <td className="py-1.5 pr-3 font-mono">{s.ip || '—'}</td>
@@ -174,7 +176,7 @@ export default function UsersTab() {
                         {new Date(s.last_seen_at).toLocaleString()}
                       </td>
                       <td className="py-1.5 text-right">
-                        <Button variant="ghost" size="icon-sm" onClick={() => handleRevokeSession(s.id)} title="Revoke session">
+                        <Button variant="ghost" size="icon-sm" onClick={() => handleRevokeSession(s.id)} title={t('usersTab.revokeSession')}>
                           <X className="size-4" />
                         </Button>
                       </td>
@@ -191,6 +193,7 @@ export default function UsersTab() {
 }
 
 function CreateUserForm({ onCreated }: { onCreated: () => void }) {
+  const { t } = useTranslation()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [role, setRole] = useState<string>('reader')
@@ -203,10 +206,10 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
     try {
       const repoPatterns = patterns.split(',').map(p => p.trim()).filter(Boolean)
       await createUser(username, password, role, repoPatterns)
-      toast.success(`User ${username} created`)
+      toast.success(t('usersTab.userCreated', { username }))
       onCreated()
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'Creation failed')
+      toast.error(err instanceof Error ? err.message : t('usersTab.createFailed'))
     } finally {
       setBusy(false)
     }
@@ -216,15 +219,15 @@ function CreateUserForm({ onCreated }: { onCreated: () => void }) {
   return (
     <Card className="p-4 rounded-xl mb-3">
       <form onSubmit={submit} className="grid gap-2 sm:grid-cols-2">
-        <input className={inputClass} placeholder="Username" value={username} onChange={e => setUsername(e.target.value)} required />
-        <input className={inputClass} type="password" placeholder="Password (min 8 chars)" value={password} onChange={e => setPassword(e.target.value)} required minLength={8} />
+        <input className={inputClass} placeholder={t('loginPage.username')} value={username} onChange={e => setUsername(e.target.value)} required />
+        <input className={inputClass} type="password" placeholder={t('usersTab.passwordPlaceholder')} value={password} onChange={e => setPassword(e.target.value)} required minLength={8} />
         <select className={inputClass} value={role} onChange={e => setRole(e.target.value)}>
           {ROLES.map(r => <option key={r} value={r}>{r}</option>)}
         </select>
-        <input className={inputClass} placeholder="Repo patterns (team-a/*, shared) — empty = all" value={patterns} onChange={e => setPatterns(e.target.value)} />
+        <input className={inputClass} placeholder={t('usersTab.patternsPlaceholder')} value={patterns} onChange={e => setPatterns(e.target.value)} />
         <Button type="submit" size="sm" disabled={busy} className="sm:col-span-2 justify-self-start">
           <Plus />
-          Create user
+          {t('usersTab.createUser')}
         </Button>
       </form>
     </Card>

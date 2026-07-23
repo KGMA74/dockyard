@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { ChevronLeft, ChevronRight, Info } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { searchRepositories, SearchResult, TagInfo } from '../api'
 import { relativeTime } from '@/lib/utils'
 import { Badge } from '@/components/ui/badge'
@@ -31,6 +32,7 @@ interface Props {
 // list — useful once a repo has many tags (no expand-per-repo needed) or
 // when filtering by signed status across the whole registry.
 export default function DenseRepoView({ query, onShowDetails }: Props) {
+  const { t } = useTranslation()
   const [items, setItems] = useState<SearchResult[]>([])
   const [total, setTotal] = useState(0)
   const [offset, setOffset] = useState(0)
@@ -52,11 +54,11 @@ export default function DenseRepoView({ query, onShowDetails }: Props) {
         offset,
       })
         .then(r => { if (!cancelled) { setItems(r.items); setTotal(r.total) } })
-        .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : 'Search failed') })
+        .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : t('denseRepoView.searchFailed')) })
         .finally(() => { if (!cancelled) setLoading(false) })
     }, 250) // debounce
     return () => { cancelled = true; clearTimeout(id) }
-  }, [query, signedFilter, offset])
+  }, [query, signedFilter, offset, t])
 
   const showingSigned = items.some(i => i.signed !== undefined)
 
@@ -64,15 +66,15 @@ export default function DenseRepoView({ query, onShowDetails }: Props) {
     <div className="space-y-3">
       {showingSigned && (
         <div className="flex items-center gap-2">
-          <span className="text-xs text-muted-foreground">Signed:</span>
+          <span className="text-xs text-muted-foreground">{t('denseRepoView.signed')}</span>
           <Select value={signedFilter} onValueChange={v => setSignedFilter(v as typeof signedFilter)}>
             <SelectTrigger size="sm" className="w-32 text-xs bg-card">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              <SelectItem value="any">Any</SelectItem>
-              <SelectItem value="true">Signed</SelectItem>
-              <SelectItem value="false">Unsigned</SelectItem>
+              <SelectItem value="any">{t('denseRepoView.any')}</SelectItem>
+              <SelectItem value="true">{t('denseRepoView.signedOpt')}</SelectItem>
+              <SelectItem value="false">{t('denseRepoView.unsigned')}</SelectItem>
             </SelectContent>
           </Select>
         </div>
@@ -82,19 +84,19 @@ export default function DenseRepoView({ query, onShowDetails }: Props) {
         <div className="text-center py-20 text-destructive text-sm">{error}</div>
       ) : !loading && items.length === 0 ? (
         <div className="text-center py-20 text-muted-foreground text-sm">
-          No images match{query ? ` "${query}"` : ' the current filters'}
+          {query ? t('denseRepoView.noMatchQuery', { query }) : t('denseRepoView.noMatchFilters')}
         </div>
       ) : (
         <div className="bg-card border rounded-xl overflow-hidden">
           <Table>
             <TableHeader>
               <TableRow>
-                <TableHead className="px-4 text-xs">Repository</TableHead>
-                <TableHead className="px-4 text-xs">Tag</TableHead>
-                <TableHead className="px-4 text-xs hidden sm:table-cell">Digest</TableHead>
-                <TableHead className="px-4 text-xs hidden md:table-cell">Signed</TableHead>
-                <TableHead className="px-4 text-xs hidden md:table-cell">Scan</TableHead>
-                <TableHead className="px-4 text-xs hidden lg:table-cell">Pushed</TableHead>
+                <TableHead className="px-4 text-xs">{t('denseRepoView.repository')}</TableHead>
+                <TableHead className="px-4 text-xs">{t('denseRepoView.tag')}</TableHead>
+                <TableHead className="px-4 text-xs hidden sm:table-cell">{t('denseRepoView.digest')}</TableHead>
+                <TableHead className="px-4 text-xs hidden md:table-cell">{t('denseRepoView.signed')}</TableHead>
+                <TableHead className="px-4 text-xs hidden md:table-cell">{t('denseRepoView.scan')}</TableHead>
+                <TableHead className="px-4 text-xs hidden lg:table-cell">{t('denseRepoView.pushed')}</TableHead>
                 <TableHead className="px-4 w-10" />
               </TableRow>
             </TableHeader>
@@ -119,7 +121,7 @@ export default function DenseRepoView({ query, onShowDetails }: Props) {
                         variant="outline"
                         className={item.signed ? 'text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10' : 'text-muted-foreground'}
                       >
-                        {item.signed ? 'signed' : 'unsigned'}
+                        {item.signed ? t('denseRepoView.signedOpt') : t('denseRepoView.unsigned')}
                       </Badge>
                     )}
                   </TableCell>
@@ -136,8 +138,8 @@ export default function DenseRepoView({ query, onShowDetails }: Props) {
                         }
                       >
                         {item.scan.status === 'succeeded'
-                          ? `${item.scan.critical_count + item.scan.high_count} high+`
-                          : item.scan.status}
+                          ? t('denseRepoView.highPlus', { count: item.scan.critical_count + item.scan.high_count })
+                          : t(`scanBadges.status.${item.scan.status}`)}
                       </Badge>
                     )}
                   </TableCell>
@@ -148,7 +150,7 @@ export default function DenseRepoView({ query, onShowDetails }: Props) {
                     <Button
                       variant="ghost"
                       size="icon-xs"
-                      title="View details"
+                      title={t('denseRepoView.viewDetails')}
                       onClick={() => onShowDetails(item.name, { tag: item.tag, digest: item.digest, pushed_at: item.pushed_at })}
                       className="text-muted-foreground/60 hover:text-blue-500 dark:hover:text-blue-400"
                     >
@@ -165,7 +167,7 @@ export default function DenseRepoView({ query, onShowDetails }: Props) {
       {total > PAGE_SIZE && (
         <div className="flex items-center justify-between text-xs text-muted-foreground">
           <span>
-            {offset + 1}–{Math.min(offset + PAGE_SIZE, total)} of {total}
+            {t('denseRepoView.rangeOfTotal', { from: offset + 1, to: Math.min(offset + PAGE_SIZE, total), total })}
           </span>
           <div className="flex gap-1">
             <Button variant="outline" size="icon-sm" disabled={offset === 0} onClick={() => setOffset(o => Math.max(0, o - PAGE_SIZE))}>

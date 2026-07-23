@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react'
 import { ShieldAlert } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { listScans, ScanResult } from '../api'
 import { ScanStatusBadge, SeverityBadge } from './ScanBadges'
 import { Card } from '@/components/ui/card'
@@ -8,6 +9,7 @@ import { Card } from '@/components/ui/card'
 // the feature is off (SCAN_ENABLED=false) or the caller isn't admin — the
 // list call 403s/404s in that case.
 export default function ScansSection() {
+  const { t } = useTranslation()
   const [scans, setScans] = useState<ScanResult[] | null>(null)
 
   const load = useCallback(() => {
@@ -23,7 +25,7 @@ export default function ScansSection() {
   return (
     <div>
       <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">
-        Vulnerability scans
+        {t('scansSection.title')}
       </h3>
       <Card className="p-4 rounded-xl gap-3">
         <div className="flex items-center gap-3">
@@ -31,13 +33,12 @@ export default function ScansSection() {
             <ShieldAlert className="size-4 text-muted-foreground" strokeWidth={1.5} />
           </div>
           <p className="text-xs text-muted-foreground">
-            Trivy scans run against an operator-managed trivy server. Trigger a scan from an
-            image's details panel.
+            {t('scansSection.description')}
           </p>
         </div>
 
         {scans.length === 0 ? (
-          <p className="text-xs text-muted-foreground">No scan yet.</p>
+          <p className="text-xs text-muted-foreground">{t('scansSection.noScan')}</p>
         ) : (
           <div className="space-y-2">
             {scans.map(s => (
@@ -48,10 +49,10 @@ export default function ScansSection() {
                 <ScanStatusBadge status={s.status} />
                 {s.status === 'succeeded' && (
                   <div className="flex items-center gap-1.5 shrink-0">
-                    <SeverityBadge label="Crit" count={s.critical_count} tone="critical" />
-                    <SeverityBadge label="High" count={s.high_count} tone="high" />
-                    <SeverityBadge label="Med" count={s.medium_count} tone="medium" />
-                    <SeverityBadge label="Low" count={s.low_count} tone="low" />
+                    <SeverityBadge count={s.critical_count} tone="critical" />
+                    <SeverityBadge count={s.high_count} tone="high" />
+                    <SeverityBadge count={s.medium_count} tone="medium" />
+                    <SeverityBadge count={s.low_count} tone="low" />
                   </div>
                 )}
                 <span className="text-xs text-muted-foreground shrink-0 tabular-nums">

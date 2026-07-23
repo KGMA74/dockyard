@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Trash2, Database, Boxes, Layers, Tags, Eye, Zap } from 'lucide-react'
+import { useTranslation } from 'react-i18next'
 import { getHealth, runGC, HealthInfo, RepoSummary, StorageStats } from '../api'
 import InsightsSection from './InsightsSection'
 import RetentionSection from './RetentionSection'
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export default function StorageTab({ stats, repos, onRefresh }: Props) {
+  const { t } = useTranslation()
   const [running, setRunning] = useState(false)
   const [health, setHealth] = useState<HealthInfo | null>(null)
 
@@ -29,15 +31,15 @@ export default function StorageTab({ stats, repos, onRefresh }: Props) {
       if (dryRun) {
         toast.info(
           result.count === 0
-            ? 'Nothing to collect — no unreferenced blob'
-            : `Preview — ${result.count} blob(s) would be removed, freeing ${result.freed_human}`,
+            ? t('storageTab.gcNothing')
+            : t('storageTab.gcPreview', { count: result.count, freed: result.freed_human }),
         )
       } else {
-        toast.success(`GC done — removed ${result.count} blob(s), freed ${result.freed_human}`)
+        toast.success(t('storageTab.gcDone', { count: result.count, freed: result.freed_human }))
         onRefresh()
       }
     } catch (err) {
-      toast.error(err instanceof Error ? err.message : 'GC failed')
+      toast.error(err instanceof Error ? err.message : t('storageTab.gcFailed'))
     } finally {
       setRunning(false)
     }
@@ -53,28 +55,28 @@ export default function StorageTab({ stats, repos, onRefresh }: Props) {
     <div className="space-y-6">
       <div>
         <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">
-          Storage
+          {t('storageTab.title')}
         </h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard icon={Database} label="Storage used" value={unavailable ? '—' : stats.total_size_human} />
-          <StatCard icon={Boxes} label="Repositories" value={unavailable ? '—' : String(stats.repo_count)} />
-          <StatCard icon={Layers} label="Blobs" value={unavailable ? '—' : String(stats.blob_count)} />
-          <StatCard icon={Tags} label="Tags" value={String(totalTags)} sub={`avg ${avgTags}/repo`} />
+          <StatCard icon={Database} label={t('storageTab.storageUsed')} value={unavailable ? '—' : stats.total_size_human} />
+          <StatCard icon={Boxes} label={t('storageTab.repositories')} value={unavailable ? '—' : String(stats.repo_count)} />
+          <StatCard icon={Layers} label={t('storageTab.blobs')} value={unavailable ? '—' : String(stats.blob_count)} />
+          <StatCard icon={Tags} label={t('storageTab.tags')} value={String(totalTags)} sub={t('storageTab.avgPerRepo', { avg: avgTags })} />
         </div>
       </div>
 
       {health?.mirror && (
         <div>
           <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">
-            Pull-through cache
+            {t('storageTab.pullThroughCache')}
           </h3>
           <div className="grid grid-cols-2 gap-3">
-            <StatCard icon={Zap} label="Cache hits" value={String(health.mirror.hits)} />
+            <StatCard icon={Zap} label={t('storageTab.cacheHits')} value={String(health.mirror.hits)} />
             <StatCard
               icon={Zap}
-              label="Cache misses"
+              label={t('storageTab.cacheMisses')}
               value={String(health.mirror.misses)}
-              sub={health.registry ? `upstream: ${health.registry.replace(/^https?:\/\//, '')}` : undefined}
+              sub={health.registry ? t('storageTab.upstream', { url: health.registry.replace(/^https?:\/\//, '') }) : undefined}
             />
           </div>
         </div>
@@ -83,7 +85,7 @@ export default function StorageTab({ stats, repos, onRefresh }: Props) {
       {stats.storage_path && (
         <div>
           <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">
-            Storage path
+            {t('storageTab.storagePath')}
           </h3>
           <Card className="p-4 rounded-xl">
             <p className="font-mono text-xs text-muted-foreground break-all">{stats.storage_path}</p>
@@ -93,15 +95,14 @@ export default function StorageTab({ stats, repos, onRefresh }: Props) {
 
       <div>
         <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">
-          Garbage collection
+          {t('storageTab.gcTitle')}
         </h3>
         <Card className="p-4 rounded-xl gap-2">
           <p className="text-sm text-muted-foreground">
-            Removes blobs that are no longer referenced by any manifest. Run this after
-            deleting tags or repositories to reclaim disk space.
+            {t('storageTab.gcDescription')}
           </p>
           {unavailable ? (
-            <p className="text-xs text-muted-foreground/70">Not available in proxy mode</p>
+            <p className="text-xs text-muted-foreground/70">{t('storageTab.notAvailableProxy')}</p>
           ) : (
             <div className="flex gap-2 mt-1">
               <Button
@@ -111,7 +112,7 @@ export default function StorageTab({ stats, repos, onRefresh }: Props) {
                 disabled={running}
               >
                 <Eye />
-                Preview GC
+                {t('storageTab.previewGC')}
               </Button>
               <Button
                 variant="secondary"
@@ -120,7 +121,7 @@ export default function StorageTab({ stats, repos, onRefresh }: Props) {
                 disabled={running}
               >
                 <Trash2 />
-                {running ? 'Running…' : 'Run garbage collection'}
+                {running ? t('storageTab.running') : t('storageTab.runGC')}
               </Button>
             </div>
           )}
