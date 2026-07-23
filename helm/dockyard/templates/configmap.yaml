@@ -25,6 +25,9 @@ data:
   TLS_CERT_FILE: "/etc/dockyard-tls/tls.crt"
   TLS_KEY_FILE: "/etc/dockyard-tls/tls.key"
   {{- end }}
+  {{- if (.Values.tracing).otlpEndpoint }}
+  OTEL_EXPORTER_OTLP_ENDPOINT: {{ .Values.tracing.otlpEndpoint | quote }}
+  {{- end }}
   SCAN_ENABLED: {{ (.Values.scan).enabled | default false | toString | quote }}
   TRIVY_SERVER_URL: {{ (.Values.scan).trivyServerURL | default "" | quote }}
   {{- if (.Values.scan).cacheDir }}

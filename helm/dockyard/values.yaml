@@ -75,6 +75,15 @@ signing:
   # mounted read-only and scanned for public keys to verify against.
   publicKeysSecret: ""
 
+tracing:
+  # Distributed tracing (OpenTelemetry). Off by default — leave otlpEndpoint
+  # empty and Dockyard adds zero overhead (no middleware installed, global
+  # tracer stays a no-op). Set otlpEndpoint to an OTLP/HTTP collector to
+  # enable: every request gets a root span, with child spans around the
+  # storage operations that matter for push/pull latency. No other config
+  # surface exists on purpose.
+  otlpEndpoint: ""
+
 scan:
   # Vulnerability scanning: Dockyard shells out to a `trivy` binary bundled in
   # its own image. Standalone by default (empty trivyServerURL) — trivy

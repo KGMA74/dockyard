@@ -22,6 +22,7 @@ A lightweight, self-hosted Docker Registry V2 server written in Go. Ships as a *
 - **Replication** — push-based copy of every tagged push to other registries (multi-arch aware, blob-deduplicating), with per-target repo pattern filtering and retry/backoff (embedded/mirror mode)
 - **JWT auth** on the admin API, optional Basic Auth on `/v2/*`
 - **Structured JSON logging** via `log/slog`
+- **OpenTelemetry tracing** — off unless `OTEL_EXPORTER_OTLP_ENDPOINT` is set, then every request gets a traced span with child spans around storage operations
 - **Single Docker image** — multi-stage build, final image from `scratch`
 
 ---
@@ -158,6 +159,15 @@ V2_AUTH_ENABLED=false
 # Prometheus metrics on /metrics (unauthenticated — keep the port private or
 # disable): HTTP by normalized route, storage gauges, GC runs, mirror cache.
 # METRICS_ENABLED=true
+
+# ── Distributed tracing (OpenTelemetry) ───────────────────────────────────────
+# Off by default, no other config surface: setting this one variable is what
+# turns tracing on. Exports spans over OTLP/HTTP — every request gets a root
+# span (via otelecho), with child spans around the storage operations that
+# matter for push/pull latency (GetBlob, PutBlob, CommitUpload, Get/Put/
+# DeleteManifest). Most useful in proxy/mirror mode to see where latency goes
+# between Dockyard and the upstream registry.
+# OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
 
 # ── Vulnerability scanning (Trivy) ────────────────────────────────────────────
 # Off by default. Dockyard shells out to the `trivy` binary bundled in its own
@@ -455,6 +465,7 @@ Un serveur Docker Registry V2 léger, écrit en Go. Livré sous forme d'un **bin
 - **Réplication** — copie push-based de chaque push de tag vers d'autres registries (multi-arch, dédup des blobs), filtrage par pattern de dépôt par cible, retry/backoff (mode embarqué/mirror)
 - **Auth JWT** sur l'API admin, Basic Auth optionnelle sur `/v2/*`
 - **Logs structurés JSON** via `log/slog`
+- **Tracing OpenTelemetry** — désactivé sauf si `OTEL_EXPORTER_OTLP_ENDPOINT` est défini, puis chaque requête a un span tracé avec des spans enfants autour des opérations storage
 - **Image Docker unique** — build multi-stage, image finale depuis `scratch`
 
 ---
@@ -591,6 +602,16 @@ V2_AUTH_ENABLED=false
 # Métriques Prometheus sur /metrics (non authentifié — garder le port privé ou
 # désactiver) : HTTP par route normalisée, jauges storage, runs de GC, cache mirror.
 # METRICS_ENABLED=true
+
+# ── Tracing distribué (OpenTelemetry) ─────────────────────────────────────────
+# Désactivé par défaut, aucune autre surface de config : définir cette seule
+# variable suffit à activer le tracing. Export des spans en OTLP/HTTP —
+# chaque requête a un span racine (via otelecho), avec des spans enfants
+# autour des opérations storage qui comptent pour la latence push/pull
+# (GetBlob, PutBlob, CommitUpload, Get/Put/DeleteManifest). Surtout utile en
+# mode proxy/mirror pour voir où passe la latence entre Dockyard et la
+# registry upstream.
+# OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
 
 # ── Scan de vulnérabilités (Trivy) ────────────────────────────────────────────
 # Désactivé par défaut. Dockyard appelle en subprocess le binaire `trivy`

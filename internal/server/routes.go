@@ -27,6 +27,8 @@ import (
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 	"golang.org/x/time/rate"
+
+	"go.opentelemetry.io/contrib/instrumentation/github.com/labstack/echo/otelecho"
 )
 
 func (s *Server) RegisterRoutes() http.Handler {
@@ -54,6 +56,13 @@ func (s *Server) RegisterRoutes() http.Handler {
 		},
 	}))
 	e.Use(middleware.Recover())
+
+	// OpenTelemetry tracing — off unless OTEL_EXPORTER_OTLP_ENDPOINT is set
+	// (see internal/tracing), so this middleware is skipped entirely rather
+	// than instrumenting into a no-op tracer.
+	if s.tracingEnabled {
+		e.Use(otelecho.Middleware("dockyard"))
+	}
 
 	// Prometheus instrumentation — registered before the V2 interceptor so
 	// registry traffic is measured too (paths are normalized to a bounded

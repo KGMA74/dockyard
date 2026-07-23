@@ -18,6 +18,9 @@ import (
 	"dockyard/internal/events"
 	"dockyard/internal/storage"
 	"dockyard/internal/store"
+	"dockyard/internal/tracing"
+
+	"go.opentelemetry.io/otel/attribute"
 )
 
 // Handler implements http.Handler for the Docker Registry V2 protocol.
@@ -126,7 +129,9 @@ func (h *Handler) tags(w http.ResponseWriter, _ *http.Request, name string) {
 func (h *Handler) manifests(w http.ResponseWriter, r *http.Request, name, ref string) {
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
+		_, end := tracing.StartSpan(r.Context(), "GetManifest", attribute.String("repository", name), attribute.String("reference", ref))
 		content, digest, err := h.store.GetManifest(name, ref)
+		end(err)
 		if err != nil {
 			registryError(w, http.StatusNotFound, "MANIFEST_UNKNOWN", err.Error())
 			return
@@ -163,7 +168,10 @@ func (h *Handler) manifests(w http.ResponseWriter, r *http.Request, name, ref st
 				return
 			}
 		}
-		if err := h.store.PutManifest(name, ref, dgst, body); err != nil {
+		_, end := tracing.StartSpan(r.Context(), "PutManifest", attribute.String("repository", name), attribute.String("reference", ref))
+		err = h.store.PutManifest(name, ref, dgst, body)
+		end(err)
+		if err != nil {
 			registryError(w, http.StatusInternalServerError, "UNKNOWN", err.Error())
 			return
 		}
@@ -177,7 +185,10 @@ func (h *Handler) manifests(w http.ResponseWriter, r *http.Request, name, ref st
 		}
 
 	case http.MethodDelete:
-		if err := h.store.DeleteManifest(name, ref); err != nil {
+		_, end := tracing.StartSpan(r.Context(), "DeleteManifest", attribute.String("repository", name), attribute.String("reference", ref))
+		err := h.store.DeleteManifest(name, ref)
+		end(err)
+		if err != nil {
 			registryError(w, http.StatusNotFound, "MANIFEST_UNKNOWN", err.Error())
 			return
 		}
@@ -198,7 +209,9 @@ func (h *Handler) getBlob(w http.ResponseWriter, r *http.Request, name, digest s
 		registryError(w, http.StatusNotFound, "BLOB_UNKNOWN", "blob unknown to registry")
 		return
 	}
+	_, end := tracing.StartSpan(r.Context(), "GetBlob", attribute.String("digest", digest))
 	rc, size, err := h.store.GetBlob(digest)
+	end(err)
 	if err != nil {
 		registryError(w, http.StatusInternalServerError, "UNKNOWN", err.Error())
 		return
@@ -232,7 +245,10 @@ func (h *Handler) initUpload(w http.ResponseWriter, r *http.Request, name string
 				h.publishQuotaWarnings(warnings, requestActor(r))
 			}
 		}
-		if err := h.store.PutBlob(digest, r.Body, r.ContentLength); err != nil {
+		_, end := tracing.StartSpan(r.Context(), "PutBlob", attribute.String("digest", digest))
+		err := h.store.PutBlob(digest, r.Body, r.ContentLength)
+		end(err)
+		if err != nil {
 			registryError(w, http.StatusBadRequest, "DIGEST_INVALID", err.Error())
 			return
 		}
@@ -294,7 +310,10 @@ func (h *Handler) patchOrCommitUpload(w http.ResponseWriter, r *http.Request, na
 				h.publishQuotaWarnings(warnings, requestActor(r))
 			}
 		}
-		if err := h.store.CommitUpload(id, digest); err != nil {
+		_, end := tracing.StartSpan(r.Context(), "CommitUpload", attribute.String("digest", digest))
+		err := h.store.CommitUpload(id, digest)
+		end(err)
+		if err != nil {
 			registryError(w, http.StatusBadRequest, "DIGEST_INVALID", err.Error())
 			return
 		}

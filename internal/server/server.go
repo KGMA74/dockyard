@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -17,6 +18,7 @@ import (
 	"dockyard/internal/storage"
 	"dockyard/internal/store"
 	"dockyard/internal/tlsutil"
+	"dockyard/internal/tracing"
 )
 
 type mode string
@@ -57,11 +59,18 @@ type Server struct {
 	trivyInsecureRegistry bool
 
 	signingPolicy *cosign.Policy
+
+	tracingEnabled bool
 }
 
-func NewServer() *http.Server {
+// NewServer builds the HTTP server. The second return value flushes and
+// closes the OpenTelemetry exporter (a no-op if tracing was never enabled) —
+// callers should invoke it during graceful shutdown.
+func NewServer() (*http.Server, func(context.Context) error) {
 	cfg := config.Load()
 	printBanner(cfg)
+
+	tracingShutdown, tracingEnabled := tracing.Init(context.Background())
 
 	m := mode(cfg.RegistryMode)
 	if m == "" {
@@ -90,6 +99,8 @@ func NewServer() *http.Server {
 		scanMaxReportBytes:    cfg.ScanMaxReportBytes,
 		scanDedupWindow:       cfg.ScanDedupWindow,
 		trivyInsecureRegistry: cfg.TrivyInsecureRegistry,
+
+		tracingEnabled: tracingEnabled,
 	}
 	if srv.trivyCacheDir == "" {
 		srv.trivyCacheDir = filepath.Join(cfg.StoragePath, "trivy-cache")
@@ -197,5 +208,5 @@ func NewServer() *http.Server {
 		IdleTimeout:       10 * time.Minute,
 		ReadHeaderTimeout: 30 * time.Second,
 		TLSConfig:         tlsConfig,
-	}
+	}, tracingShutdown
 }

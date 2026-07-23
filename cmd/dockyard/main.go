@@ -33,7 +33,12 @@ func gracefulShutdown(apiServer *http.Server, done chan bool) {
 func main() {
 	slog.SetDefault(slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo})))
 
-	srv := server.NewServer()
+	srv, tracingShutdown := server.NewServer()
+	defer func() {
+		if err := tracingShutdown(context.Background()); err != nil {
+			slog.Error("tracing shutdown failed", "err", err)
+		}
+	}()
 
 	done := make(chan bool, 1)
 	go gracefulShutdown(srv, done)
