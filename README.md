@@ -6,7 +6,7 @@ A lightweight, self-hosted Docker Registry V2 server written in Go. Ships as a *
 
 ## Features
 
-- **Embedded UI** — React + Tailwind (shadcn/ui) dashboard served directly by the binary, with dark/light/system theme
+- **Embedded UI** — React + Tailwind (shadcn/ui) dashboard served directly by the binary, with dark/light/system theme, and English/French localization (auto-detected from the browser, switchable in the sidebar)
 - **Multi-arch aware** — manifest lists (OCI indexes) are resolved per-platform, so multi-arch images show their real total size instead of 0
 - **Layer browser** — inspect the files inside any layer (path, size, symlinks) without pulling the image
 - **Repository and tag deletion** — remove a single tag or an entire repository from the UI or API
@@ -449,7 +449,7 @@ Un serveur Docker Registry V2 léger, écrit en Go. Livré sous forme d'un **bin
 
 ## Fonctionnalités
 
-- **UI embarquée** — dashboard React + Tailwind (shadcn/ui) servi directement par le binaire, avec thème clair/sombre/système
+- **UI embarquée** — dashboard React + Tailwind (shadcn/ui) servi directement par le binaire, avec thème clair/sombre/système et localisation FR/EN (détection automatique du navigateur, switch dans la sidebar)
 - **Support multi-arch** — les manifest lists (index OCI) sont résolues par plateforme, donc les images multi-arch affichent leur vraie taille totale au lieu de 0
 - **Explorateur de layers** — inspecter les fichiers d'une layer (chemin, taille, symlinks) sans puller l'image
 - **Suppression de dépôts et de tags** — supprimer un tag ou un dépôt entier depuis l'UI ou l'API
