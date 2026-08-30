@@ -5,9 +5,10 @@ import { useTranslation } from 'react-i18next'
 import { logout, getRepositories, getStorageStats, subscribeToEvents, formatEventMessage, RegistryEvent, StorageStats, RepoSummary, TagInfo } from '../api'
 import DenseRepoView from '../components/DenseRepoView'
 import ImageDetailsPanel from '../components/ImageDetailsPanel'
-import { NotificationItem } from '../components/NotificationBell'
+import NotificationBell, { NotificationItem } from '../components/NotificationBell'
 import RepoList from '../components/RepoList'
-import Sidebar, { Tab } from '../components/Sidebar'
+import AppSidebar, { Tab } from '../components/Sidebar'
+import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
 import StorageTab from '../components/StorageTab'
 import SettingsTab from '../components/SettingsTab'
 import UsersTab from '../components/UsersTab'
@@ -28,6 +29,14 @@ interface Props {
 }
 
 type SortKey = 'name' | 'tags' | 'pushed'
+
+// The shadcn Sidebar writes its expanded/collapsed state to a `sidebar_state`
+// cookie. This is a Vite SPA (no SSR), so we read it back here to seed
+// `defaultOpen` and keep the choice across reloads.
+function sidebarInitiallyOpen(): boolean {
+  const m = document.cookie.match(/(?:^|;\s*)sidebar_state=([^;]+)/)
+  return m ? m[1] === 'true' : true
+}
 
 export default function Dashboard({ onLogout }: Props) {
   const { t } = useTranslation()
@@ -125,19 +134,29 @@ export default function Dashboard({ onLogout }: Props) {
     })
 
   return (
-    <div className="min-h-screen bg-muted/40 dark:bg-background flex">
-      <Sidebar
+    <SidebarProvider className="h-svh overflow-hidden" defaultOpen={sidebarInitiallyOpen()}>
+      <AppSidebar
         tab={tab}
         onTabChange={setTab}
         onChangePassword={() => setShowPasswordModal(true)}
         onLogout={handleLogout}
-        notifications={notifications}
-        unreadCount={unreadCount}
-        notifOpen={notifOpen}
-        onNotifOpenChange={handleNotifOpenChange}
       />
 
-      <main className="flex-1 min-w-0 px-6 py-6">
+      <SidebarInset className="min-h-0 overflow-hidden">
+        <header className="flex h-12 shrink-0 items-center gap-2 border-b px-4">
+          <SidebarTrigger className="text-muted-foreground" aria-label={t('sidebar.toggle')} />
+          <span className="text-sm font-medium">{t(`sidebar.${tab}`)}</span>
+          <div className="ml-auto">
+            <NotificationBell
+              items={notifications}
+              unreadCount={unreadCount}
+              open={notifOpen}
+              onOpenChange={handleNotifOpenChange}
+            />
+          </div>
+        </header>
+
+      <main className="flex-1 min-w-0 min-h-0 overflow-y-auto px-6 py-6 bg-muted/40 dark:bg-background">
         {tab === 'images' && (
           <div>
             <div className="flex items-center gap-3 mb-3">
@@ -239,10 +258,11 @@ export default function Dashboard({ onLogout }: Props) {
           <SettingsTab onChangePassword={() => setShowPasswordModal(true)} />
         )}
       </main>
+      </SidebarInset>
 
       {showPasswordModal && (
         <ChangePasswordModal onClose={() => setShowPasswordModal(false)} />
       )}
-    </div>
+    </SidebarProvider>
   )
 }

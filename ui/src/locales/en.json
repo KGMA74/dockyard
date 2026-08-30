@@ -24,7 +24,14 @@
     "users": "Users",
     "settings": "Settings",
     "changePassword": "Change password",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "toggle": "Toggle sidebar"
+  },
+  "theme": {
+    "light": "Light",
+    "system": "System",
+    "dark": "Dark",
+    "switchTo": "Switch to {{theme}} theme"
   },
   "loginPage": {
     "subtitle": "Docker Registry",
@@ -204,7 +211,8 @@
     "gcNothing": "Nothing to collect — no unreferenced blob",
     "gcPreview": "Preview — {{count}} blob(s) would be removed, freeing {{freed}}",
     "gcDone": "GC done — removed {{count}} blob(s), freed {{freed}}",
-    "gcFailed": "GC failed"
+    "gcFailed": "GC failed",
+    "gcNoBlobsListed": "No blobs could be listed — check the storage backend permissions (S3 needs s3:ListBucket)"
   },
   "denseRepoView": {
     "searchFailed": "Search failed",

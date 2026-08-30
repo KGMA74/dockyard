@@ -34,6 +34,8 @@ export default function StorageTab({ stats, repos, onRefresh }: Props) {
             ? t('storageTab.gcNothing')
             : t('storageTab.gcPreview', { count: result.count, freed: result.freed_human }),
         )
+      } else if (result.scanned_blobs === 0 && repos.length > 0) {
+        toast.warning(t('storageTab.gcNoBlobsListed'))
       } else {
         toast.success(t('storageTab.gcDone', { count: result.count, freed: result.freed_human }))
         onRefresh()

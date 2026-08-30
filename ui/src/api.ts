@@ -310,6 +310,9 @@ export interface GCResult {
   freed_bytes: number
   removed: string[]
   dry_run?: boolean
+  /** Total blobs enumerated. 0 while repositories exist means the backend
+   *  could not list storage (e.g. missing S3 ListBucket permission). */
+  scanned_blobs?: number
 }
 
 export async function runGC(dryRun = false): Promise<GCResult> {

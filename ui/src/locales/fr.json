@@ -24,7 +24,14 @@
     "users": "Utilisateurs",
     "settings": "Paramètres",
     "changePassword": "Changer le mot de passe",
-    "signOut": "Se déconnecter"
+    "signOut": "Se déconnecter",
+    "toggle": "Replier / déplier le menu"
+  },
+  "theme": {
+    "light": "Clair",
+    "system": "Système",
+    "dark": "Sombre",
+    "switchTo": "Passer au thème {{theme}}"
   },
   "loginPage": {
     "subtitle": "Registry Docker",
@@ -204,7 +211,8 @@
     "gcNothing": "Rien à collecter — aucun blob non référencé",
     "gcPreview": "Aperçu — {{count}} blob(s) seraient supprimés, libérant {{freed}}",
     "gcDone": "GC terminé — {{count}} blob(s) supprimés, {{freed}} libérés",
-    "gcFailed": "Échec du GC"
+    "gcFailed": "Échec du GC",
+    "gcNoBlobsListed": "Aucun blob listé — vérifier les permissions du backend de stockage (S3 requiert s3:ListBucket)"
   },
   "denseRepoView": {
     "searchFailed": "Échec de la recherche",
