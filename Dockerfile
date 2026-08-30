@@ -28,10 +28,15 @@ RUN CGO_ENABLED=0 GOOS=$TARGETOS GOARCH=$TARGETARCH \
     -o dockyard \
     ./cmd/dockyard
 
-# ── Stage 3 : trivy binary (vulnerability scanning, see internal/scan) ────────
+# ── Stage 3 : trivy binary + pre-seeded vulnerability DB ─────────────────────
 # Pinned explicitly — a version bump may require adjusting the JSON parsing in
 # internal/scan/trivy.go, so treat it as a deliberate, linked change.
+# We also download the vulnerability DB at build time and ship it in the final
+# image, so the very first scan works offline and doesn't stall on a ~50 MB
+# download. The server refreshes it in the background on startup (unless
+# TRIVY_OFFLINE=true).
 FROM aquasec/trivy:0.56.2 AS trivy
+RUN trivy --cache-dir /trivy-cache image --download-db-only
 
 # ── Stage 4 : Final image ─────────────────────────────────────────────────────
 FROM scratch
@@ -39,6 +44,7 @@ FROM scratch
 COPY --from=builder /etc/ssl/certs/ca-certificates.crt /etc/ssl/certs/
 COPY --from=builder /app/dockyard /dockyard
 COPY --from=trivy /usr/local/bin/trivy /trivy
+COPY --from=trivy /trivy-cache /opt/trivy-cache
 
 EXPOSE 8080
 

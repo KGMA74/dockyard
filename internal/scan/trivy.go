@@ -16,6 +16,7 @@ import (
 	"fmt"
 	"os/exec"
 	"strings"
+	"time"
 )
 
 // trivyReport is the minimal shape of `trivy image --format json` output
@@ -90,13 +91,23 @@ func (c *cappedBuffer) Write(p []byte) (int, error) {
 // scratch with no HOME, so trivy's default cache-dir resolution is
 // unreliable even in server mode (it still pulls and unpacks image layers
 // locally to scan them, regardless of where the vulnerability DB lives).
-func buildTrivyArgs(server, cacheDir, imageRef string, insecure bool) []string {
+func buildTrivyArgs(server, cacheDir, imageRef string, insecure, offline bool, timeout time.Duration) []string {
 	args := []string{
 		"image",
 		"--cache-dir", cacheDir,
 		"--format", "json",
 		"--scanners", "vuln",
 		"--quiet",
+	}
+	if timeout > 0 {
+		// Trivy has its own internal timeout (default 5m); align it with ours so
+		// a slow pull/extract fails with a trivy error rather than a bare
+		// context cancellation.
+		args = append(args, "--timeout", timeout.String())
+	}
+	if offline {
+		// Scan with only the seeded/cached DB — never touch the network.
+		args = append(args, "--skip-db-update", "--skip-java-db-update")
 	}
 	if server != "" {
 		args = append(args, "--server", server)
@@ -110,8 +121,8 @@ func buildTrivyArgs(server, cacheDir, imageRef string, insecure bool) []string {
 // runTrivy shells out to `trivy image` (standalone or --server, depending on
 // whether server is set) and returns the raw JSON report. user/pass
 // authenticate trivy's own registry pull against Dockyard.
-func runTrivy(ctx context.Context, bin, server, cacheDir, imageRef, user, pass string, insecure bool, maxBytes int64) ([]byte, error) {
-	args := buildTrivyArgs(server, cacheDir, imageRef, insecure)
+func runTrivy(ctx context.Context, bin, server, cacheDir, imageRef, user, pass string, insecure, offline bool, timeout time.Duration, maxBytes int64) ([]byte, error) {
+	args := buildTrivyArgs(server, cacheDir, imageRef, insecure, offline, timeout)
 	cmd := exec.CommandContext(ctx, bin, args...) //nolint:gosec // bin/server/imageRef are operator/config-controlled, not end-user input
 	// TMPDIR: the final image runs FROM scratch, which has no /tmp — trivy's
 	// own DB download and layer extraction need a writable temp dir, so point
@@ -138,12 +149,46 @@ func runTrivyWithCmd(cmd *exec.Cmd, maxBytes int64) ([]byte, error) {
 		if msg == "" {
 			msg = err.Error()
 		}
-		return nil, fmt.Errorf("scan: trivy failed: %s", msg)
+		return nil, fmt.Errorf("scan: trivy failed: %s%s", msg, trivyErrorHint(msg))
 	}
 	if stdout.exceeded {
 		return nil, errReportTooLarge
 	}
 	return stdout.buf.Bytes(), nil
+}
+
+// downloadTrivyDB refreshes the vulnerability DB in the given cache dir. Used
+// for a best-effort background warm-up on startup so the DB shipped in the image
+// (which is as old as the build) is current before the first user scan.
+func downloadTrivyDB(ctx context.Context, bin, cacheDir string) error {
+	cmd := exec.CommandContext(ctx, bin, "--cache-dir", cacheDir, "image", "--download-db-only") //nolint:gosec // bin is operator/config-controlled
+	cmd.Env = append(cmd.Environ(), "TMPDIR="+cacheDir)
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
+	if err := cmd.Run(); err != nil {
+		msg := strings.TrimSpace(stderr.String())
+		if msg == "" {
+			msg = err.Error()
+		}
+		return fmt.Errorf("scan: trivy db refresh: %s", msg)
+	}
+	return nil
+}
+
+// trivyErrorHint maps common trivy failures to an actionable suggestion,
+// appended to the raw error the operator sees.
+func trivyErrorHint(stderr string) string {
+	s := strings.ToLower(stderr)
+	switch {
+	case strings.Contains(s, "vulnerability db") && (strings.Contains(s, "download") || strings.Contains(s, "update")):
+		return " (hint: no internet access to fetch the vulnerability DB — set TRIVY_OFFLINE=true to use only the DB shipped in the image, or point TRIVY_SERVER_URL at a shared trivy server)"
+	case strings.Contains(s, "deadline exceeded") || strings.Contains(s, "timeout"):
+		return " (hint: the scan timed out — raise SCAN_TIMEOUT; the first scan is slower while the DB is prepared)"
+	case strings.Contains(s, "manifest_unknown") || strings.Contains(s, "manifest unknown") || strings.Contains(s, "401") || strings.Contains(s, "unauthorized"):
+		return " (hint: trivy could not pull the image from Dockyard — check the image still exists and the registry credentials)"
+	default:
+		return ""
+	}
 }
 
 // trivyVersion runs `trivy --version` once and extracts the version string,

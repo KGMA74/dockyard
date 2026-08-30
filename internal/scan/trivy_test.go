@@ -43,7 +43,7 @@ func runHelperProcess() {
 }
 
 func TestBuildTrivyArgsStandalone(t *testing.T) {
-	args := buildTrivyArgs("", "/cache", "registry.local/team/app@sha256:abc", false)
+	args := buildTrivyArgs("", "/cache", "registry.local/team/app@sha256:abc", false, false, 0)
 	joined := strings.Join(args, " ")
 	if strings.Contains(joined, "--server") {
 		t.Fatalf("standalone args should not include --server: %v", args)
@@ -57,7 +57,7 @@ func TestBuildTrivyArgsStandalone(t *testing.T) {
 }
 
 func TestBuildTrivyArgsServerMode(t *testing.T) {
-	args := buildTrivyArgs("http://trivy:4954", "/cache", "registry.local/team/app@sha256:abc", false)
+	args := buildTrivyArgs("http://trivy:4954", "/cache", "registry.local/team/app@sha256:abc", false, false, 0)
 	joined := strings.Join(args, " ")
 	if !strings.Contains(joined, "--server http://trivy:4954") {
 		t.Fatalf("expected --server http://trivy:4954 in args: %v", args)
@@ -68,13 +68,53 @@ func TestBuildTrivyArgsServerMode(t *testing.T) {
 }
 
 func TestBuildTrivyArgsInsecure(t *testing.T) {
-	args := buildTrivyArgs("http://trivy:4954", "/cache", "img", true)
+	args := buildTrivyArgs("http://trivy:4954", "/cache", "img", true, false, 0)
 	if !slices.Contains(args, "--insecure") {
 		t.Fatalf("expected --insecure in args: %v", args)
 	}
-	args = buildTrivyArgs("", "/cache", "img", false)
+	args = buildTrivyArgs("", "/cache", "img", false, false, 0)
 	if slices.Contains(args, "--insecure") {
 		t.Fatalf("did not expect --insecure in args: %v", args)
+	}
+}
+
+func TestBuildTrivyArgsTimeoutAndOffline(t *testing.T) {
+	args := buildTrivyArgs("", "/cache", "img", false, true, 8*time.Minute)
+	joined := strings.Join(args, " ")
+	if !strings.Contains(joined, "--timeout 8m0s") {
+		t.Fatalf("expected --timeout 8m0s in args: %v", args)
+	}
+	if !slices.Contains(args, "--skip-db-update") {
+		t.Fatalf("expected --skip-db-update in offline args: %v", args)
+	}
+
+	online := buildTrivyArgs("", "/cache", "img", false, false, 0)
+	if slices.Contains(online, "--skip-db-update") {
+		t.Fatalf("did not expect --skip-db-update when online: %v", online)
+	}
+	if strings.Contains(strings.Join(online, " "), "--timeout") {
+		t.Fatalf("did not expect --timeout with zero duration: %v", online)
+	}
+}
+
+func TestTrivyErrorHint(t *testing.T) {
+	cases := map[string]string{
+		"FATAL failed to download vulnerability DB: dial tcp": "TRIVY_OFFLINE",
+		"context deadline exceeded":                           "SCAN_TIMEOUT",
+		"MANIFEST_UNKNOWN: manifest unknown":                  "credentials",
+		"some other unrelated error":                          "",
+	}
+	for stderr, want := range cases {
+		got := trivyErrorHint(stderr)
+		if want == "" {
+			if got != "" {
+				t.Errorf("trivyErrorHint(%q) = %q, want empty", stderr, got)
+			}
+			continue
+		}
+		if !strings.Contains(got, want) {
+			t.Errorf("trivyErrorHint(%q) = %q, want it to mention %q", stderr, got, want)
+		}
 	}
 }
 

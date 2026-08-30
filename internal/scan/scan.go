@@ -23,6 +23,7 @@ type Config struct {
 	RegistryUser   string        // credentials trivy uses to pull from Dockyard
 	RegistryPass   string
 	Insecure       bool          // pass --insecure to trivy (plain HTTP / self-signed local pulls)
+	Offline        bool          // TRIVY_OFFLINE — scan with only the seeded/cached DB, never hit the network
 	Timeout        time.Duration // per-scan subprocess timeout
 	MaxReportBytes int64
 	DedupWindow    time.Duration // reuse a recent successful scan instead of re-running
@@ -57,6 +58,21 @@ func NewDispatcher(st *store.Store, cfg Config) *Dispatcher {
 		interval: 15 * time.Second,
 	}
 	go d.loop()
+
+	// Best-effort: refresh the vulnerability DB shipped in the image so the
+	// first real scan isn't the one that discovers a stale/missing DB. Skipped
+	// in offline mode and when deferring to an external trivy server.
+	if !cfg.Offline && cfg.TrivyServerURL == "" && cfg.TrivyBin != "" {
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
+			defer cancel()
+			if err := downloadTrivyDB(ctx, cfg.TrivyBin, cfg.TrivyCacheDir); err != nil {
+				slog.Warn("scan: vulnerability DB warm-up failed (scans will retry the download)", "err", err)
+			} else {
+				slog.Info("scan: vulnerability DB is up to date")
+			}
+		}()
+	}
 	return d
 }
 
@@ -158,7 +174,7 @@ func (d *Dispatcher) execute(sc *store.ScanResult) error {
 	defer cancel()
 
 	imageRef := fmt.Sprintf("%s/%s@%s", d.cfg.RegistryURL, sc.Name, sc.Digest)
-	report, err := runTrivy(ctx, d.cfg.TrivyBin, d.cfg.TrivyServerURL, d.cfg.TrivyCacheDir, imageRef, d.cfg.RegistryUser, d.cfg.RegistryPass, d.cfg.Insecure, d.cfg.MaxReportBytes)
+	report, err := runTrivy(ctx, d.cfg.TrivyBin, d.cfg.TrivyServerURL, d.cfg.TrivyCacheDir, imageRef, d.cfg.RegistryUser, d.cfg.RegistryPass, d.cfg.Insecure, d.cfg.Offline, d.cfg.Timeout, d.cfg.MaxReportBytes)
 	if err != nil {
 		return err
 	}
