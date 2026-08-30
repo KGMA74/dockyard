@@ -3,7 +3,6 @@ package storage
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"fmt"
 	"io"
 	"io/fs"
@@ -218,7 +217,21 @@ func (b *LocalBackend) GetManifest(name, reference string) ([]byte, string, erro
 	return content, digest, nil
 }
 
-func (b *LocalBackend) DeleteManifest(name, digest string) error {
+func (b *LocalBackend) DeleteManifest(name, reference string) error {
+	// Resolve a tag reference to its digest — deleting by tag must remove the
+	// manifest it points at, not silently do nothing.
+	digest := reference
+	if !strings.HasPrefix(reference, "sha256:") {
+		raw, err := os.ReadFile(b.tagPath(name, reference))
+		if err != nil {
+			return fmt.Errorf("tag %q not found in %s", reference, name)
+		}
+		digest = string(raw)
+	}
+
+	// If this manifest is an index, prune child manifests nothing else needs.
+	indexRaw, _ := os.ReadFile(b.manifestPath(name, digest))
+
 	if err := os.Remove(b.manifestPath(name, digest)); err != nil && !os.IsNotExist(err) {
 		return err
 	}
@@ -229,6 +242,10 @@ func (b *LocalBackend) DeleteManifest(name, digest string) error {
 		if err == nil && string(raw) == digest {
 			_ = os.Remove(filepath.Join(tagsDir, e.Name()))
 		}
+	}
+
+	if len(indexRaw) > 0 {
+		b.pruneOrphanChildManifests(name, indexRaw)
 	}
 
 	// If no manifests remain, the repository is empty — drop it entirely so it
@@ -368,33 +385,49 @@ func (b *LocalBackend) ReferencedBlobs() (map[string]struct{}, error) {
 		if err != nil {
 			continue
 		}
+		fetchChild := func(digest string) ([]byte, error) {
+			return os.ReadFile(b.manifestPath(name, digest))
+		}
 		for _, e := range entries {
 			raw, err := os.ReadFile(filepath.Join(manifDir, e.Name()))
 			if err != nil {
 				continue
 			}
-			var m struct {
-				Config struct {
-					Digest string `json:"digest"`
-				} `json:"config"`
-				Layers []struct {
-					Digest string `json:"digest"`
-				} `json:"layers"`
-			}
-			if err := json.Unmarshal(raw, &m); err != nil {
-				continue
-			}
-			if m.Config.Digest != "" {
-				referenced[m.Config.Digest] = struct{}{}
-			}
-			for _, l := range m.Layers {
-				if l.Digest != "" {
-					referenced[l.Digest] = struct{}{}
-				}
-			}
+			collectBlobRefs(raw, referenced, fetchChild)
 		}
 	}
 	return referenced, nil
+}
+
+// pruneOrphanChildManifests removes the per-platform child manifest files of a
+// just-deleted index when no other manifest in the repository still references
+// them — otherwise ReferencedBlobs keeps every layer they list alive forever.
+func (b *LocalBackend) pruneOrphanChildManifests(name string, deletedIndexRaw []byte) {
+	children := childManifestDigests(deletedIndexRaw)
+	if len(children) == 0 {
+		return
+	}
+	manifDir := filepath.Join(b.root, "repositories", filepath.FromSlash(name), "manifests")
+	entries, err := os.ReadDir(manifDir)
+	if err != nil {
+		return
+	}
+	stillReferenced := make(map[string]struct{})
+	for _, e := range entries {
+		raw, err := os.ReadFile(filepath.Join(manifDir, e.Name()))
+		if err != nil {
+			continue
+		}
+		for _, d := range childManifestDigests(raw) {
+			stillReferenced[d] = struct{}{}
+		}
+	}
+	for _, child := range children {
+		if _, ok := stillReferenced[child]; ok {
+			continue
+		}
+		_ = os.Remove(b.manifestPath(name, child))
+	}
 }
 
 func (b *LocalBackend) RemoveBlob(digest string) error {

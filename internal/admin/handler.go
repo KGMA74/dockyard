@@ -287,11 +287,12 @@ func (h *Handler) GarbageCollect(c echo.Context) error {
 		}
 	}
 	return c.JSON(http.StatusOK, map[string]any{
-		"removed":     removed,
-		"count":       len(removed),
-		"freed_bytes": freed,
-		"freed_human": humanSize(freed),
-		"dry_run":     dryRun,
+		"removed":       removed,
+		"count":         len(removed),
+		"freed_bytes":   freed,
+		"freed_human":   humanSize(freed),
+		"dry_run":       dryRun,
+		"scanned_blobs": len(allBlobs),
 	})
 }
 

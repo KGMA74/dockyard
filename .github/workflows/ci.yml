@@ -11,6 +11,23 @@ permissions:
 jobs:
   go:
     runs-on: ubuntu-latest
+    services:
+      minio:
+        image: bitnami/minio:latest
+        ports:
+          - 9000:9000
+        env:
+          MINIO_ROOT_USER: minioadmin
+          MINIO_ROOT_PASSWORD: minioadmin
+        options: >-
+          --health-cmd "mc ready local || curl -sf http://localhost:9000/minio/health/live"
+          --health-interval 5s --health-timeout 5s --health-retries 20
+    env:
+      # Exercises the S3 storage-backend contract (incl. GC) against real MinIO;
+      # without these the S3 tests self-skip.
+      DOCKYARD_TEST_S3_ENDPOINT: localhost:9000
+      DOCKYARD_TEST_S3_ACCESS_KEY: minioadmin
+      DOCKYARD_TEST_S3_SECRET_KEY: minioadmin
     steps:
       - name: Checkout
         uses: actions/checkout@v4
