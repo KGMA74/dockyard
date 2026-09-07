@@ -1,30 +1,23 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { TrendingUp } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { getInsights, RepoSize, StatsSample } from '../api'
+import { RepoSize, StatsSample } from '../api'
 import GrowthChart from './GrowthChart'
 import { formatBytes } from '@/lib/format'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 
+interface Props {
+  topRepos: RepoSize[]
+  history: StatsSample[]
+}
+
 // InsightsSection shows the largest repositories and storage growth; hidden
-// for non-admins (403) and in proxy mode.
-export default function InsightsSection() {
+// for non-admins (403) and in proxy mode. Data is fetched once by the parent
+// (StorageTab) and shared with the "Storage used" sparkline.
+export default function InsightsSection({ topRepos, history }: Props) {
   const { t } = useTranslation()
-  const [topRepos, setTopRepos] = useState<RepoSize[] | null>(null)
-  const [history, setHistory] = useState<StatsSample[]>([])
   const [showTable, setShowTable] = useState(false)
-
-  useEffect(() => {
-    getInsights()
-      .then(r => {
-        setTopRepos(r.top_repos)
-        setHistory(r.history)
-      })
-      .catch(() => setTopRepos(null))
-  }, [])
-
-  if (topRepos === null) return null
 
   const maxSize = Math.max(1, ...topRepos.map(r => r.size_bytes))
   // One point per day at most, most recent last.

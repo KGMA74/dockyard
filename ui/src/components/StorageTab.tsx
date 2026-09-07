@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { toast } from 'sonner'
 import { Trash2, Database, Boxes, Layers, Tags, Eye, Zap } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { getHealth, runGC, HealthInfo, RepoSummary, StorageStats } from '../api'
+import { getHealth, getInsights, runGC, HealthInfo, RepoSize, RepoSummary, StatsSample, StorageStats } from '../api'
 import InsightsSection from './InsightsSection'
 import RetentionSection from './RetentionSection'
 import ScansSection from './ScansSection'
+import Sparkline from './Sparkline'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 
@@ -19,9 +20,17 @@ export default function StorageTab({ stats, repos, onRefresh }: Props) {
   const { t } = useTranslation()
   const [running, setRunning] = useState(false)
   const [health, setHealth] = useState<HealthInfo | null>(null)
+  const [topRepos, setTopRepos] = useState<RepoSize[] | null>(null)
+  const [history, setHistory] = useState<StatsSample[]>([])
 
   useEffect(() => {
     getHealth().then(setHealth).catch(() => setHealth(null))
+    getInsights()
+      .then(r => {
+        setTopRepos(r.top_repos)
+        setHistory(r.history)
+      })
+      .catch(() => setTopRepos(null))
   }, [])
 
   async function handleGC(dryRun: boolean) {
@@ -60,7 +69,12 @@ export default function StorageTab({ stats, repos, onRefresh }: Props) {
           {t('storageTab.title')}
         </h2>
         <div className="grid grid-cols-2 lg:grid-cols-4 gap-3">
-          <StatCard icon={Database} label={t('storageTab.storageUsed')} value={unavailable ? '—' : stats.total_size_human} />
+          <StatCard
+            icon={Database}
+            label={t('storageTab.storageUsed')}
+            value={unavailable ? '—' : stats.total_size_human}
+            spark={history.length >= 2 ? history.slice(-14).map(s => s.total_size) : undefined}
+          />
           <StatCard icon={Boxes} label={t('storageTab.repositories')} value={unavailable ? '—' : String(stats.repo_count)} />
           <StatCard icon={Layers} label={t('storageTab.blobs')} value={unavailable ? '—' : String(stats.blob_count)} />
           <StatCard icon={Tags} label={t('storageTab.tags')} value={String(totalTags)} sub={t('storageTab.avgPerRepo', { avg: avgTags })} />
@@ -130,7 +144,7 @@ export default function StorageTab({ stats, repos, onRefresh }: Props) {
         </Card>
       </div>
 
-      {!unavailable && <InsightsSection />}
+      {!unavailable && topRepos !== null && <InsightsSection topRepos={topRepos} history={history} />}
 
       {!unavailable && <RetentionSection />}
 
@@ -144,20 +158,25 @@ function StatCard({
   label,
   value,
   sub,
+  spark,
 }: {
   icon: typeof Database
   label: string
   value: string
   sub?: string
+  spark?: number[]
 }) {
   return (
-    <Card className="p-4 gap-1 rounded-xl">
+    <Card className="p-4 gap-1 rounded-xl relative overflow-hidden">
       <div className="flex items-center gap-1.5 text-muted-foreground">
         <Icon className="size-3.5" strokeWidth={1.5} />
         <p className="text-xs font-medium">{label}</p>
       </div>
       <p className="text-2xl font-semibold tabular-nums">{value}</p>
       {sub && <p className="text-xs text-muted-foreground/70">{sub}</p>}
+      {spark && (
+        <Sparkline values={spark} className="absolute right-3 bottom-3 w-16 h-6 opacity-70" />
+      )}
     </Card>
   )
 }
