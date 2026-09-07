@@ -116,7 +116,7 @@ function CreateTargetForm({ onCreated }: { onCreated: () => void }) {
   const [repoPattern, setRepoPattern] = useState('*')
   const [busy, setBusy] = useState(false)
 
-  async function submit(e: React.FormEvent) {
+  async function submit(e: React.SubmitEvent) {
     e.preventDefault()
     if (!name.trim() || !baseUrl.trim()) {
       toast.error(t('replication.nameAndUrlRequired'))

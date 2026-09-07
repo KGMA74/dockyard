@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react'
+import { useState, SubmitEvent } from 'react'
 import { toast } from 'sonner'
 import { useTranslation } from 'react-i18next'
 import { changePassword } from '../api'
@@ -25,7 +25,7 @@ export default function ChangePasswordModal({ onClose }: Props) {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState('')
 
-  async function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: SubmitEvent) {
     e.preventDefault()
     if (next !== confirm) {
       setError(t('changePasswordModal.mismatch'))

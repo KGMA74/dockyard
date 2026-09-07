@@ -1,4 +1,4 @@
-import { useState, FormEvent } from 'react'
+import { useState, SubmitEvent } from 'react'
 import { Box } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { login } from '../api'
@@ -19,7 +19,7 @@ export default function LoginPage({ onLogin }: Props) {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  async function handleSubmit(e: FormEvent) {
+  async function handleSubmit(e: SubmitEvent) {
     e.preventDefault()
     setError('')
     setLoading(true)
