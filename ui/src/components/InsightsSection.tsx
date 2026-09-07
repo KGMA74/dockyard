@@ -2,20 +2,10 @@ import { useEffect, useState } from 'react'
 import { TrendingUp } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getInsights, RepoSize, StatsSample } from '../api'
+import GrowthChart from './GrowthChart'
+import { formatBytes } from '@/lib/format'
+import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
-
-function humanBytes(n: number): string {
-  if (n < 1024) return `${n} B`
-  const units = ['KB', 'MB', 'GB', 'TB']
-  let value = n
-  let unit = ''
-  for (const u of units) {
-    value /= 1024
-    unit = u
-    if (value < 1024) break
-  }
-  return `${value.toFixed(1)} ${unit}`
-}
 
 // InsightsSection shows the largest repositories and storage growth; hidden
 // for non-admins (403) and in proxy mode.
@@ -23,6 +13,7 @@ export default function InsightsSection() {
   const { t } = useTranslation()
   const [topRepos, setTopRepos] = useState<RepoSize[] | null>(null)
   const [history, setHistory] = useState<StatsSample[]>([])
+  const [showTable, setShowTable] = useState(false)
 
   useEffect(() => {
     getInsights()
@@ -72,15 +63,23 @@ export default function InsightsSection() {
         </Card>
 
         <Card className="p-4 rounded-xl gap-3">
-          <div className="flex items-center gap-2">
-            <TrendingUp className="size-4 text-muted-foreground" strokeWidth={1.5} />
-            <p className="text-sm font-medium">{t('insights.growth')}</p>
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <TrendingUp className="size-4 text-muted-foreground" strokeWidth={1.5} />
+              <p className="text-sm font-medium">{t('insights.growth')}</p>
+            </div>
+            {growth.length >= 2 && (
+              <Button variant="ghost" size="sm" className="text-xs text-muted-foreground -my-1" onClick={() => setShowTable(v => !v)}>
+                {showTable ? t('insights.viewAsChart') : t('insights.viewAsTable')}
+              </Button>
+            )}
           </div>
+
           {growth.length < 2 ? (
             <p className="text-xs text-muted-foreground">
               {t('insights.notEnoughSamples')}
             </p>
-          ) : (
+          ) : showTable ? (
             <div className="overflow-x-auto">
               <table className="w-full text-xs">
                 <thead>
@@ -97,7 +96,7 @@ export default function InsightsSection() {
                       <td className="py-1.5 pr-3 whitespace-nowrap text-muted-foreground">
                         {new Date(s.at).toLocaleString()}
                       </td>
-                      <td className="py-1.5 pr-3">{humanBytes(s.total_size)}</td>
+                      <td className="py-1.5 pr-3">{formatBytes(s.total_size)}</td>
                       <td className="py-1.5 pr-3">{s.blob_count}</td>
                       <td className="py-1.5">{s.repo_count}</td>
                     </tr>
@@ -105,6 +104,8 @@ export default function InsightsSection() {
                 </tbody>
               </table>
             </div>
+          ) : (
+            <GrowthChart samples={growth} />
           )}
         </Card>
       </div>
