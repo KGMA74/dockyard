@@ -336,7 +336,13 @@
     "dense": "Dense",
     "refresh": "Refresh",
     "noImages": "No images pushed yet",
-    "noMatch": "No images match \"{{search}}\""
+    "noImagesHint": "Push your first image and it'll show up here.",
+    "noMatch": "No images match \"{{search}}\"",
+    "noMatchHint": "Try a different name, or clear the filter.",
+    "clearFilter": "Clear filter",
+    "errorHint": "The registry might be unreachable — check your connection and try again.",
+    "retry": "Retry",
+    "pullExampleCopied": "Command copied"
   },
   "imageDetails": {
     "loadFailed": "Failed to load details",

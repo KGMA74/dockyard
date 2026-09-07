@@ -20,9 +20,17 @@ i18n
     },
     detection: {
       order: ['localStorage', 'navigator'],
-      lookupLocalStorage: 'dockyard-lang',
+      lookupLocalStorage: 'dockyard_lang',
       caches: ['localStorage'],
     },
   })
+
+// Keep <html lang> in sync so screen readers and the browser pick the right
+// language rules.
+function syncHtmlLang(lng: string) {
+  if (typeof document !== 'undefined') document.documentElement.lang = lng
+}
+syncHtmlLang(i18n.resolvedLanguage ?? 'en')
+i18n.on('languageChanged', syncHtmlLang)
 
 export default i18n

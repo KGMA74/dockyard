@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react'
 import { toast } from 'sonner'
-import { LayoutGrid, List, Search, RefreshCw } from 'lucide-react'
+import { AlertCircle, Copy, Check, LayoutGrid, List, PackageOpen, Search, RefreshCw, SearchX } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { logout, getRepositories, getStorageStats, subscribeToEvents, formatEventMessage, RegistryEvent, StorageStats, RepoSummary, TagInfo } from '../api'
 import DenseRepoView from '../components/DenseRepoView'
@@ -30,12 +30,50 @@ interface Props {
 
 type SortKey = 'name' | 'tags' | 'pushed'
 
+// Event types that change what the repo list shows and therefore trigger a
+// reload. `scan` is notify-only (it doesn't add/remove tags).
+const REFRESH_ON: RegistryEvent['type'][] = ['push', 'delete', 'retention', 'gc', 'import']
+
 // The shadcn Sidebar writes its expanded/collapsed state to a `sidebar_state`
 // cookie. This is a Vite SPA (no SSR), so we read it back here to seed
 // `defaultOpen` and keep the choice across reloads.
 function sidebarInitiallyOpen(): boolean {
   const m = document.cookie.match(/(?:^|;\s*)sidebar_state=([^;]+)/)
   return m ? m[1] === 'true' : true
+}
+
+function EmptyRegistry() {
+  const { t } = useTranslation()
+  const [copied, setCopied] = useState(false)
+  const pushCmd = `docker push ${window.location.host}/my-image:latest`
+
+  function copy() {
+    navigator.clipboard.writeText(pushCmd)
+    setCopied(true)
+    setTimeout(() => setCopied(false), 1500)
+  }
+
+  return (
+    <div className="flex flex-col items-center gap-4 text-center py-20">
+      <div className="flex items-center justify-center size-12 rounded-2xl bg-card border">
+        <PackageOpen className="size-6 text-muted-foreground/50" strokeWidth={1.5} />
+      </div>
+      <div>
+        <p className="text-sm font-medium">{t('dashboard.noImages')}</p>
+        <p className="text-muted-foreground text-xs mt-1">{t('dashboard.noImagesHint')}</p>
+      </div>
+      <button
+        onClick={copy}
+        title={pushCmd}
+        className="group/push flex items-center gap-2 rounded-lg border bg-card px-3 py-2 font-mono text-xs text-muted-foreground hover:text-foreground hover:bg-muted/50 transition-colors"
+      >
+        <span>{pushCmd}</span>
+        {copied
+          ? <Check className="size-3 shrink-0 text-emerald-500" />
+          : <Copy className="size-3 shrink-0 opacity-0 group-hover/push:opacity-100 transition-opacity" />}
+      </button>
+    </div>
+  )
 }
 
 export default function Dashboard({ onLogout }: Props) {
@@ -75,9 +113,7 @@ export default function Dashboard({ onLogout }: Props) {
 
   // Live-refresh the list and surface a toast + notification-bell entry when
   // something happens elsewhere (docker push, CI, scheduled GC, a scan
-  // completing, …). Events that change what the repo list shows trigger a
-  // reload; scan doesn't (it doesn't add/remove tags), so it's notify-only.
-  const REFRESH_ON: RegistryEvent['type'][] = ['push', 'delete', 'retention', 'gc', 'import']
+  // completing, …).
   useEffect(() => {
     return subscribeToEvents(event => {
       const message = formatEventMessage(event)
@@ -225,14 +261,29 @@ export default function Dashboard({ onLogout }: Props) {
                 <Skeleton className="h-12 rounded-xl" />
               </div>
             ) : error ? (
-              <div className="text-center py-20 text-destructive text-sm">{error}</div>
-            ) : repos.length === 0 ? (
-              <div className="text-center py-20">
-                <p className="text-muted-foreground text-sm">{t('dashboard.noImages')}</p>
+              <div className="flex flex-col items-center gap-3 text-center py-20">
+                <AlertCircle className="size-8 text-destructive/60" strokeWidth={1.5} />
+                <div>
+                  <p className="text-destructive text-sm font-medium">{error}</p>
+                  <p className="text-muted-foreground text-xs mt-1">{t('dashboard.errorHint')}</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={loadData} className="mt-1">
+                  <RefreshCw />
+                  {t('dashboard.retry')}
+                </Button>
               </div>
+            ) : repos.length === 0 ? (
+              <EmptyRegistry />
             ) : filtered.length === 0 ? (
-              <div className="text-center py-20 text-muted-foreground text-sm">
-                {t('dashboard.noMatch', { search })}
+              <div className="flex flex-col items-center gap-3 text-center py-20">
+                <SearchX className="size-8 text-muted-foreground/40" strokeWidth={1.5} />
+                <div>
+                  <p className="text-muted-foreground text-sm">{t('dashboard.noMatch', { search })}</p>
+                  <p className="text-muted-foreground/70 text-xs mt-1">{t('dashboard.noMatchHint')}</p>
+                </div>
+                <Button variant="outline" size="sm" onClick={() => setSearch('')} className="mt-1">
+                  {t('dashboard.clearFilter')}
+                </Button>
               </div>
             ) : (
               <RepoList repos={filtered} onRefresh={loadData} />

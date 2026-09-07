@@ -336,7 +336,13 @@
     "dense": "Dense",
     "refresh": "Rafraîchir",
     "noImages": "Aucune image poussée pour le moment",
-    "noMatch": "Aucune image ne correspond à \"{{search}}\""
+    "noImagesHint": "Poussez votre première image et elle apparaîtra ici.",
+    "noMatch": "Aucune image ne correspond à \"{{search}}\"",
+    "noMatchHint": "Essayez un autre nom, ou effacez le filtre.",
+    "clearFilter": "Effacer le filtre",
+    "errorHint": "Le registre est peut-être injoignable — vérifiez votre connexion et réessayez.",
+    "retry": "Réessayer",
+    "pullExampleCopied": "Commande copiée"
   },
   "imageDetails": {
     "loadFailed": "Échec du chargement des détails",

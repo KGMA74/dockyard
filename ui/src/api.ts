@@ -46,27 +46,54 @@ function clearSession(): void {
   localStorage.removeItem(REFRESH_KEY)
 }
 
-async function req<T>(path: string, opts?: RequestInit, retried = false): Promise<T> {
+/** Typed error carrying the HTTP status so callers (and react-query) can tell
+ *  403/404 "feature off / not allowed" apart from a real 5xx outage. */
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    message: string,
+    readonly code?: string,
+  ) {
+    super(message)
+    this.name = 'ApiError'
+  }
+}
+
+async function parseError(res: Response): Promise<ApiError> {
+  const contentType = res.headers.get('content-type') ?? ''
+  if (contentType.includes('application/json')) {
+    const body = (await res.json().catch(() => ({}))) as { error?: string; code?: string }
+    return new ApiError(res.status, body.error ?? `HTTP ${res.status}`, body.code)
+  }
+  return new ApiError(res.status, `HTTP ${res.status}`)
+}
+
+interface ReqOptions extends RequestInit {
+  /** Skip the Authorization header and the 401-refresh dance (for /health). */
+  noAuth?: boolean
+}
+
+async function req<T>(path: string, opts?: ReqOptions, retried = false): Promise<T> {
+  const { noAuth, ...init } = opts ?? {}
   const res = await fetch(BASE + path, {
-    ...opts,
+    ...init,
     headers: {
       'Content-Type': 'application/json',
-      Authorization: `Bearer ${token()}`,
+      ...(noAuth ? {} : { Authorization: `Bearer ${token()}` }),
       ...opts?.headers,
     },
   })
-  if (res.status === 401) {
+  if (res.status === 401 && !noAuth) {
     if (!retried && (await tryRefresh())) {
       return req(path, opts, true)
     }
     clearSession()
     window.location.reload()
-    throw new Error('Unauthorized')
+    throw new ApiError(401, 'Unauthorized')
   }
   if (res.status === 204) return undefined as T
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error((body as { error?: string }).error ?? `HTTP ${res.status}`)
+    throw await parseError(res)
   }
   return res.json() as Promise<T>
 }
@@ -140,10 +167,11 @@ export function getUsername(): string | null {
   return tokenClaims()?.sub ?? null
 }
 
-// Tokens issued before the RBAC release have no role claim — the only account
-// back then was the admin, mirror the backend's fallback.
+// Default to least privilege when the token carries no role claim: a missing
+// claim should never unlock admin-only UI. (The backend still enforces RBAC
+// server-side regardless.)
 export function getRole(): string {
-  return tokenClaims()?.role ?? 'admin'
+  return tokenClaims()?.role ?? 'reader'
 }
 
 export async function login(username: string, password: string): Promise<void> {
@@ -293,15 +321,15 @@ export interface StorageStats {
 }
 
 export async function getStorageStats(): Promise<StorageStats> {
-  const res = await fetch(BASE + '/storage/stats', {
-    headers: { Authorization: `Bearer ${token()}` },
-  })
-  // proxy mode: stats not supported → return sentinel values
-  if (res.status === 501) {
-    return { total_size_bytes: -1, total_size_human: '—', blob_count: -1, repo_count: -1 }
+  try {
+    return await req<StorageStats>('/storage/stats')
+  } catch (err) {
+    // proxy mode: stats not supported → return sentinel values
+    if (err instanceof ApiError && err.status === 501) {
+      return { total_size_bytes: -1, total_size_human: '—', blob_count: -1, repo_count: -1 }
+    }
+    throw err
   }
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
-  return res.json()
 }
 
 export interface GCResult {
@@ -617,6 +645,6 @@ export interface HealthInfo {
 
 export async function getHealth(): Promise<HealthInfo> {
   const res = await fetch('/health')
-  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  if (!res.ok) throw new ApiError(res.status, `HTTP ${res.status}`)
   return res.json()
 }
