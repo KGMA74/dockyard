@@ -8,14 +8,17 @@ import ErrorBoundary from './components/ErrorBoundary'
 import { queryClient } from './lib/queryClient'
 import { ThemeProvider } from './theme'
 import { Toaster } from '@/components/ui/sonner'
+import { TooltipProvider } from '@/components/ui/tooltip'
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
       <QueryClientProvider client={queryClient}>
         <ThemeProvider>
-          <App />
-          <Toaster position="bottom-right" />
+          <TooltipProvider>
+            <App />
+            <Toaster position="bottom-right" />
+          </TooltipProvider>
         </ThemeProvider>
       </QueryClientProvider>
     </ErrorBoundary>
