@@ -33,10 +33,23 @@
     "dark": "Dark",
     "switchTo": "Switch to {{theme}} theme"
   },
+  "preferences": {
+    "title": "Preferences",
+    "appearance": "Appearance",
+    "language": "Language"
+  },
   "loginPage": {
     "subtitle": "Docker Registry",
+    "heroTitle": "Your images, self-hosted",
+    "heroDescription": "Push, scan and distribute container images from one binary — nothing else to run.",
+    "fact1": "push / pull over the standard Docker Registry V2 API",
+    "fact2": "local disk or S3 storage, Trivy vulnerability scanning built in",
+    "fact3": "retention, replication and webhooks, out of the box",
+    "footerCaption": "Admin console — sign in to continue",
     "username": "Username",
     "password": "Password",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
     "signIn": "Sign in",
     "signingIn": "Signing in…",
     "loginFailed": "Login failed"

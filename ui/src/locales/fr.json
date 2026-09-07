@@ -33,10 +33,23 @@
     "dark": "Sombre",
     "switchTo": "Passer au thème {{theme}}"
   },
+  "preferences": {
+    "title": "Préférences",
+    "appearance": "Apparence",
+    "language": "Langue"
+  },
   "loginPage": {
     "subtitle": "Registry Docker",
+    "heroTitle": "Vos images, auto-hébergées",
+    "heroDescription": "Poussez, scannez et distribuez vos images de conteneurs depuis un seul binaire — rien d'autre à faire tourner.",
+    "fact1": "push / pull via l'API standard Docker Registry V2",
+    "fact2": "stockage local ou S3, scan de vulnérabilités Trivy intégré",
+    "fact3": "rétention, réplication et webhooks, prêts à l'emploi",
+    "footerCaption": "Console d'administration — connectez-vous pour continuer",
     "username": "Nom d'utilisateur",
     "password": "Mot de passe",
+    "showPassword": "Afficher le mot de passe",
+    "hidePassword": "Masquer le mot de passe",
     "signIn": "Se connecter",
     "signingIn": "Connexion…",
     "loginFailed": "Échec de la connexion"

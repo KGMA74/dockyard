@@ -25,6 +25,7 @@ export default defineConfig(({ mode }) => {
     server: {
       proxy: {
         '/api': { target: `http://localhost:${backendPort}`, changeOrigin: true },
+        '/health': { target: `http://localhost:${backendPort}`, changeOrigin: true },
       },
     },
   }

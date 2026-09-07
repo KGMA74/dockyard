@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import { User, KeyRound, Server, CircleCheck, CircleAlert, GitFork, BookOpen, Bug, ScrollText } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getAudit, getHealth, getUsername, AuditEntry, HealthInfo } from '../api'
+import { ThemeSwitcher } from '../theme'
+import { LanguageSwitcher } from '../i18nSwitcher'
 import QuotasSection from './QuotasSection'
 import ReplicationSection from './ReplicationSection'
 import SigningPoliciesSection from './SigningPoliciesSection'
@@ -50,6 +52,22 @@ export default function SettingsTab({ onChangePassword }: Props) {
             <KeyRound />
             {t('sidebar.changePassword')}
           </Button>
+        </Card>
+      </div>
+
+      <div>
+        <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">
+          {t('preferences.title')}
+        </h2>
+        <Card className="p-4 rounded-xl gap-4 sm:flex-row sm:items-start">
+          <div className="flex-1 space-y-1.5">
+            <p className="text-xs font-medium text-muted-foreground">{t('preferences.appearance')}</p>
+            <ThemeSwitcher />
+          </div>
+          <div className="flex-1 space-y-1.5">
+            <p className="text-xs font-medium text-muted-foreground">{t('preferences.language')}</p>
+            <LanguageSwitcher />
+          </div>
         </Card>
       </div>
 

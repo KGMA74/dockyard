@@ -1,8 +1,6 @@
 import { Box, HardDrive, KeyRound, LogOut, Settings, Users } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getRole } from '../api'
-import { ThemeSwitcher } from '../theme'
-import { LanguageSwitcher } from '../i18nSwitcher'
 import {
   Sidebar,
   SidebarContent,
@@ -70,10 +68,6 @@ export default function AppSidebar({ tab, onTabChange, onChangePassword, onLogou
       </SidebarContent>
 
       <SidebarFooter>
-        <div className="space-y-1.5 px-1 pb-1 group-data-[collapsible=icon]:hidden">
-          <ThemeSwitcher />
-          <LanguageSwitcher />
-        </div>
         <SidebarMenu>
           <SidebarMenuItem>
             <SidebarMenuButton onClick={onChangePassword} tooltip={t('sidebar.changePassword')}>
