@@ -6,7 +6,7 @@ import { logout, getRepositories, getStorageStats, subscribeToEvents, formatEven
 import DenseRepoView from '../components/DenseRepoView'
 import ImageDetailsPanel from '../components/ImageDetailsPanel'
 import NotificationBell, { NotificationItem } from '../components/NotificationBell'
-import PreferencesMenu from '../components/PreferencesMenu'
+import { ThemeToggle, LanguageToggle } from '../components/HeaderToggles'
 import RepoList from '../components/RepoList'
 import AppSidebar, { Tab } from '../components/Sidebar'
 import { SidebarInset, SidebarProvider, SidebarTrigger } from '@/components/ui/sidebar'
@@ -175,7 +175,6 @@ export default function Dashboard({ onLogout }: Props) {
       <AppSidebar
         tab={tab}
         onTabChange={setTab}
-        onChangePassword={() => setShowPasswordModal(true)}
         onLogout={handleLogout}
       />
 
@@ -184,7 +183,8 @@ export default function Dashboard({ onLogout }: Props) {
           <SidebarTrigger className="text-muted-foreground" aria-label={t('sidebar.toggle')} />
           <span className="text-sm font-medium">{t(`sidebar.${tab}`)}</span>
           <div className="ml-auto flex items-center gap-1">
-            <PreferencesMenu />
+            <ThemeToggle />
+            <LanguageToggle />
             <NotificationBell
               items={notifications}
               unreadCount={unreadCount}

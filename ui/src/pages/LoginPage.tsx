@@ -98,14 +98,14 @@ export default function LoginPage({ onLogin }: Props) {
 
   return (
     <main className="grid min-h-screen lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] bg-muted/40 dark:bg-background">
-      <aside className="hidden flex-col justify-between gap-8 overflow-hidden border-r bg-sidebar p-12 lg:flex">
+      <aside className="hidden flex-col items-center justify-between gap-8 overflow-hidden border-r bg-sidebar p-12 lg:flex">
         <div className="flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-500">
           <Box className="size-6 text-blue-500 dark:text-blue-400" strokeWidth={1.5} />
           <span className="font-semibold text-sidebar-foreground tracking-tight">Dockyard</span>
         </div>
 
         <div className="max-w-md animate-in fade-in slide-in-from-left-4 duration-700 delay-150 fill-mode-both">
-          <RegistryGlyph className="mb-8 h-auto w-full max-w-[300px] text-muted-foreground" />
+          <RegistryGlyph className="mx-auto mb-8 h-auto w-full max-w-[300px] text-muted-foreground" />
           <p className="text-xl font-semibold text-sidebar-foreground">{t('loginPage.heroTitle')}</p>
           <p className="mt-3 text-sm text-muted-foreground">{t('loginPage.heroDescription')}</p>
 
@@ -138,9 +138,14 @@ export default function LoginPage({ onLogin }: Props) {
             <p className="text-muted-foreground text-sm mt-1">{t('loginPage.subtitle')}</p>
           </div>
 
-          <Card>
+          <div className="mb-6 hidden lg:block">
+            <h1 className="text-2xl font-semibold tracking-tight">{t('loginPage.formTitle')}</h1>
+            <p className="text-muted-foreground text-sm mt-1.5">{t('loginPage.formSubtitle')}</p>
+          </div>
+
+          <Card className="[--card-spacing:--spacing(7)] border-t-2 border-t-primary">
             <CardContent>
-              <form onSubmit={handleSubmit} className="space-y-4">
+              <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="space-y-1.5">
                   <Label htmlFor="username">{t('loginPage.username')}</Label>
                   <Input
@@ -186,7 +191,7 @@ export default function LoginPage({ onLogin }: Props) {
                   </p>
                 )}
 
-                <Button type="submit" disabled={loading} className="w-full">
+                <Button type="submit" size="lg" disabled={loading} className="w-full">
                   {loading ? t('loginPage.signingIn') : t('loginPage.signIn')}
                 </Button>
               </form>

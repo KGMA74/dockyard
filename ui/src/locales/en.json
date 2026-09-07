@@ -46,6 +46,8 @@
     "fact2": "local disk or S3 storage, Trivy vulnerability scanning built in",
     "fact3": "retention, replication and webhooks, out of the box",
     "footerCaption": "Admin console — sign in to continue",
+    "formTitle": "Sign in",
+    "formSubtitle": "Enter your admin credentials to continue.",
     "username": "Username",
     "password": "Password",
     "showPassword": "Show password",

@@ -1,6 +1,6 @@
-import { Box, HardDrive, KeyRound, LogOut, Settings, Users } from 'lucide-react'
+import { Box, HardDrive, LogOut, Settings, User, Users } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { getRole } from '../api'
+import { getRole, getUsername } from '../api'
 import {
   Sidebar,
   SidebarContent,
@@ -18,7 +18,6 @@ export type Tab = 'images' | 'storage' | 'users' | 'settings'
 interface Props {
   tab: Tab
   onTabChange: (tab: Tab) => void
-  onChangePassword: () => void
   onLogout: () => void
 }
 
@@ -29,9 +28,10 @@ const navItems: { tab: Tab; labelKey: string; icon: typeof Box; adminOnly?: bool
   { tab: 'settings', labelKey: 'sidebar.settings', icon: Settings },
 ]
 
-export default function AppSidebar({ tab, onTabChange, onChangePassword, onLogout }: Props) {
+export default function AppSidebar({ tab, onTabChange, onLogout }: Props) {
   const { t } = useTranslation()
   const isAdmin = getRole() === 'admin'
+  const username = getUsername()
 
   return (
     <Sidebar collapsible="icon">
@@ -70,9 +70,13 @@ export default function AppSidebar({ tab, onTabChange, onChangePassword, onLogou
       <SidebarFooter>
         <SidebarMenu>
           <SidebarMenuItem>
-            <SidebarMenuButton onClick={onChangePassword} tooltip={t('sidebar.changePassword')}>
-              <KeyRound strokeWidth={1.5} />
-              <span>{t('sidebar.changePassword')}</span>
+            <SidebarMenuButton
+              isActive={tab === 'settings'}
+              onClick={() => onTabChange('settings')}
+              tooltip={username ?? t('settingsTab.unknownUser')}
+            >
+              <User strokeWidth={1.5} />
+              <span className="truncate">{username ?? t('settingsTab.unknownUser')}</span>
             </SidebarMenuButton>
           </SidebarMenuItem>
           <SidebarMenuItem>

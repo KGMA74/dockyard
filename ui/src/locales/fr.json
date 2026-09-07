@@ -46,6 +46,8 @@
     "fact2": "stockage local ou S3, scan de vulnérabilités Trivy intégré",
     "fact3": "rétention, réplication et webhooks, prêts à l'emploi",
     "footerCaption": "Console d'administration — connectez-vous pour continuer",
+    "formTitle": "Se connecter",
+    "formSubtitle": "Entrez vos identifiants administrateur pour continuer.",
     "username": "Nom d'utilisateur",
     "password": "Mot de passe",
     "showPassword": "Afficher le mot de passe",
