@@ -246,7 +246,7 @@ func (h *Handler) StorageStats(c echo.Context) error {
 func (h *Handler) GarbageCollect(c echo.Context) error {
 	if h.gcStore == nil {
 		return c.JSON(http.StatusNotImplemented, map[string]string{
-			"error": "garbage collection is only available with the local storage backend",
+			"error": "garbage collection is only available in embedded mode (local and s3 backends), not in proxy mode",
 		})
 	}
 	dryRun := c.QueryParam("dryRun") == "true"
