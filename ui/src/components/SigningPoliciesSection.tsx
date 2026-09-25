@@ -111,7 +111,7 @@ function CreateOverrideForm({ onCreated }: { onCreated: () => void }) {
   const [required, setRequired] = useState(true)
   const [busy, setBusy] = useState(false)
 
-  async function submit(e: React.FormEvent) {
+  async function submit(e: React.SubmitEvent) {
     e.preventDefault()
     setBusy(true)
     try {

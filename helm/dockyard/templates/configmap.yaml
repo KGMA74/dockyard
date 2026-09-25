@@ -30,6 +30,7 @@ data:
   {{- end }}
   SCAN_ENABLED: {{ (.Values.scan).enabled | default false | toString | quote }}
   TRIVY_SERVER_URL: {{ (.Values.scan).trivyServerURL | default "" | quote }}
+  TRIVY_OFFLINE: {{ (.Values.scan).offline | default false | toString | quote }}
   {{- if (.Values.scan).cacheDir }}
   TRIVY_CACHE_DIR: {{ .Values.scan.cacheDir | quote }}
   {{- end }}

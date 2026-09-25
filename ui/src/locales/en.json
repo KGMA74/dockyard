@@ -24,12 +24,34 @@
     "users": "Users",
     "settings": "Settings",
     "changePassword": "Change password",
-    "signOut": "Sign out"
+    "signOut": "Sign out",
+    "toggle": "Toggle sidebar"
+  },
+  "theme": {
+    "light": "Light",
+    "system": "System",
+    "dark": "Dark",
+    "switchTo": "Switch to {{theme}} theme"
+  },
+  "preferences": {
+    "title": "Preferences",
+    "appearance": "Appearance",
+    "language": "Language"
   },
   "loginPage": {
     "subtitle": "Docker Registry",
+    "heroTitle": "Your images, self-hosted",
+    "heroDescription": "Push, scan and distribute container images from one binary — nothing else to run.",
+    "fact1": "push / pull over the standard Docker Registry V2 API",
+    "fact2": "local disk or S3 storage, Trivy vulnerability scanning built in",
+    "fact3": "retention, replication and webhooks, out of the box",
+    "footerCaption": "Admin console — sign in to continue",
+    "formTitle": "Sign in",
+    "formSubtitle": "Enter your admin credentials to continue.",
     "username": "Username",
     "password": "Password",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
     "signIn": "Sign in",
     "signingIn": "Signing in…",
     "loginFailed": "Login failed"
@@ -82,8 +104,13 @@
     "noRepo": "No repository yet.",
     "tagCount_one": "{{count}} tag",
     "tagCount_other": "{{count}} tags",
+    "repoCount_one": "{{count}} repo",
+    "repoCount_other": "{{count}} repos",
     "growth": "Growth",
+    "sinceDate": "since {{date}}",
     "notEnoughSamples": "Not enough samples yet — storage is snapshotted every 6 hours.",
+    "viewAsTable": "View as table",
+    "viewAsChart": "View as chart",
     "date": "Date",
     "size": "Size",
     "blobs": "Blobs",
@@ -204,7 +231,8 @@
     "gcNothing": "Nothing to collect — no unreferenced blob",
     "gcPreview": "Preview — {{count}} blob(s) would be removed, freeing {{freed}}",
     "gcDone": "GC done — removed {{count}} blob(s), freed {{freed}}",
-    "gcFailed": "GC failed"
+    "gcFailed": "GC failed",
+    "gcNoBlobsListed": "No blobs could be listed — check the storage backend permissions (S3 needs s3:ListBucket)"
   },
   "denseRepoView": {
     "searchFailed": "Search failed",
@@ -328,7 +356,13 @@
     "dense": "Dense",
     "refresh": "Refresh",
     "noImages": "No images pushed yet",
-    "noMatch": "No images match \"{{search}}\""
+    "noImagesHint": "Push your first image and it'll show up here.",
+    "noMatch": "No images match \"{{search}}\"",
+    "noMatchHint": "Try a different name, or clear the filter.",
+    "clearFilter": "Clear filter",
+    "errorHint": "The registry might be unreachable — check your connection and try again.",
+    "retry": "Retry",
+    "pullExampleCopied": "Command copied"
   },
   "imageDetails": {
     "loadFailed": "Failed to load details",

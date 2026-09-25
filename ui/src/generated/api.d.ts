@@ -1364,11 +1364,14 @@ export interface paths {
         put?: never;
         /**
          * Trigger a vulnerability scan for an image (admin only)
-         * @description Requires SCAN_ENABLED and TRIVY_SERVER_URL to be configured; Dockyard
-         *     shells out to `trivy image --server ...` against an operator-managed
-         *     trivy server. Scans run asynchronously — poll GET /api/admin/scans/{id}
-         *     for the outcome. A recent successful scan for the same resolved
-         *     digest is reused instead of re-scanning (see `cached` in the response).
+         * @description Requires SCAN_ENABLED. Dockyard shells out to the `trivy` binary bundled
+         *     in its own image; the vulnerability DB is shipped in the image and
+         *     refreshed on startup (standalone mode, the default). Set TRIVY_SERVER_URL
+         *     to defer to a shared external trivy server, or TRIVY_OFFLINE=true for
+         *     air-gapped hosts. Scans run asynchronously — poll GET
+         *     /api/admin/scans/{id} for the outcome. A recent successful scan for the
+         *     same resolved digest is reused instead of re-scanning (see `cached` in
+         *     the response).
          */
         post: {
             parameters: {

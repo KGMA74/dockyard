@@ -24,12 +24,34 @@
     "users": "Utilisateurs",
     "settings": "Paramètres",
     "changePassword": "Changer le mot de passe",
-    "signOut": "Se déconnecter"
+    "signOut": "Se déconnecter",
+    "toggle": "Replier / déplier le menu"
+  },
+  "theme": {
+    "light": "Clair",
+    "system": "Système",
+    "dark": "Sombre",
+    "switchTo": "Passer au thème {{theme}}"
+  },
+  "preferences": {
+    "title": "Préférences",
+    "appearance": "Apparence",
+    "language": "Langue"
   },
   "loginPage": {
     "subtitle": "Registry Docker",
+    "heroTitle": "Vos images, auto-hébergées",
+    "heroDescription": "Poussez, scannez et distribuez vos images de conteneurs depuis un seul binaire — rien d'autre à faire tourner.",
+    "fact1": "push / pull via l'API standard Docker Registry V2",
+    "fact2": "stockage local ou S3, scan de vulnérabilités Trivy intégré",
+    "fact3": "rétention, réplication et webhooks, prêts à l'emploi",
+    "footerCaption": "Console d'administration — connectez-vous pour continuer",
+    "formTitle": "Se connecter",
+    "formSubtitle": "Entrez vos identifiants administrateur pour continuer.",
     "username": "Nom d'utilisateur",
     "password": "Mot de passe",
+    "showPassword": "Afficher le mot de passe",
+    "hidePassword": "Masquer le mot de passe",
     "signIn": "Se connecter",
     "signingIn": "Connexion…",
     "loginFailed": "Échec de la connexion"
@@ -82,8 +104,13 @@
     "noRepo": "Aucun dépôt pour le moment.",
     "tagCount_one": "{{count}} tag",
     "tagCount_other": "{{count}} tags",
+    "repoCount_one": "{{count}} dépôt",
+    "repoCount_other": "{{count}} dépôts",
     "growth": "Croissance",
+    "sinceDate": "depuis le {{date}}",
     "notEnoughSamples": "Pas encore assez d'échantillons — le stockage est capturé toutes les 6 heures.",
+    "viewAsTable": "Voir en tableau",
+    "viewAsChart": "Voir en graphique",
     "date": "Date",
     "size": "Taille",
     "blobs": "Blobs",
@@ -204,7 +231,8 @@
     "gcNothing": "Rien à collecter — aucun blob non référencé",
     "gcPreview": "Aperçu — {{count}} blob(s) seraient supprimés, libérant {{freed}}",
     "gcDone": "GC terminé — {{count}} blob(s) supprimés, {{freed}} libérés",
-    "gcFailed": "Échec du GC"
+    "gcFailed": "Échec du GC",
+    "gcNoBlobsListed": "Aucun blob listé — vérifier les permissions du backend de stockage (S3 requiert s3:ListBucket)"
   },
   "denseRepoView": {
     "searchFailed": "Échec de la recherche",
@@ -328,7 +356,13 @@
     "dense": "Dense",
     "refresh": "Rafraîchir",
     "noImages": "Aucune image poussée pour le moment",
-    "noMatch": "Aucune image ne correspond à \"{{search}}\""
+    "noImagesHint": "Poussez votre première image et elle apparaîtra ici.",
+    "noMatch": "Aucune image ne correspond à \"{{search}}\"",
+    "noMatchHint": "Essayez un autre nom, ou effacez le filtre.",
+    "clearFilter": "Effacer le filtre",
+    "errorHint": "Le registre est peut-être injoignable — vérifiez votre connexion et réessayez.",
+    "retry": "Réessayer",
+    "pullExampleCopied": "Commande copiée"
   },
   "imageDetails": {
     "loadFailed": "Échec du chargement des détails",

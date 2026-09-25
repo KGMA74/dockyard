@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"crypto/sha256"
-	"encoding/json"
 	"fmt"
 	"io"
 	"sort"
@@ -251,6 +250,17 @@ func (s *S3Backend) PutManifest(name, reference, digest string, content []byte) 
 	return nil
 }
 
+// getObjectBytes reads a whole object into memory. Used for manifests, which
+// are small.
+func (s *S3Backend) getObjectBytes(ctx context.Context, key string) ([]byte, error) {
+	obj, err := s.client.GetObject(ctx, s.bucket, key, minio.GetObjectOptions{})
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = obj.Close() }()
+	return io.ReadAll(obj)
+}
+
 func (s *S3Backend) GetManifest(name, reference string) ([]byte, string, error) {
 	key := fmt.Sprintf("manifests/%s/%s", name, reference)
 	obj, err := s.client.GetObject(context.Background(), s.bucket, key, minio.GetObjectOptions{})
@@ -269,16 +279,31 @@ func (s *S3Backend) GetManifest(name, reference string) ([]byte, string, error) 
 	return data, digest, nil
 }
 
-func (s *S3Backend) DeleteManifest(name, digest string) error {
+func (s *S3Backend) DeleteManifest(name, reference string) error {
 	ctx := context.Background()
-	prefix := fmt.Sprintf("manifests/%s/", name)
 
+	// Resolve a tag reference to its digest first — otherwise the content-hash
+	// comparison below never matches and the delete is a silent no-op.
+	digest := reference
+	if !strings.HasPrefix(reference, "sha256:") {
+		_, d, err := s.GetManifest(name, reference)
+		if err != nil {
+			return err
+		}
+		digest = d
+	}
+
+	// Read the manifest before deleting it so we can prune now-orphaned child
+	// manifests if it turns out to be an index / manifest list.
+	indexRaw, _, _ := s.GetManifest(name, digest)
+
+	prefix := fmt.Sprintf("manifests/%s/", name)
 	for obj := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
 		Prefix:    prefix,
 		Recursive: true,
 	}) {
 		if obj.Err != nil {
-			continue
+			return obj.Err
 		}
 		ref := strings.TrimPrefix(obj.Key, prefix)
 		data, _, err := s.GetManifest(name, ref)
@@ -287,10 +312,47 @@ func (s *S3Backend) DeleteManifest(name, digest string) error {
 		}
 		h := sha256.Sum256(data)
 		if fmt.Sprintf("sha256:%x", h) == digest {
-			_ = s.client.RemoveObject(ctx, s.bucket, obj.Key, minio.RemoveObjectOptions{})
+			if err := s.client.RemoveObject(ctx, s.bucket, obj.Key, minio.RemoveObjectOptions{}); err != nil {
+				return err
+			}
 		}
 	}
+
+	if len(indexRaw) > 0 {
+		s.pruneOrphanChildManifests(ctx, name, indexRaw)
+	}
 	return nil
+}
+
+// pruneOrphanChildManifests removes the per-platform child manifest objects of a
+// just-deleted index when nothing else in the repository still references them.
+// Without this, deleting a multi-arch tag leaves the child manifests behind and
+// GC keeps treating every layer they list as referenced.
+func (s *S3Backend) pruneOrphanChildManifests(ctx context.Context, name string, deletedIndexRaw []byte) {
+	children := childManifestDigests(deletedIndexRaw)
+	if len(children) == 0 {
+		return
+	}
+	prefix := fmt.Sprintf("manifests/%s/", name)
+	stillReferenced := make(map[string]struct{})
+	for obj := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{Prefix: prefix, Recursive: true}) {
+		if obj.Err != nil {
+			return // be conservative: on a list error, prune nothing
+		}
+		data, err := s.getObjectBytes(ctx, obj.Key)
+		if err != nil {
+			continue
+		}
+		for _, d := range childManifestDigests(data) {
+			stillReferenced[d] = struct{}{}
+		}
+	}
+	for _, child := range children {
+		if _, ok := stillReferenced[child]; ok {
+			continue
+		}
+		_ = s.client.RemoveObject(ctx, s.bucket, fmt.Sprintf("manifests/%s/%s", name, child), minio.RemoveObjectOptions{})
+	}
 }
 
 func (s *S3Backend) ManifestExists(name, reference string) (bool, error) {
@@ -315,7 +377,7 @@ func (s *S3Backend) ListRepositories() ([]string, error) {
 		Recursive: true,
 	}) {
 		if obj.Err != nil {
-			continue
+			return nil, obj.Err
 		}
 		// The key is "manifests/<name>/<reference>". <name> can itself contain
 		// slashes (org/image), but <reference> (a tag or a sha256: digest) never
@@ -344,7 +406,7 @@ func (s *S3Backend) ListTags(name string) ([]string, error) {
 		Recursive: false,
 	}) {
 		if obj.Err != nil {
-			continue
+			return nil, obj.Err
 		}
 		tag := strings.TrimPrefix(obj.Key, prefix)
 		if tag != "" && !strings.HasPrefix(tag, "sha256:") {
@@ -374,10 +436,12 @@ func (s *S3Backend) DeleteRepository(name string) error {
 		Recursive: true,
 	}) {
 		if obj.Err != nil {
-			continue
+			return obj.Err
 		}
 		found = true
-		_ = s.client.RemoveObject(ctx, s.bucket, obj.Key, minio.RemoveObjectOptions{})
+		if err := s.client.RemoveObject(ctx, s.bucket, obj.Key, minio.RemoveObjectOptions{}); err != nil {
+			return err
+		}
 	}
 	if !found {
 		return fmt.Errorf("repository %q not found", name)
@@ -395,7 +459,7 @@ func (s *S3Backend) AllBlobs() ([]string, error) {
 		Recursive: true,
 	}) {
 		if obj.Err != nil {
-			continue
+			return nil, obj.Err
 		}
 		digest := strings.TrimPrefix(obj.Key, "blobs/")
 		if digest != "" {
@@ -423,41 +487,23 @@ func (s *S3Backend) ReferencedBlobs() (map[string]struct{}, error) {
 		Recursive: true,
 	}) {
 		if obj.Err != nil {
-			continue
+			return nil, obj.Err
 		}
-		// Only read digest keys (sha256:…) to avoid processing each manifest twice
+		// Only read digest keys (sha256:…) to avoid processing each manifest twice.
 		parts := strings.Split(obj.Key, "/")
-		if !strings.HasPrefix(parts[len(parts)-1], "sha256:") {
+		last := parts[len(parts)-1]
+		if !strings.HasPrefix(last, "sha256:") {
 			continue
 		}
-		reader, err := s.client.GetObject(ctx, s.bucket, obj.Key, minio.GetObjectOptions{})
+		name := strings.TrimSuffix(strings.TrimPrefix(obj.Key, "manifests/"), "/"+last)
+		data, err := s.getObjectBytes(ctx, obj.Key)
 		if err != nil {
 			continue
 		}
-		data, err := io.ReadAll(reader)
-		_ = reader.Close()
-		if err != nil {
-			continue
+		fetchChild := func(digest string) ([]byte, error) {
+			return s.getObjectBytes(ctx, fmt.Sprintf("manifests/%s/%s", name, digest))
 		}
-		var m struct {
-			Config struct {
-				Digest string `json:"digest"`
-			} `json:"config"`
-			Layers []struct {
-				Digest string `json:"digest"`
-			} `json:"layers"`
-		}
-		if err := json.Unmarshal(data, &m); err != nil {
-			continue
-		}
-		if m.Config.Digest != "" {
-			referenced[m.Config.Digest] = struct{}{}
-		}
-		for _, l := range m.Layers {
-			if l.Digest != "" {
-				referenced[l.Digest] = struct{}{}
-			}
-		}
+		collectBlobRefs(data, referenced, fetchChild)
 	}
 	return referenced, nil
 }
@@ -478,16 +524,17 @@ func (s *S3Backend) Stats() (StorageStats, error) {
 		Recursive: true,
 	}) {
 		if obj.Err != nil {
-			continue
+			return StorageStats{}, obj.Err
 		}
 		stats.TotalSize += obj.Size
 		stats.BlobCount++
 	}
 
 	repos, err := s.ListRepositories()
-	if err == nil {
-		stats.RepoCount = len(repos)
+	if err != nil {
+		return StorageStats{}, err
 	}
+	stats.RepoCount = len(repos)
 
 	return stats, nil
 }

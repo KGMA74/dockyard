@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback, createContext, useContext } from 'react'
+import { useTranslation } from 'react-i18next'
 import { Sun, Moon, Monitor } from 'lucide-react'
 
 export type Theme = 'light' | 'dark' | 'system'
@@ -21,10 +22,16 @@ function apply(theme: Theme) {
 
 interface ThemeContextValue {
   theme: Theme
+  /** The actually-applied light/dark state, resolving "system" live. */
+  resolvedDark: boolean
   setTheme: (t: Theme) => void
 }
 
-const ThemeContext = createContext<ThemeContextValue>({ theme: 'system', setTheme: () => {} })
+const ThemeContext = createContext<ThemeContextValue>({
+  theme: 'system',
+  resolvedDark: false,
+  setTheme: () => {},
+})
 
 export function useTheme() {
   return useContext(ThemeContext)
@@ -32,40 +39,49 @@ export function useTheme() {
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [theme, setThemeState] = useState<Theme>(storedTheme)
+  const [resolvedDark, setResolvedDark] = useState(
+    () => theme === 'dark' || (theme === 'system' && systemPrefersDark()),
+  )
+
+  const sync = useCallback((t: Theme) => {
+    apply(t)
+    setResolvedDark(t === 'dark' || (t === 'system' && systemPrefersDark()))
+  }, [])
 
   const setTheme = useCallback((t: Theme) => {
     setThemeState(t)
     if (t === 'system') localStorage.removeItem(THEME_KEY)
     else localStorage.setItem(THEME_KEY, t)
-    apply(t)
-  }, [])
+    sync(t)
+  }, [sync])
 
-  useEffect(() => { apply(theme) }, [theme])
+  useEffect(() => { sync(theme) }, [theme, sync])
 
   // Follow OS preference live while in system mode
   useEffect(() => {
     if (theme !== 'system') return
     const mq = window.matchMedia('(prefers-color-scheme: dark)')
-    const onChange = () => apply('system')
+    const onChange = () => sync('system')
     mq.addEventListener('change', onChange)
     return () => mq.removeEventListener('change', onChange)
-  }, [theme])
+  }, [theme, sync])
 
   return (
-    <ThemeContext.Provider value={{ theme, setTheme }}>
+    <ThemeContext.Provider value={{ theme, resolvedDark, setTheme }}>
       {children}
     </ThemeContext.Provider>
   )
 }
 
-const options: { value: Theme; label: string; icon: React.ReactNode }[] = [
-  { value: 'light',  label: 'Light',  icon: <Sun className="size-3.5" /> },
-  { value: 'system', label: 'System', icon: <Monitor className="size-3.5" /> },
-  { value: 'dark',   label: 'Dark',   icon: <Moon className="size-3.5" /> },
+const options: { value: Theme; labelKey: string; icon: React.ReactNode }[] = [
+  { value: 'light',  labelKey: 'theme.light',  icon: <Sun className="size-3.5" /> },
+  { value: 'system', labelKey: 'theme.system', icon: <Monitor className="size-3.5" /> },
+  { value: 'dark',   labelKey: 'theme.dark',   icon: <Moon className="size-3.5" /> },
 ]
 
 export function ThemeSwitcher() {
   const { theme, setTheme } = useTheme()
+  const { t } = useTranslation()
 
   return (
     <div className="flex items-center gap-0.5 bg-muted border rounded-lg p-0.5">
@@ -73,8 +89,8 @@ export function ThemeSwitcher() {
         <button
           key={opt.value}
           onClick={() => setTheme(opt.value)}
-          title={opt.label}
-          aria-label={`${opt.label} theme`}
+          title={t(opt.labelKey)}
+          aria-label={t('theme.switchTo', { theme: t(opt.labelKey) })}
           className={`flex-1 flex items-center justify-center py-1.5 rounded-md transition-colors ${
             theme === opt.value
               ? 'bg-background text-foreground shadow-sm'

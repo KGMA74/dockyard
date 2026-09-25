@@ -39,6 +39,8 @@ main
 internal/ui/dist/*
 !internal/ui/dist/index.html
 ui/node_modules/
+ui/tsconfig.tsbuildinfo
+ui/coverage/
 
 
 # Local dev registry data (SQLite db, blobs)

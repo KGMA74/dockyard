@@ -1,22 +1,24 @@
-import { Box, HardDrive, KeyRound, LogOut, Settings, Users } from 'lucide-react'
+import { Box, HardDrive, LogOut, Settings, User, Users } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { getRole } from '../api'
-import { ThemeSwitcher } from '../theme'
-import { LanguageSwitcher } from '../i18nSwitcher'
-import NotificationBell, { NotificationItem } from './NotificationBell'
-import { Button } from '@/components/ui/button'
+import { getRole, getUsername } from '../api'
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarFooter,
+  SidebarGroup,
+  SidebarGroupContent,
+  SidebarHeader,
+  SidebarMenu,
+  SidebarMenuButton,
+  SidebarMenuItem,
+} from '@/components/ui/sidebar'
 
 export type Tab = 'images' | 'storage' | 'users' | 'settings'
 
 interface Props {
   tab: Tab
   onTabChange: (tab: Tab) => void
-  onChangePassword: () => void
   onLogout: () => void
-  notifications: NotificationItem[]
-  unreadCount: number
-  notifOpen: boolean
-  onNotifOpenChange: (open: boolean) => void
 }
 
 const navItems: { tab: Tab; labelKey: string; icon: typeof Box; adminOnly?: boolean }[] = [
@@ -26,70 +28,65 @@ const navItems: { tab: Tab; labelKey: string; icon: typeof Box; adminOnly?: bool
   { tab: 'settings', labelKey: 'sidebar.settings', icon: Settings },
 ]
 
-export default function Sidebar({
-  tab,
-  onTabChange,
-  onChangePassword,
-  onLogout,
-  notifications,
-  unreadCount,
-  notifOpen,
-  onNotifOpenChange,
-}: Props) {
+export default function AppSidebar({ tab, onTabChange, onLogout }: Props) {
   const { t } = useTranslation()
   const isAdmin = getRole() === 'admin'
+  const username = getUsername()
+
   return (
-    <aside className="w-56 shrink-0 h-screen sticky top-0 border-r bg-card flex flex-col">
-      <div className="h-14 flex items-center gap-2.5 px-4 border-b">
-        <Box className="size-5 text-blue-500 dark:text-blue-400" strokeWidth={1.5} />
-        <span className="font-semibold text-sm tracking-tight flex-1">Dockyard</span>
-        <NotificationBell
-          items={notifications}
-          unreadCount={unreadCount}
-          open={notifOpen}
-          onOpenChange={onNotifOpenChange}
-        />
-      </div>
-
-      <nav className="flex-1 px-3 py-4 space-y-1">
-        {navItems.filter(item => !item.adminOnly || isAdmin).map(item => (
-          <button
-            key={item.tab}
-            onClick={() => onTabChange(item.tab)}
-            className={`w-full flex items-center gap-2.5 px-3 py-2 rounded-lg text-sm transition-colors ${
-              tab === item.tab
-                ? 'bg-muted font-medium'
-                : 'text-muted-foreground hover:bg-muted/60 hover:text-foreground'
-            }`}
-          >
-            <item.icon className="size-4" strokeWidth={1.5} />
-            {t(item.labelKey)}
-          </button>
-        ))}
-      </nav>
-
-      <div className="px-3 py-4 border-t space-y-1">
-        <div className="px-3 pb-2 space-y-1.5">
-          <ThemeSwitcher />
-          <LanguageSwitcher />
+    <Sidebar collapsible="icon">
+      <SidebarHeader>
+        <div className="flex h-8 items-center gap-2.5 px-1.5 group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0">
+          <Box className="size-5 shrink-0 text-blue-500 dark:text-blue-400" strokeWidth={1.5} />
+          <span className="font-semibold text-sm tracking-tight group-data-[collapsible=icon]:hidden">
+            Dockyard
+          </span>
         </div>
-        <Button
-          variant="ghost"
-          onClick={onChangePassword}
-          className="w-full justify-start gap-2.5 px-3 text-muted-foreground font-normal"
-        >
-          <KeyRound strokeWidth={1.5} />
-          {t('sidebar.changePassword')}
-        </Button>
-        <Button
-          variant="ghost"
-          onClick={onLogout}
-          className="w-full justify-start gap-2.5 px-3 text-muted-foreground font-normal"
-        >
-          <LogOut strokeWidth={1.5} />
-          {t('sidebar.signOut')}
-        </Button>
-      </div>
-    </aside>
+      </SidebarHeader>
+
+      <SidebarContent>
+        <SidebarGroup>
+          <SidebarGroupContent>
+            <SidebarMenu>
+              {navItems
+                .filter(item => !item.adminOnly || isAdmin)
+                .map(item => (
+                  <SidebarMenuItem key={item.tab}>
+                    <SidebarMenuButton
+                      isActive={tab === item.tab}
+                      tooltip={t(item.labelKey)}
+                      onClick={() => onTabChange(item.tab)}
+                    >
+                      <item.icon strokeWidth={1.5} />
+                      <span>{t(item.labelKey)}</span>
+                    </SidebarMenuButton>
+                  </SidebarMenuItem>
+                ))}
+            </SidebarMenu>
+          </SidebarGroupContent>
+        </SidebarGroup>
+      </SidebarContent>
+
+      <SidebarFooter>
+        <SidebarMenu>
+          <SidebarMenuItem>
+            <SidebarMenuButton
+              isActive={tab === 'settings'}
+              onClick={() => onTabChange('settings')}
+              tooltip={username ?? t('settingsTab.unknownUser')}
+            >
+              <User strokeWidth={1.5} />
+              <span className="truncate">{username ?? t('settingsTab.unknownUser')}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+          <SidebarMenuItem>
+            <SidebarMenuButton onClick={onLogout} tooltip={t('sidebar.signOut')}>
+              <LogOut strokeWidth={1.5} />
+              <span>{t('sidebar.signOut')}</span>
+            </SidebarMenuButton>
+          </SidebarMenuItem>
+        </SidebarMenu>
+      </SidebarFooter>
+    </Sidebar>
   )
 }

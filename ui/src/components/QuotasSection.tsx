@@ -143,7 +143,7 @@ function CreateQuotaForm({ onCreated }: { onCreated: () => void }) {
   const [warnPercent, setWarnPercent] = useState('90')
   const [busy, setBusy] = useState(false)
 
-  async function submit(e: React.FormEvent) {
+  async function submit(e: React.SubmitEvent) {
     e.preventDefault()
     if (!scopeValue.trim()) {
       toast.error(t('quotas.scopeRequired'))

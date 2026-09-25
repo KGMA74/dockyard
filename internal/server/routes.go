@@ -308,6 +308,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 			RegistryUser:   s.authUsername,
 			RegistryPass:   s.authPassword,
 			Insecure:       s.trivyInsecureRegistry,
+			Offline:        s.trivyOffline,
 			Timeout:        s.scanTimeout,
 			MaxReportBytes: s.scanMaxReportBytes,
 			DedupWindow:    s.scanDedupWindow,

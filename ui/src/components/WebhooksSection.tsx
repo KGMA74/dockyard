@@ -113,7 +113,7 @@ function CreateWebhookForm({ onCreated }: { onCreated: () => void }) {
     setSelected(cur => (cur.includes(ev) ? cur.filter(e => e !== ev) : [...cur, ev]))
   }
 
-  async function submit(e: React.FormEvent) {
+  async function submit(e: React.SubmitEvent) {
     e.preventDefault()
     setBusy(true)
     try {

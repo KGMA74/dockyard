@@ -36,6 +36,28 @@ func ManifestFor(configDigest string, layerDigests ...string) []byte {
 	)
 }
 
+// IndexFor builds a minimal OCI image index / manifest list referencing the
+// given child manifest digests.
+func IndexFor(childDigests ...string) []byte {
+	var entries []string
+	for _, d := range childDigests {
+		entries = append(entries, fmt.Sprintf(`{"digest":%q,"size":0,"mediaType":"application/vnd.oci.image.manifest.v1+json"}`, d))
+	}
+	return fmt.Appendf(nil,
+		`{"schemaVersion":2,"mediaType":"application/vnd.oci.image.index.v1+json","manifests":[%s]}`,
+		strings.Join(entries, ","),
+	)
+}
+
+// gcBackend mirrors the GC helper methods implemented by every real backend but
+// absent from storage.Backend (they're reached by type assertion in admin/server).
+type gcBackend interface {
+	AllBlobs() ([]string, error)
+	BlobSize(digest string) (int64, error)
+	ReferencedBlobs() (map[string]struct{}, error)
+	RemoveBlob(digest string) error
+}
+
 // RunBackendContract exercises the full storage.Backend interface against a
 // fresh backend per subtest. newBackend must return an empty, isolated store.
 func RunBackendContract(t *testing.T, newBackend func(t *testing.T) storage.Backend) {
@@ -297,6 +319,115 @@ func RunBackendContract(t *testing.T, newBackend func(t *testing.T) storage.Back
 		}
 		if stats.RepoCount != 1 {
 			t.Errorf("RepoCount = %d, want 1", stats.RepoCount)
+		}
+	})
+
+	t.Run("GarbageCollectionSet", func(t *testing.T) {
+		b := newBackend(t)
+		gc, ok := b.(gcBackend)
+		if !ok {
+			t.Skip("backend does not implement GC helpers")
+		}
+		put := func(content []byte) string {
+			t.Helper()
+			d := Digest(content)
+			if err := b.PutBlob(d, bytes.NewReader(content), int64(len(content))); err != nil {
+				t.Fatalf("PutBlob: %v", err)
+			}
+			return d
+		}
+		cfg := put([]byte("gc-config"))
+		layer := put([]byte("gc-layer"))
+		orphan := put([]byte("gc-orphan"))
+
+		m := ManifestFor(cfg, layer)
+		if err := b.PutManifest("gc/app", "v1", Digest(m), m); err != nil {
+			t.Fatalf("PutManifest: %v", err)
+		}
+
+		all, err := gc.AllBlobs()
+		if err != nil {
+			t.Fatalf("AllBlobs: %v", err)
+		}
+		if len(all) != 3 {
+			t.Fatalf("AllBlobs = %d, want 3", len(all))
+		}
+		ref, err := gc.ReferencedBlobs()
+		if err != nil {
+			t.Fatalf("ReferencedBlobs: %v", err)
+		}
+		if _, ok := ref[cfg]; !ok {
+			t.Errorf("config blob not marked referenced")
+		}
+		if _, ok := ref[layer]; !ok {
+			t.Errorf("layer blob not marked referenced")
+		}
+		if _, ok := ref[orphan]; ok {
+			t.Errorf("orphan blob was marked referenced")
+		}
+		if err := gc.RemoveBlob(orphan); err != nil {
+			t.Fatalf("RemoveBlob: %v", err)
+		}
+		if ok, _ := b.BlobExists(orphan); ok {
+			t.Errorf("orphan blob still present after RemoveBlob")
+		}
+	})
+
+	t.Run("MultiArchDeleteFreesChildLayers", func(t *testing.T) {
+		b := newBackend(t)
+		gc, ok := b.(gcBackend)
+		if !ok {
+			t.Skip("backend does not implement GC helpers")
+		}
+		put := func(content []byte) string {
+			t.Helper()
+			d := Digest(content)
+			if err := b.PutBlob(d, bytes.NewReader(content), int64(len(content))); err != nil {
+				t.Fatalf("PutBlob: %v", err)
+			}
+			return d
+		}
+		const name = "gc/multi"
+		amdCfg, amdLayer := put([]byte("amd-cfg")), put([]byte("amd-layer"))
+		armCfg, armLayer := put([]byte("arm-cfg")), put([]byte("arm-layer"))
+
+		amd := ManifestFor(amdCfg, amdLayer)
+		arm := ManifestFor(armCfg, armLayer)
+		if err := b.PutManifest(name, Digest(amd), Digest(amd), amd); err != nil {
+			t.Fatalf("PutManifest amd: %v", err)
+		}
+		if err := b.PutManifest(name, Digest(arm), Digest(arm), arm); err != nil {
+			t.Fatalf("PutManifest arm: %v", err)
+		}
+		index := IndexFor(Digest(amd), Digest(arm))
+		if err := b.PutManifest(name, "latest", Digest(index), index); err != nil {
+			t.Fatalf("PutManifest index: %v", err)
+		}
+
+		// All four child layers/configs must be referenced through the index.
+		ref, err := gc.ReferencedBlobs()
+		if err != nil {
+			t.Fatalf("ReferencedBlobs: %v", err)
+		}
+		for _, d := range []string{amdCfg, amdLayer, armCfg, armLayer} {
+			if _, ok := ref[d]; !ok {
+				t.Fatalf("blob %s not referenced through the index", d)
+			}
+		}
+
+		// Delete the tag; the child manifests must be pruned so GC reclaims
+		// every layer.
+		if err := b.DeleteManifest(name, Digest(index)); err != nil {
+			t.Fatalf("DeleteManifest: %v", err)
+		}
+		ref, err = gc.ReferencedBlobs()
+		if err != nil {
+			t.Fatalf("ReferencedBlobs after delete: %v", err)
+		}
+		for _, d := range []string{amdCfg, amdLayer, armCfg, armLayer} {
+			if _, ok := ref[d]; ok {
+				t.Errorf("blob %s still referenced after deleting the multi-arch tag", d)
+			}
 		}
 	})
 }

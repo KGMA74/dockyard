@@ -182,7 +182,7 @@ function CreatePolicyForm({ onCreated }: { onCreated: () => void }) {
   const [protectedTags, setProtectedTags] = useState('')
   const [busy, setBusy] = useState(false)
 
-  async function submit(e: React.FormEvent) {
+  async function submit(e: React.SubmitEvent) {
     e.preventDefault()
     setBusy(true)
     try {

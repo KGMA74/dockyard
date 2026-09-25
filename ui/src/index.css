@@ -102,7 +102,7 @@
 
     --popover-foreground: oklch(0.145 0 0);
 
-    --primary: oklch(0.205 0 0);
+    --primary: oklch(0.546 0.245 262.881);
 
     --primary-foreground: oklch(0.985 0 0);
 
@@ -124,7 +124,7 @@
 
     --input: oklch(0.922 0 0);
 
-    --ring: oklch(0.708 0 0);
+    --ring: oklch(0.623 0.214 259.815);
 
     --chart-1: oklch(0.87 0 0);
 
@@ -142,7 +142,7 @@
 
     --sidebar-foreground: oklch(0.145 0 0);
 
-    --sidebar-primary: oklch(0.205 0 0);
+    --sidebar-primary: oklch(0.546 0.245 262.881);
 
     --sidebar-primary-foreground: oklch(0.985 0 0);
 
@@ -152,7 +152,7 @@
 
     --sidebar-border: oklch(0.922 0 0);
 
-    --sidebar-ring: oklch(0.708 0 0);
+    --sidebar-ring: oklch(0.623 0.214 259.815);
 }
 
 .dark {
@@ -169,9 +169,9 @@
 
     --popover-foreground: oklch(0.985 0 0);
 
-    --primary: oklch(0.922 0 0);
+    --primary: oklch(0.623 0.214 259.815);
 
-    --primary-foreground: oklch(0.205 0 0);
+    --primary-foreground: oklch(0.985 0 0);
 
     --secondary: oklch(0.269 0 0);
 
@@ -191,7 +191,7 @@
 
     --input: oklch(1 0 0 / 15%);
 
-    --ring: oklch(0.556 0 0);
+    --ring: oklch(0.623 0.214 259.815);
 
     --chart-1: oklch(0.87 0 0);
 
@@ -207,7 +207,7 @@
 
     --sidebar-foreground: oklch(0.985 0 0);
 
-    --sidebar-primary: oklch(0.488 0.243 264.376);
+    --sidebar-primary: oklch(0.623 0.214 259.815);
 
     --sidebar-primary-foreground: oklch(0.985 0 0);
 
@@ -217,7 +217,7 @@
 
     --sidebar-border: oklch(1 0 0 / 10%);
 
-    --sidebar-ring: oklch(0.556 0 0);
+    --sidebar-ring: oklch(0.623 0.214 259.815);
 }
 
 @layer base {
@@ -230,4 +230,31 @@
   html {
     @apply font-sans;
     }
+}
+
+@keyframes orbit-spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+@keyframes cube-breathe {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.035); }
+}
+
+.animate-orbit-slow {
+  animation: orbit-spin 50s linear infinite;
+  transform-origin: 340px 210px;
+}
+
+.animate-cube-breathe {
+  animation: cube-breathe 4.5s ease-in-out infinite;
+  transform-origin: 340px 210px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-orbit-slow,
+  .animate-cube-breathe {
+    animation: none;
+  }
 }
