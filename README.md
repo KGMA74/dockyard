@@ -16,9 +16,9 @@ A lightweight, self-hosted Docker Registry V2 server written in Go. Ships as a *
 - **Two storage backends** — local filesystem or any S3-compatible object store (RustFS, MinIO, AWS S3, …)
 - **Two modes** — embedded registry, or proxy/mirror in front of an existing registry
 - **Multi-arch aware** — manifest lists (OCI indexes) resolve per-platform, real total size instead of 0
-- **Vulnerability scanning** — Trivy scans on demand via the admin API, results with severity counts
+- **Vulnerability scanning** — Trivy scans on demand via the admin API, results with severity counts. The vulnerability DB ships in the image, so scans work offline / air-gapped
 - **Signed-push enforcement** — reject pushes without a valid cosign signature, verified server-side
-- **Garbage collection, retention policies, replication, byte quotas** — all with dry-run previews
+- **Garbage collection, retention policies, replication, byte quotas** — all with dry-run previews; GC runs on both the local and S3 backends
 - **Tag diff, layer browser, server-side search** — inspect and compare images from the UI
 - **In-app notifications, audit log, webhooks** — over the same event feed
 - **JWT auth** on the admin API, Docker token auth on `/v2/*`, structured JSON logs, optional OpenTelemetry tracing
@@ -91,7 +91,7 @@ JWT_SECRET=change-this-to-a-long-random-secret
 V2_AUTH_ENABLED=false
 ```
 
-The bucket for the S3 backend is created automatically on first startup if it doesn't exist; GC and the storage-tree view are local-backend only.
+The bucket for the S3 backend is created automatically on first startup if it doesn't exist. Garbage collection works on both backends (the S3 credentials need `s3:ListBucket`); only the storage-tree debug view is local-backend only.
 
 Rate limiting, CORS, native TLS, Prometheus/OpenTelemetry, Trivy scanning, cosign enforcement, and proxy/mirror upstream credentials are all documented in the **[full configuration reference](./CONFIGURATION.md)**.
 

@@ -92,7 +92,8 @@ This does not delete the PVC created for local storage; remove it manually if yo
 | Name                        | Description                                                                          | Value      |
 | ----------------------------- | ----------------------------------------------------------------------------------------- | ------------ |
 | `scan.enabled`                 | Enable on-demand Trivy scans via the admin API                                            | `false`     |
-| `scan.trivyServerURL`          | External `trivy server --listen` to defer to (shared DB / air-gapped). Empty = standalone, Trivy manages its own DB under `cacheDir` (needs outbound internet on first scan) | `""` |
+| `scan.trivyServerURL`          | External `trivy server --listen` to defer to (shared DB across instances). Empty = standalone: the vulnerability DB shipped in the image seeds `cacheDir` on startup, so the first scan needs no internet access | `""` |
+| `scan.offline`                 | Air-gapped mode: never update the DB, scan with the one shipped in the image (or already cached) | `false` |
 | `scan.cacheDir`                | Trivy vulnerability DB cache path. Empty = computed automatically under `<registry.storage.path>/trivy-cache` | `""` |
 | `scan.timeout`                 | Per-scan timeout                                                                           | `5m`        |
 | `scan.maxReportBytes`          | Max stored report size                                                                     | `20971520`  |

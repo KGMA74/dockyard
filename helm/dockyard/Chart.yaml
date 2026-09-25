@@ -2,8 +2,8 @@ apiVersion: v2
 name: dockyard
 description: A self-hosted Docker Registry V2 server
 type: application
-version: 0.1.0
-appVersion: "latest"
+version: 0.5.0
+appVersion: "0.5.0"
 keywords:
   - docker
   - registry
@@ -27,9 +27,24 @@ annotations:
       url: https://raw.githubusercontent.com/kgma74/dockyard/main/assets/screenshots/image-details.jpg
     - title: Storage insights — growth history and largest repositories
       url: https://raw.githubusercontent.com/kgma74/dockyard/main/assets/screenshots/storage-insights.jpg
-  # Overwritten by .github/workflows/helm-release.yml before packaging, from
-  # the GitHub release notes of the tag being published — this placeholder
-  # only shows up if that step is ever skipped.
+  # Kept by .github/workflows/helm-release.yml when `version` above matches the
+  # tag being released (a hand-written changelog). Otherwise the workflow
+  # overwrites it from the GitHub release notes of that tag.
   artifacthub.io/changes: |
+    - kind: fixed
+      description: Garbage collection on the S3 backend freed nothing (LIST errors were swallowed, multi-arch child manifests were never pruned)
+    - kind: fixed
+      description: GC now follows manifest lists / OCI indexes into their child manifests
     - kind: added
-      description: Initial release
+      description: Trivy vulnerability DB shipped in the image — the first scan no longer needs internet access
+    - kind: added
+      description: scan.offline value (TRIVY_OFFLINE) for air-gapped clusters
+    - kind: changed
+      description: Redesigned UI — collapsible sidebar, branded login page, preferences popover, storage-growth chart and sparkline
+    - kind: fixed
+      description: UI crashed on load (Tooltip used without TooltipProvider)
+    - kind: changed
+      description: Dependency updates (grpc, hono, undici, postcss, nanoid and others)
+  artifacthub.io/images: |
+    - name: dockyard
+      image: ghcr.io/kgma74/dockyard:0.5.0

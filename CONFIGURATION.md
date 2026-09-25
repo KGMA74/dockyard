@@ -41,17 +41,17 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
 # ── Vulnerability scanning (Trivy) ────────────────────────────────────────────
 # Off by default. Dockyard shells out to the `trivy` binary bundled in its own
 # image. SCAN_ENABLED=true is enough to turn it on — standalone mode is the
-# default: trivy manages its own vulnerability DB, downloaded and cached
-# under TRIVY_CACHE_DIR on first scan (needs outbound internet access; give
-# the first scan a generous SCAN_TIMEOUT while the DB downloads, subsequent
-# scans reuse the cache and are fast). Trigger a scan via
+# default. The image ships a vulnerability DB (downloaded at build time); on
+# startup it seeds an empty TRIVY_CACHE_DIR, so the very first scan works
+# without internet access. A background refresh then keeps the cache up to
+# date unless TRIVY_OFFLINE=true. Trigger a scan via
 # POST /api/admin/scans {"name","reference"}.
 SCAN_ENABLED=true
+TRIVY_OFFLINE=false                  # true = air-gapped: never update the DB, scan with the shipped/cached one
 
 # Advanced: point at a shared/external trivy server instead of standalone —
-# useful to mutualize the DB across multiple Dockyard instances, or when
-# Dockyard itself has no internet egress (the external server needs it, not
-# Dockyard).
+# useful to mutualize an always-fresh DB across multiple Dockyard instances
+# (the external server needs internet access, not Dockyard).
 TRIVY_SERVER_URL=http://trivy:4954
 
 TRIVY_BIN_PATH=/trivy                # path to the trivy binary in the image

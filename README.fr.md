@@ -16,9 +16,9 @@ Un serveur Docker Registry V2 léger, écrit en Go. Livré sous forme d'un **bin
 - **Deux backends de stockage** — filesystem local ou tout stockage objet compatible S3 (RustFS, MinIO, AWS S3, …)
 - **Deux modes** — registry embarquée, ou proxy/mirror devant une registry existante
 - **Support multi-arch** — les manifest lists (index OCI) sont résolues par plateforme, vraie taille totale au lieu de 0
-- **Scan de vulnérabilités** — scans Trivy à la demande via l'API admin, résultats avec comptes par sévérité
+- **Scan de vulnérabilités** — scans Trivy à la demande via l'API admin, résultats avec comptes par sévérité. La base de vulnérabilités est incluse dans l'image : les scans fonctionnent hors ligne / en environnement air-gapped
 - **Application des push signés** — rejette les push sans signature cosign valide, vérifiée côté serveur
-- **Garbage collection, politiques de rétention, réplication, quotas** — tous avec prévisualisation dry-run
+- **Garbage collection, politiques de rétention, réplication, quotas** — tous avec prévisualisation dry-run ; le GC fonctionne sur les backends local et S3
 - **Diff de tags, explorateur de layers, recherche serveur** — inspecter et comparer les images depuis l'UI
 - **Notifications in-app, journal d'audit, webhooks** — sur le même flux d'événements
 - **Auth JWT** sur l'API admin, token auth Docker sur `/v2/*`, logs JSON structurés, tracing OpenTelemetry optionnel
@@ -91,7 +91,7 @@ JWT_SECRET=changez-moi-pour-une-longue-chaine-aleatoire
 V2_AUTH_ENABLED=false
 ```
 
-Le bucket du backend S3 est créé automatiquement au premier démarrage s'il n'existe pas ; le GC et l'arbre de stockage ne sont disponibles qu'avec le backend local.
+Le bucket du backend S3 est créé automatiquement au premier démarrage s'il n'existe pas. Le garbage collection fonctionne sur les deux backends (les identifiants S3 doivent avoir `s3:ListBucket`) ; seule la vue de debug de l'arbre de stockage est réservée au backend local.
 
 Rate limiting, CORS, TLS natif, Prometheus/OpenTelemetry, scan Trivy, application cosign, et identifiants upstream proxy/mirror sont documentés dans la **[référence de configuration complète](./CONFIGURATION.md)** (en anglais).
 

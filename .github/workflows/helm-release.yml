@@ -32,10 +32,18 @@ jobs:
           sudo curl -fsSL https://github.com/mikefarah/yq/releases/latest/download/yq_linux_amd64 -o /usr/local/bin/yq
           sudo chmod +x /usr/local/bin/yq
 
-      - name: Populate Artifact Hub changelog from the GitHub release notes
+      - name: Populate Artifact Hub images + changelog
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          VERSION=${GITHUB_REF_NAME#v}
+          IMAGES=$(printf -- '- name: dockyard\n  image: ghcr.io/kgma74/dockyard:%s\n' "$VERSION")
+          export IMAGES
+          yq e -i '.annotations."artifacthub.io/images" = strenv(IMAGES)' helm/dockyard/Chart.yaml
+          if [ "$(yq e '.version' helm/dockyard/Chart.yaml)" = "$VERSION" ]; then
+            echo "Chart.yaml already carries a hand-written changelog for $VERSION, keeping it"
+            exit 0
+          fi
           NOTES=$(gh release view "$GITHUB_REF_NAME" --json body -q .body 2>/dev/null || true)
           CHANGES=""
           while IFS= read -r line; do
