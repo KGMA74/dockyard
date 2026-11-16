@@ -1,7 +1,9 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { ArrowRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { getTagDiff, TagDiff as TagDiffResult } from '../api'
+import { getTagDiff } from '../api'
+import { formatBytes } from '../lib/format'
+import { ErrorState, TableSkeleton } from './kit'
 import { Badge } from '@/components/ui/badge'
 import {
   Dialog,
@@ -20,20 +22,11 @@ interface Props {
 
 export default function TagDiff({ imageName, tagA, tagB, onClose }: Props) {
   const { t } = useTranslation()
-  const [diff, setDiff] = useState<TagDiffResult | null>(null)
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setError('')
-    getTagDiff(imageName, tagA, tagB)
-      .then(d => { if (!cancelled) setDiff(d) })
-      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : t('tagDiff.loadFailed')) })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [imageName, tagA, tagB, t])
+  const query = useQuery({
+    queryKey: ['tags', imageName, 'diff', tagA, tagB],
+    queryFn: () => getTagDiff(imageName, tagA, tagB),
+  })
+  const diff = query.data
 
   return (
     <Dialog open onOpenChange={open => { if (!open) onClose() }}>
@@ -45,10 +38,10 @@ export default function TagDiff({ imageName, tagA, tagB, onClose }: Props) {
           <DialogDescription className="truncate">{imageName}</DialogDescription>
         </DialogHeader>
 
-        {loading ? (
-          <p className="text-sm text-muted-foreground py-10 text-center">{t('common.loading')}</p>
-        ) : error ? (
-          <p className="text-sm text-destructive py-10 text-center">{error}</p>
+        {query.isPending ? (
+          <TableSkeleton rows={4} />
+        ) : query.isError ? (
+          <ErrorState error={query.error} onRetry={() => query.refetch()} />
         ) : diff ? (
           <div className="flex-1 min-h-0 overflow-y-auto space-y-5">
             <div className="grid grid-cols-2 gap-3">
@@ -78,8 +71,9 @@ export default function TagDiff({ imageName, tagA, tagB, onClose }: Props) {
                       : 'text-muted-foreground'
                 }
               >
-                {diff.size_delta_bytes > 0 ? '+' : ''}
-                {t('tagDiff.bytes', { count: diff.size_delta_bytes.toLocaleString() })}
+                {diff.size_delta_bytes === 0
+                  ? t('tagDiff.noSizeChange')
+                  : `${diff.size_delta_bytes > 0 ? '+' : '−'}${formatBytes(Math.abs(diff.size_delta_bytes))}`}
               </Badge>
             </div>
 

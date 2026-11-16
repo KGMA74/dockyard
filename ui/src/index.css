@@ -2,6 +2,7 @@
 @import "tw-animate-css";
 @import "shadcn/tailwind.css";
 @import "@fontsource-variable/geist";
+@import "@fontsource-variable/geist-mono";
 
 @custom-variant dark (&:where(.dark, .dark *));
 
@@ -9,7 +10,15 @@
 
     --font-heading: var(--font-sans);
 
-    --font-sans: 'Geist Variable', sans-serif;
+    --font-sans: 'Geist Variable', ui-sans-serif, system-ui, sans-serif;
+
+    --font-mono: 'Geist Mono Variable', ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+
+    --color-success: var(--success);
+
+    --color-warning: var(--warning);
+
+    --color-danger: var(--destructive);
 
     --color-sidebar-ring: var(--sidebar-ring);
 
@@ -89,6 +98,9 @@
 }
 
 :root {
+    /* Native controls (checkboxes, scrollbars, date pickers) follow the
+       app's chosen theme, not the OS one from <meta name="color-scheme">. */
+    color-scheme: light;
 
     --background: oklch(1 0 0);
 
@@ -136,6 +148,10 @@
 
     --chart-5: oklch(0.269 0 0);
 
+    --success: oklch(0.52 0.14 155);
+
+    --warning: oklch(0.58 0.15 65);
+
     --radius: 0.625rem;
 
     --sidebar: oklch(0.985 0 0);
@@ -156,6 +172,7 @@
 }
 
 .dark {
+    color-scheme: dark;
 
     --background: oklch(0.145 0 0);
 
@@ -190,6 +207,10 @@
     --border: oklch(1 0 0 / 10%);
 
     --input: oklch(1 0 0 / 15%);
+
+    --success: oklch(0.76 0.16 155);
+
+    --warning: oklch(0.80 0.15 80);
 
     --ring: oklch(0.623 0.214 259.815);
 
@@ -229,6 +250,13 @@
     }
   html {
     @apply font-sans;
+    }
+  code, kbd, pre, samp {
+    @apply font-mono;
+    }
+  /* Tabular figures everywhere numbers line up in columns. */
+  table {
+    font-variant-numeric: tabular-nums;
     }
 }
 

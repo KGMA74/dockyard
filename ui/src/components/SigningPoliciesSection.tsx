@@ -1,144 +1,143 @@
-import { useCallback, useEffect, useState } from 'react'
-import { toast } from 'sonner'
-import { Plus, ShieldCheck, Trash2, X } from 'lucide-react'
+import { useState } from 'react'
+import { Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+import { createSigningPolicy, deleteSigningPolicy, type SigningPolicy } from '@/api'
+import { keys, useInvalidate, useSigningPolicies, useSigningStatus } from '@/lib/queries'
 import {
-  createSigningPolicy, deleteSigningPolicy, getSigningStatus, listSigningPolicies,
-  SigningPolicy,
-} from '../api'
-import { Badge } from '@/components/ui/badge'
+  ConfirmDialog,
+  Fact,
+  Facts,
+  Field,
+  FormDialog,
+  NativeSelect,
+  Panel,
+  QueryPanel,
+  RowAction,
+  Section,
+  StatusBadge,
+} from './kit'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 
-// SigningPoliciesSection lives in the Settings tab; hidden for non-admins
-// (403). Signing itself always happens client-side (cosign CLI) — Dockyard
-// only verifies against configured public keys.
-export default function SigningPoliciesSection() {
+function OverrideDialog({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation()
-  const [status, setStatus] = useState<{ enabled: boolean; keys_loaded: number } | null>(null)
-  const [policies, setPolicies] = useState<SigningPolicy[] | null>(null)
-  const [showCreate, setShowCreate] = useState(false)
+  const invalidate = useInvalidate()
+  const [pattern, setPattern] = useState('')
+  const [required, setRequired] = useState('true')
 
-  const load = useCallback(() => {
-    getSigningStatus().then(setStatus).catch(() => setStatus(null))
-    listSigningPolicies()
-      .then(r => setPolicies(r.policies))
-      .catch(() => setPolicies(null))
-  }, [])
-
-  useEffect(load, [load])
-
-  if (policies === null) return null
-
-  async function handleDelete(id: number) {
-    try {
-      await deleteSigningPolicy(id)
-      toast.success(t('signingPolicies.deleted'))
-      load()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('signingPolicies.deleteFailed'))
-    }
+  async function submit() {
+    await createSigningPolicy(pattern.trim(), required === 'true')
+    toast.success(t('signing.created'))
+    await invalidate(keys.signingPolicies)
+    onClose()
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest">
-          {t('signingPolicies.title')}
-        </h2>
-        <Button variant="outline" size="sm" onClick={() => setShowCreate(v => !v)}>
-          {showCreate ? <X /> : <Plus />}
-          {showCreate ? t('common.cancel') : t('signingPolicies.newOverride')}
-        </Button>
-      </div>
-
-      {showCreate && (
-        <CreateOverrideForm
-          onCreated={() => {
-            setShowCreate(false)
-            load()
-          }}
-        />
-      )}
-
-      <Card className="p-4 rounded-xl gap-3">
-        <div className="flex items-center gap-3">
-          <div className="size-9 rounded-full bg-muted flex items-center justify-center shrink-0">
-            <ShieldCheck className="size-4 text-muted-foreground" strokeWidth={1.5} />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {t('signingPolicies.description')}
-          </p>
-        </div>
-
-        {status && (
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-muted-foreground">{t('signingPolicies.globalDefault')}</span>
-            <Badge variant="outline" className={status.enabled ? 'text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10' : 'text-muted-foreground'}>
-              {status.enabled ? t('signingPolicies.required') : t('signingPolicies.notRequired')}
-            </Badge>
-            <span className="text-xs text-muted-foreground">
-              · {t('signingPolicies.keysConfigured', { count: status.keys_loaded })}
-            </span>
-          </div>
+    <FormDialog
+      title={t('signing.newOverride')}
+      description={t('signing.overrideIntro')}
+      submitLabel={t('signing.create')}
+      onSubmit={submit}
+      onClose={onClose}
+      canSubmit={pattern.trim() !== ''}
+    >
+      <Field label={t('fields.repoPattern')} hint={t('fields.repoPatternHint')}>
+        {ids => <Input {...ids} value={pattern} onChange={e => setPattern(e.target.value)} placeholder="team-a/*" className="font-mono" required />}
+      </Field>
+      <Field label={t('signing.rule')}>
+        {ids => (
+          <NativeSelect {...ids} value={required} onChange={e => setRequired(e.target.value)}>
+            <option value="true">{t('signing.require')}</option>
+            <option value="false">{t('signing.doNotRequire')}</option>
+          </NativeSelect>
         )}
-
-        {policies.length === 0 ? (
-          <p className="text-xs text-muted-foreground">{t('signingPolicies.noOverride')}</p>
-        ) : (
-          <div className="space-y-2">
-            {policies.map(p => (
-              <div key={p.id} className="flex items-center gap-3 bg-muted/50 border rounded-lg px-3 py-2">
-                <span className="font-mono text-xs flex-1 truncate">{p.repo_pattern}</span>
-                <Badge variant="outline" className={p.required ? 'text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10' : 'text-muted-foreground'}>
-                  {p.required ? t('signingPolicies.required') : t('signingPolicies.notRequired')}
-                </Badge>
-                <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(p.id)} title={t('signingPolicies.deleteOverride')}>
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-    </div>
+      </Field>
+    </FormDialog>
   )
 }
 
-function CreateOverrideForm({ onCreated }: { onCreated: () => void }) {
+/** Signed-push enforcement: which repositories refuse a tag that carries no
+ *  valid cosign signature. Verification only — keys never leave the client. */
+export default function SigningPoliciesSection() {
   const { t } = useTranslation()
-  const [pattern, setPattern] = useState('*')
-  const [required, setRequired] = useState(true)
-  const [busy, setBusy] = useState(false)
+  const status = useSigningStatus()
+  const policies = useSigningPolicies()
+  const invalidate = useInvalidate()
+  const [creating, setCreating] = useState(false)
+  const [toDelete, setToDelete] = useState<SigningPolicy | null>(null)
 
-  async function submit(e: React.SubmitEvent) {
-    e.preventDefault()
-    setBusy(true)
-    try {
-      await createSigningPolicy(pattern || '*', required)
-      toast.success(t('signingPolicies.created'))
-      onCreated()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('signingPolicies.createFailed'))
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  const inputClass = 'w-full text-sm bg-transparent border rounded-md px-3 py-1.5'
   return (
-    <Card className="p-4 rounded-xl mb-3">
-      <form onSubmit={submit} className="grid gap-2 sm:grid-cols-2">
-        <input className={inputClass} placeholder={t('signingPolicies.patternPlaceholder')} value={pattern} onChange={e => setPattern(e.target.value)} />
-        <select className={inputClass} value={required ? 'required' : 'not-required'} onChange={e => setRequired(e.target.value === 'required')}>
-          <option value="required">{t('signingPolicies.requireSignature')}</option>
-          <option value="not-required">{t('signingPolicies.doNotRequire')}</option>
-        </select>
-        <Button type="submit" size="sm" disabled={busy} className="justify-self-start self-center">
-          <Plus />
-          {t('signingPolicies.createOverride')}
-        </Button>
-      </form>
-    </Card>
+    <Section
+      id="signing"
+      title={t('signing.title')}
+      description={t('signing.description')}
+      actions={
+        policies.isSuccess && (
+          <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
+            <Plus />
+            {t('signing.newOverride')}
+          </Button>
+        )
+      }
+    >
+      <QueryPanel query={status} unavailable={{ title: t('signing.unavailableTitle') }} skeletonRows={2}>
+        {data => (
+          <Panel>
+            <Facts>
+              <Fact label={t('signing.globalDefault')}>
+                <StatusBadge tone={data.enabled ? 'success' : 'neutral'}>
+                  {data.enabled ? t('signing.required') : t('signing.notRequired')}
+                </StatusBadge>
+              </Fact>
+              <Fact label={t('signing.publicKeys')}>
+                {data.keys_loaded > 0 ? (
+                  <span className="tabular-nums">{t('signing.keysLoaded', { count: data.keys_loaded })}</span>
+                ) : (
+                  <StatusBadge tone={data.enabled ? 'danger' : 'neutral'}>{t('signing.noKeys')}</StatusBadge>
+                )}
+              </Fact>
+            </Facts>
+            {data.enabled && data.keys_loaded === 0 && (
+              <p className="border-t px-4 py-2.5 text-xs text-destructive text-pretty">{t('signing.noKeysWarning')}</p>
+            )}
+            {policies.data && policies.data.length > 0 && (
+              <ul className="divide-y border-t">
+                {policies.data.map(policy => (
+                  <li key={policy.id} className="flex items-center gap-3 px-4 py-2">
+                    <code className="min-w-0 flex-1 truncate text-xs font-medium">{policy.repo_pattern}</code>
+                    <StatusBadge tone={policy.required ? 'success' : 'neutral'}>
+                      {policy.required ? t('signing.required') : t('signing.notRequired')}
+                    </StatusBadge>
+                    <RowAction label={t('signing.deleteOverride')} onClick={() => setToDelete(policy)} destructive>
+                      <Trash2 />
+                    </RowAction>
+                  </li>
+                ))}
+              </ul>
+            )}
+            {policies.data?.length === 0 && (
+              <p className="border-t px-4 py-2.5 text-xs text-muted-foreground">{t('signing.noOverride')}</p>
+            )}
+          </Panel>
+        )}
+      </QueryPanel>
+
+      {creating && <OverrideDialog onClose={() => setCreating(false)} />}
+      {toDelete && (
+        <ConfirmDialog
+          title={t('signing.deleteOverride')}
+          description={t('signing.deleteBody', { pattern: toDelete.repo_pattern })}
+          confirmLabel={t('common.delete')}
+          destructive
+          onConfirm={async () => {
+            await deleteSigningPolicy(toDelete.id)
+            setToDelete(null)
+            await invalidate(keys.signingPolicies)
+          }}
+          onCancel={() => setToDelete(null)}
+        />
+      )}
+    </Section>
   )
 }

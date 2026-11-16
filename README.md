@@ -12,7 +12,7 @@ A lightweight, self-hosted Docker Registry V2 server written in Go. Ships as a *
 
 ## Features
 
-- **Embedded UI** — React + Tailwind (shadcn/ui) dashboard, dark/light/system theme, EN/FR localization
+- **Embedded UI** — React + Tailwind (shadcn/ui) console with shareable URLs for every page, repository and tag, a `Ctrl+K` command palette, role-aware navigation (readers only see what they can use), ready-to-copy `docker login/push/pull` commands, a filterable vulnerability report, dark/light/system theme and EN/FR localization (a test keeps both languages in sync)
 - **Two storage backends** — local filesystem or any S3-compatible object store (RustFS, MinIO, AWS S3, …)
 - **Two modes** — embedded registry, or proxy/mirror in front of an existing registry
 - **Multi-arch aware** — manifest lists (OCI indexes) resolve per-platform, real total size instead of 0

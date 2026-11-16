@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useMemo, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { Search, File, Folder, Link as LinkIcon } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { getLayerEntries, LayerEntry } from '../api'
+import { getLayerEntries, type LayerEntry } from '../api'
+import { ErrorState, TableSkeleton } from './kit'
 import { Input } from '@/components/ui/input'
 import {
   Dialog,
@@ -19,21 +21,13 @@ interface Props {
 
 export default function LayerBrowser({ imageName, digest, onClose }: Props) {
   const { t } = useTranslation()
-  const [entries, setEntries] = useState<LayerEntry[] | null>(null)
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
   const [filter, setFilter] = useState('')
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setError('')
-    getLayerEntries(imageName, digest)
-      .then(d => { if (!cancelled) setEntries(d.entries) })
-      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : t('layerBrowser.loadFailed')) })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [imageName, digest, t])
+  const layer = useQuery({
+    queryKey: ['layer', digest],
+    queryFn: () => getLayerEntries(imageName, digest),
+    staleTime: Infinity, // a layer is immutable
+  })
+  const entries = layer.data?.entries
 
   const filtered = useMemo(() => {
     if (!entries) return []
@@ -49,10 +43,10 @@ export default function LayerBrowser({ imageName, digest, onClose }: Props) {
           <DialogDescription className="font-mono text-xs truncate">{digest}</DialogDescription>
         </DialogHeader>
 
-        {loading ? (
-          <p className="text-sm text-muted-foreground py-10 text-center">{t('common.loading')}</p>
-        ) : error ? (
-          <p className="text-sm text-destructive py-10 text-center">{error}</p>
+        {layer.isPending ? (
+          <TableSkeleton rows={5} />
+        ) : layer.isError ? (
+          <ErrorState error={layer.error} onRetry={() => layer.refetch()} />
         ) : entries && entries.length === 0 ? (
           <p className="text-sm text-muted-foreground py-10 text-center">
             {t('layerBrowser.empty')}
@@ -64,6 +58,7 @@ export default function LayerBrowser({ imageName, digest, onClose }: Props) {
               <Input
                 autoFocus
                 placeholder={t('layerBrowser.filterPlaceholder', { count: entries?.length ?? 0 })}
+                aria-label={t('layerBrowser.filterPlaceholder', { count: entries?.length ?? 0 })}
                 value={filter}
                 onChange={e => setFilter(e.target.value)}
                 className="pl-8 h-8 text-xs"

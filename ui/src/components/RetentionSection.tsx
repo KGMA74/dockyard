@@ -1,222 +1,255 @@
-import { useCallback, useEffect, useState } from 'react'
-import { toast } from 'sonner'
-import { CalendarClock, Eye, Play, Plus, Trash2, X } from 'lucide-react'
+import { useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
+import { CalendarClock, Eye, Play, Plus, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { TFunction } from 'i18next'
+import { toast } from 'sonner'
 import {
-  createRetentionPolicy, deleteRetentionPolicy, listRetentionPolicies, runRetention,
-  RetentionPlan, RetentionPolicy,
-} from '../api'
-import { Badge } from '@/components/ui/badge'
+  createRetentionPolicy,
+  deleteRetentionPolicy,
+  runRetention,
+  type RetentionPlan,
+  type RetentionPolicy,
+} from '@/api'
+import { keys, useInvalidate, useRetentionPolicies } from '@/lib/queries'
+import {
+  ConfirmDialog,
+  EmptyState,
+  errorMessage,
+  Field,
+  FormDialog,
+  Panel,
+  QueryPanel,
+  RowAction,
+  Section,
+  Spinner,
+  splitList,
+  StatusBadge,
+} from './kit'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
-function ruleSummary(p: RetentionPolicy, t: TFunction): string {
-  const rules: string[] = []
-  if (p.keep_n > 0) rules.push(t('retention.ruleKeepLast', { n: p.keep_n }))
-  if (p.unpulled_days > 0) rules.push(t('retention.ruleDropAfter', { days: p.unpulled_days }))
-  if (p.keep_patterns.length > 0) rules.push(t('retention.ruleAlwaysKeep', { patterns: p.keep_patterns.join(', ') }))
-  if (p.protected_tags.length > 0) rules.push(t('retention.ruleProtect', { tags: p.protected_tags.join(', ') }))
-  return rules.join(' · ')
+function rules(policy: RetentionPolicy, t: TFunction): string[] {
+  const out: string[] = []
+  if (policy.keep_n > 0) out.push(t('retention.ruleKeepLast', { count: policy.keep_n }))
+  if (policy.unpulled_days > 0) out.push(t('retention.ruleUnpulled', { count: policy.unpulled_days }))
+  if (policy.keep_patterns.length > 0) out.push(t('retention.ruleAlwaysKeep', { patterns: policy.keep_patterns.join(', ') }))
+  if (policy.protected_tags.length > 0) out.push(t('retention.ruleProtect', { tags: policy.protected_tags.join(', ') }))
+  return out
 }
 
-// RetentionSection lives inside the Storage tab, next to the GC it feeds.
-// Hidden for non-admins (the list call 403s) and in proxy mode (501/404).
-export default function RetentionSection() {
+function PlanTable({ plan, dryRun }: { plan: RetentionPlan; dryRun: boolean }) {
   const { t } = useTranslation()
-  const [policies, setPolicies] = useState<RetentionPolicy[] | null>(null)
-  const [plan, setPlan] = useState<RetentionPlan | null>(null)
-  const [showCreate, setShowCreate] = useState(false)
-  const [busy, setBusy] = useState(false)
-
-  const load = useCallback(() => {
-    listRetentionPolicies()
-      .then(r => setPolicies(r.policies))
-      .catch(() => setPolicies(null))
-  }, [])
-
-  useEffect(load, [load])
-
-  if (policies === null) return null
-
-  async function handleRun(dryRun: boolean) {
-    setBusy(true)
-    try {
-      const result = await runRetention(dryRun)
-      setPlan(result.plan)
-      if (dryRun) {
-        toast.info(
-          result.plan.delete.length === 0
-            ? t('retention.nothingToClean')
-            : t('retention.previewCount', { count: result.plan.delete.length }),
-        )
-      } else {
-        toast.success(t('retention.applied', { count: result.deleted }))
-      }
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('retention.runFailed'))
-    } finally {
-      setBusy(false)
-    }
+  if (plan.delete.length === 0 && plan.skipped.length === 0) {
+    return <p className="border-t px-4 py-3 text-sm text-muted-foreground">{t('retention.nothing')}</p>
   }
-
-  async function handleDeletePolicy(id: number) {
-    try {
-      await deleteRetentionPolicy(id)
-      toast.success(t('retention.deleted'))
-      load()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('retention.deleteFailed'))
-    }
-  }
-
   return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-widest">
-          {t('retention.title')}
-        </h3>
-        <Button variant="outline" size="sm" onClick={() => setShowCreate(v => !v)}>
-          {showCreate ? <X /> : <Plus />}
-          {showCreate ? t('common.cancel') : t('retention.newPolicy')}
-        </Button>
-      </div>
-
-      {showCreate && (
-        <CreatePolicyForm
-          onCreated={() => {
-            setShowCreate(false)
-            load()
-          }}
-        />
-      )}
-
-      <Card className="p-4 rounded-xl gap-3">
-        <div className="flex items-center gap-3">
-          <div className="size-9 rounded-full bg-muted flex items-center justify-center shrink-0">
-            <CalendarClock className="size-4 text-muted-foreground" strokeWidth={1.5} />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {t('retention.description')}
-          </p>
-        </div>
-
-        {policies.length === 0 ? (
-          <p className="text-xs text-muted-foreground">{t('retention.noPolicy')}</p>
-        ) : (
-          <div className="space-y-2">
-            {policies.map(p => (
-              <div key={p.id} className="flex items-center gap-3 bg-muted/50 border rounded-lg px-3 py-2">
-                <span className="font-mono text-xs shrink-0">{p.repo_pattern}</span>
-                <span className="text-xs text-muted-foreground flex-1 truncate">{ruleSummary(p, t)}</span>
-                <Button variant="ghost" size="icon-sm" onClick={() => handleDeletePolicy(p.id)} title={t('retention.deletePolicy')}>
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-
-        {policies.length > 0 && (
-          <div className="flex gap-2">
-            <Button variant="outline" size="sm" onClick={() => handleRun(true)} disabled={busy}>
-              <Eye />
-              {t('retention.previewPlan')}
-            </Button>
-            <Button variant="secondary" size="sm" onClick={() => handleRun(false)} disabled={busy}>
-              <Play />
-              {busy ? t('storageTab.running') : t('retention.applyNow')}
-            </Button>
-          </div>
-        )}
-
-        {plan && (plan.delete.length > 0 || plan.skipped.length > 0) && (
-          <div className="overflow-x-auto">
-            <table className="w-full text-xs">
-              <thead>
-                <tr className="text-left text-muted-foreground border-b">
-                  <th className="py-1.5 pr-3 font-medium">{t('denseRepoView.repository')}</th>
-                  <th className="py-1.5 pr-3 font-medium">{t('denseRepoView.tag')}</th>
-                  <th className="py-1.5 pr-3 font-medium">{t('retention.outcome')}</th>
-                  <th className="py-1.5 font-medium">{t('retention.reason')}</th>
-                </tr>
-              </thead>
-              <tbody>
-                {plan.delete.map(c => (
-                  <tr key={`d-${c.repo}-${c.tag}`} className="border-b last:border-0">
-                    <td className="py-1.5 pr-3 font-mono">{c.repo}</td>
-                    <td className="py-1.5 pr-3 font-mono">{c.tag}</td>
-                    <td className="py-1.5 pr-3">
-                      <Badge variant="outline" className="text-destructive border-destructive/30 bg-destructive/10">
-                        {t('common.delete').toLowerCase()}
-                      </Badge>
-                    </td>
-                    <td className="py-1.5 text-muted-foreground">{c.reason}</td>
-                  </tr>
-                ))}
-                {plan.skipped.map(s => (
-                  <tr key={`s-${s.repo}-${s.tag}`} className="border-b last:border-0">
-                    <td className="py-1.5 pr-3 font-mono">{s.repo}</td>
-                    <td className="py-1.5 pr-3 font-mono">{s.tag}</td>
-                    <td className="py-1.5 pr-3">
-                      <Badge variant="outline" className="text-muted-foreground">{t('retention.skipped')}</Badge>
-                    </td>
-                    <td className="py-1.5 text-muted-foreground">{s.reason}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </Card>
+    <div className="border-t">
+      <p className="px-4 pt-3 text-xs font-medium text-muted-foreground">
+        {dryRun ? t('retention.planPreview', { count: plan.delete.length }) : t('retention.planApplied', { count: plan.delete.length })}
+      </p>
+      <Table>
+        <TableHeader>
+          <TableRow className="hover:bg-transparent">
+            <TableHead className="px-4">{t('columns.repository')}</TableHead>
+            <TableHead>{t('columns.tag')}</TableHead>
+            <TableHead>{t('retention.outcome')}</TableHead>
+            <TableHead className="px-4">{t('retention.reason')}</TableHead>
+          </TableRow>
+        </TableHeader>
+        <TableBody>
+          {plan.delete.map(item => (
+            <TableRow key={`d-${item.repo}-${item.tag}`}>
+              <TableCell className="px-4 font-mono text-xs">{item.repo}</TableCell>
+              <TableCell className="font-mono text-xs">{item.tag}</TableCell>
+              <TableCell>
+                <StatusBadge tone="danger">{dryRun ? t('retention.wouldDelete') : t('retention.deleted')}</StatusBadge>
+              </TableCell>
+              <TableCell className="px-4 text-xs whitespace-normal text-muted-foreground">{item.reason}</TableCell>
+            </TableRow>
+          ))}
+          {plan.skipped.map(item => (
+            <TableRow key={`s-${item.repo}-${item.tag}`}>
+              <TableCell className="px-4 font-mono text-xs">{item.repo}</TableCell>
+              <TableCell className="font-mono text-xs">{item.tag}</TableCell>
+              <TableCell>
+                <StatusBadge>{t('retention.kept')}</StatusBadge>
+              </TableCell>
+              <TableCell className="px-4 text-xs whitespace-normal text-muted-foreground">{item.reason}</TableCell>
+            </TableRow>
+          ))}
+        </TableBody>
+      </Table>
     </div>
   )
 }
 
-function CreatePolicyForm({ onCreated }: { onCreated: () => void }) {
+function CreatePolicyDialog({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation()
+  const invalidate = useInvalidate()
   const [pattern, setPattern] = useState('*')
   const [keepN, setKeepN] = useState('')
   const [unpulledDays, setUnpulledDays] = useState('')
   const [keepPatterns, setKeepPatterns] = useState('')
-  const [protectedTags, setProtectedTags] = useState('')
-  const [busy, setBusy] = useState(false)
+  const [protectedTags, setProtectedTags] = useState('latest')
 
-  async function submit(e: React.SubmitEvent) {
-    e.preventDefault()
-    setBusy(true)
-    try {
-      const csv = (raw: string) => raw.split(',').map(s => s.trim()).filter(Boolean)
-      await createRetentionPolicy({
-        repo_pattern: pattern || '*',
-        keep_n: parseInt(keepN, 10) || 0,
-        unpulled_days: parseInt(unpulledDays, 10) || 0,
-        keep_patterns: csv(keepPatterns),
-        protected_tags: csv(protectedTags),
-      })
-      toast.success(t('retention.created'))
-      onCreated()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('retention.createFailed'))
-    } finally {
-      setBusy(false)
-    }
+  const keep = parseInt(keepN, 10) || 0
+  const days = parseInt(unpulledDays, 10) || 0
+
+  async function submit() {
+    await createRetentionPolicy({
+      repo_pattern: pattern.trim() || '*',
+      keep_n: keep,
+      unpulled_days: days,
+      keep_patterns: splitList(keepPatterns),
+      protected_tags: splitList(protectedTags),
+    })
+    toast.success(t('retention.created'))
+    await invalidate(keys.retention)
+    onClose()
   }
 
-  const inputClass = 'w-full text-sm bg-transparent border rounded-md px-3 py-1.5'
   return (
-    <Card className="p-4 rounded-xl mb-3">
-      <form onSubmit={submit} className="grid gap-2 sm:grid-cols-2">
-        <input className={inputClass} placeholder={t('retention.patternPlaceholder')} value={pattern} onChange={e => setPattern(e.target.value)} />
-        <input className={inputClass} type="number" min="0" placeholder={t('retention.keepNPlaceholder')} value={keepN} onChange={e => setKeepN(e.target.value)} />
-        <input className={inputClass} type="number" min="0" placeholder={t('retention.unpulledDaysPlaceholder')} value={unpulledDays} onChange={e => setUnpulledDays(e.target.value)} />
-        <input className={inputClass} placeholder={t('retention.keepPatternsPlaceholder')} value={keepPatterns} onChange={e => setKeepPatterns(e.target.value)} />
-        <input className={inputClass} placeholder={t('retention.protectedTagsPlaceholder')} value={protectedTags} onChange={e => setProtectedTags(e.target.value)} />
-        <Button type="submit" size="sm" disabled={busy} className="justify-self-start self-center">
-          <Plus />
-          {t('retention.createPolicy')}
-        </Button>
-      </form>
-    </Card>
+    <FormDialog
+      title={t('retention.newPolicy')}
+      description={t('retention.formIntro')}
+      submitLabel={t('retention.create')}
+      onSubmit={submit}
+      onClose={onClose}
+      canSubmit={keep > 0 || days > 0}
+      className="sm:max-w-lg"
+    >
+      <Field label={t('fields.repoPattern')} hint={t('fields.repoPatternHint')}>
+        {ids => <Input {...ids} value={pattern} onChange={e => setPattern(e.target.value)} className="font-mono" required />}
+      </Field>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label={t('retention.keepN')} hint={t('retention.keepNHint')}>
+          {ids => <Input {...ids} type="number" min="0" inputMode="numeric" value={keepN} onChange={e => setKeepN(e.target.value)} placeholder="0" />}
+        </Field>
+        <Field label={t('retention.unpulledDays')} hint={t('retention.unpulledDaysHint')}>
+          {ids => (
+            <Input {...ids} type="number" min="0" inputMode="numeric" value={unpulledDays} onChange={e => setUnpulledDays(e.target.value)} placeholder="0" />
+          )}
+        </Field>
+      </div>
+      <Field label={t('retention.keepPatterns')} hint={t('retention.keepPatternsHint')} optional>
+        {ids => <Input {...ids} value={keepPatterns} onChange={e => setKeepPatterns(e.target.value)} placeholder="v*, release-*" className="font-mono" />}
+      </Field>
+      <Field label={t('retention.protectedTags')} hint={t('retention.protectedTagsHint')} optional>
+        {ids => <Input {...ids} value={protectedTags} onChange={e => setProtectedTags(e.target.value)} placeholder="latest, stable" className="font-mono" />}
+      </Field>
+      {keep === 0 && days === 0 && <p className="text-xs text-muted-foreground">{t('retention.needOneRule')}</p>}
+    </FormDialog>
+  )
+}
+
+export default function RetentionSection() {
+  const { t } = useTranslation()
+  const policies = useRetentionPolicies()
+  const invalidate = useInvalidate()
+  const [creating, setCreating] = useState(false)
+  const [toDelete, setToDelete] = useState<RetentionPolicy | null>(null)
+  const [applying, setApplying] = useState(false)
+  const [outcome, setOutcome] = useState<{ plan: RetentionPlan; dryRun: boolean } | null>(null)
+
+  const preview = useMutation({
+    mutationFn: () => runRetention(true),
+    onSuccess: result => setOutcome({ plan: result.plan, dryRun: true }),
+    onError: err => toast.error(errorMessage(err, t('retention.runFailed'))),
+  })
+
+  async function apply() {
+    const result = await runRetention(false)
+    setOutcome({ plan: result.plan, dryRun: false })
+    setApplying(false)
+    toast.success(t('retention.applied', { count: result.deleted }))
+    await invalidate(keys.repositories, ['tags'])
+  }
+
+  const hasPolicies = (policies.data?.length ?? 0) > 0
+
+  return (
+    <Section
+      id="retention"
+      title={t('retention.title')}
+      description={t('retention.description')}
+      actions={
+        policies.isSuccess && (
+          <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
+            <Plus />
+            {t('retention.newPolicy')}
+          </Button>
+        )
+      }
+    >
+      <QueryPanel
+        query={policies}
+        unavailable={{ title: t('retention.unavailableTitle'), body: t('kit.proxyUnavailable') }}
+        isEmpty={data => data.length === 0}
+        empty={<EmptyState icon={CalendarClock} title={t('retention.emptyTitle')} description={t('retention.emptyBody')} />}
+      >
+        {data => (
+          <Panel>
+            <ul className="divide-y">
+              {data.map(policy => (
+                <li key={policy.id} className="flex items-center gap-3 px-4 py-2.5">
+                  <code className="shrink-0 text-xs font-medium">{policy.repo_pattern}</code>
+                  <span className="flex min-w-0 flex-1 flex-wrap gap-1.5">
+                    {rules(policy, t).map(rule => (
+                      <StatusBadge key={rule}>{rule}</StatusBadge>
+                    ))}
+                  </span>
+                  <RowAction label={t('retention.deletePolicy')} onClick={() => setToDelete(policy)} destructive>
+                    <Trash2 />
+                  </RowAction>
+                </li>
+              ))}
+            </ul>
+            {hasPolicies && (
+              <div className="flex flex-wrap gap-2 border-t px-4 py-3">
+                <Button variant="outline" size="sm" onClick={() => preview.mutate()} disabled={preview.isPending}>
+                  {preview.isPending ? <Spinner /> : <Eye />}
+                  {t('retention.preview')}
+                </Button>
+                <Button variant="secondary" size="sm" onClick={() => setApplying(true)}>
+                  <Play />
+                  {t('retention.applyNow')}
+                </Button>
+              </div>
+            )}
+            {outcome && <PlanTable plan={outcome.plan} dryRun={outcome.dryRun} />}
+          </Panel>
+        )}
+      </QueryPanel>
+
+      {creating && <CreatePolicyDialog onClose={() => setCreating(false)} />}
+
+      {applying && (
+        <ConfirmDialog
+          title={t('retention.applyTitle')}
+          description={t('retention.applyBody')}
+          confirmLabel={t('retention.applyNow')}
+          destructive
+          onConfirm={apply}
+          onCancel={() => setApplying(false)}
+        />
+      )}
+
+      {toDelete && (
+        <ConfirmDialog
+          title={t('retention.deletePolicy')}
+          description={t('retention.deletePolicyBody', { pattern: toDelete.repo_pattern })}
+          confirmLabel={t('common.delete')}
+          destructive
+          onConfirm={async () => {
+            await deleteRetentionPolicy(toDelete.id)
+            setToDelete(null)
+            await invalidate(keys.retention)
+          }}
+          onCancel={() => setToDelete(null)}
+        />
+      )}
+    </Section>
   )
 }

@@ -132,32 +132,81 @@ export function formatEventMessage(event: RegistryEvent): string {
   }
 }
 
+/** True when the access token is missing, unreadable or about to expire. */
+function accessTokenStale(): boolean {
+  const exp = tokenClaims()?.exp
+  return typeof exp !== 'number' || exp * 1000 - 30_000 < Date.now()
+}
+
 // Subscribes to the SSE feed of registry events. EventSource can't set an
-// Authorization header, so the token travels as a query param instead — the
-// browser reconnects automatically on drop, no manual retry logic needed
-// here.
-export function subscribeToEvents(onEvent: (event: RegistryEvent) => void): () => void {
-  const es = new EventSource(`${BASE}/events?token=${encodeURIComponent(token())}`)
-  es.onmessage = e => {
-    try {
-      onEvent(JSON.parse(e.data) as RegistryEvent)
-    } catch {
-      // ignore malformed payloads
+// Authorization header, so the token travels as a query param instead.
+//
+// Reconnection is handled here rather than left to the browser: EventSource
+// retries with the *same URL*, i.e. the same access token — which lives 15
+// minutes. Left alone, the first dropped connection after that (proxy idle
+// timeout, deploy) got a 401 and live updates silently stopped until a page
+// reload. On error we close, refresh the token if needed, and reopen with
+// exponential backoff. `onStatus` reports whether the feed is live.
+export function subscribeToEvents(
+  onEvent: (event: RegistryEvent) => void,
+  onStatus?: (connected: boolean) => void,
+): () => void {
+  let source: EventSource | null = null
+  let stopped = false
+  let attempt = 0
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  const open = () => {
+    if (stopped || !isAuthenticated()) return
+    source = new EventSource(`${BASE}/events?token=${encodeURIComponent(token())}`)
+    source.onopen = () => {
+      attempt = 0
+      onStatus?.(true)
+    }
+    source.onmessage = e => {
+      try {
+        onEvent(JSON.parse(e.data) as RegistryEvent)
+      } catch {
+        // ignore malformed payloads
+      }
+    }
+    source.onerror = () => {
+      source?.close()
+      onStatus?.(false)
+      if (stopped) return
+      const delay = Math.min(30_000, 1000 * 2 ** attempt++)
+      timer = setTimeout(async () => {
+        if (accessTokenStale()) await tryRefresh()
+        open()
+      }, delay)
     }
   }
-  return () => es.close()
+  open()
+
+  return () => {
+    stopped = true
+    clearTimeout(timer)
+    source?.close()
+  }
 }
 
 export function isAuthenticated(): boolean {
   return !!localStorage.getItem(TOKEN_KEY)
 }
 
-function tokenClaims(): { sub?: string; role?: string } | null {
+interface TokenClaims {
+  sub?: string
+  role?: string
+  repos?: string[] | null
+  exp?: number
+}
+
+function tokenClaims(): TokenClaims | null {
   const payload = token().split('.')[1]
   if (!payload) return null
   try {
     const json = atob(payload.replace(/-/g, '+').replace(/_/g, '/'))
-    return JSON.parse(json) as { sub?: string; role?: string }
+    return JSON.parse(json) as TokenClaims
   } catch {
     return null
   }
@@ -174,6 +223,11 @@ export function getRole(): string {
   return tokenClaims()?.role ?? 'reader'
 }
 
+/** Repository patterns the signed-in account is limited to (empty = all). */
+export function getRepoPatterns(): string[] {
+  return tokenClaims()?.repos ?? []
+}
+
 export async function login(username: string, password: string): Promise<void> {
   const res = await fetch(BASE + '/auth/login', {
     method: 'POST',
@@ -181,8 +235,9 @@ export async function login(username: string, password: string): Promise<void> {
     body: JSON.stringify({ username, password }),
   })
   if (!res.ok) {
-    const body = await res.json().catch(() => ({}))
-    throw new Error((body as { error?: string }).error ?? 'Login failed')
+    // Typed, so the login form can tell "wrong password" (401) from "too
+    // many attempts" (429) from "server unreachable" (5xx).
+    throw await parseError(res)
   }
   const data = (await res.json()) as { token: string; refresh_token?: string }
   localStorage.setItem(TOKEN_KEY, data.token)
@@ -312,6 +367,19 @@ export async function getLayerEntries(name: string, digest: string): Promise<{ d
   return req(`/repositories/layer?name=${encodeURIComponent(name)}&digest=${encodeURIComponent(digest)}`)
 }
 
+/** `host[:port]` clients use to reach this registry — what goes in front of
+ *  an image name in docker commands. */
+export function registryHost(): string {
+  return window.location.host
+}
+
+/** True when the page is served over plain HTTP from a non-loopback host:
+ *  docker will then refuse to talk to it unless it is declared insecure. */
+export function registryIsInsecure(): boolean {
+  const { protocol, hostname } = window.location
+  return protocol === 'http:' && !['localhost', '127.0.0.1', '[::1]'].includes(hostname)
+}
+
 export interface StorageStats {
   total_size_bytes: number
   total_size_human: string
@@ -341,10 +409,20 @@ export interface GCResult {
   /** Total blobs enumerated. 0 while repositories exist means the backend
    *  could not list storage (e.g. missing S3 ListBucket permission). */
   scanned_blobs?: number
+  /** Unreferenced blobs left alone because they were written within the
+   *  grace period (they may belong to a push that is still in flight). */
+  skipped_recent?: number
+  /** Unreferenced blobs the backend refused to delete. */
+  failed?: number
+  grace_period_seconds?: number
 }
 
-export async function runGC(dryRun = false): Promise<GCResult> {
-  return req(`/gc${dryRun ? '?dryRun=true' : ''}`, { method: 'POST' })
+export async function runGC(options: { dryRun?: boolean; force?: boolean } = {}): Promise<GCResult> {
+  const qs = new URLSearchParams()
+  if (options.dryRun) qs.set('dryRun', 'true')
+  if (options.force) qs.set('force', 'true')
+  const suffix = qs.toString()
+  return req(`/gc${suffix ? `?${suffix}` : ''}`, { method: 'POST' })
 }
 
 export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
@@ -418,8 +496,15 @@ export interface AuditEntry {
   details?: string
 }
 
-export async function getAudit(limit = 50): Promise<{ entries: AuditEntry[]; total: number }> {
-  return req(`/audit?limit=${limit}`)
+export async function getAudit(
+  params: { limit?: number; offset?: number; actor?: string; repo?: string } = {},
+): Promise<{ entries: AuditEntry[]; total: number }> {
+  const qs = new URLSearchParams()
+  qs.set('limit', String(params.limit ?? 50))
+  if (params.offset) qs.set('offset', String(params.offset))
+  if (params.actor) qs.set('actor', params.actor)
+  if (params.repo) qs.set('repo', params.repo)
+  return req(`/audit?${qs.toString()}`)
 }
 
 export interface RetentionPolicy {
@@ -525,6 +610,63 @@ export async function triggerScan(name: string, reference: string): Promise<{ sc
 
 export async function getScan(id: number): Promise<ScanResult> {
   return req(`/scans/${id}`)
+}
+
+export type Severity = 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW' | 'UNKNOWN'
+
+export interface Vulnerability {
+  id: string
+  pkg: string
+  installed: string
+  fixed: string
+  severity: Severity
+  title: string
+  url: string
+  target: string
+}
+
+interface TrivyReport {
+  Results?: {
+    Target?: string
+    Vulnerabilities?: {
+      VulnerabilityID?: string
+      PkgName?: string
+      InstalledVersion?: string
+      FixedVersion?: string
+      Severity?: string
+      Title?: string
+      PrimaryURL?: string
+    }[]
+  }[]
+}
+
+const SEVERITY_RANK: Record<Severity, number> = { CRITICAL: 0, HIGH: 1, MEDIUM: 2, LOW: 3, UNKNOWN: 4 }
+
+/** Flattens a raw Trivy JSON report into rows, most severe first. */
+export function parseTrivyReport(report: unknown): Vulnerability[] {
+  const rows: Vulnerability[] = []
+  for (const result of (report as TrivyReport)?.Results ?? []) {
+    for (const v of result.Vulnerabilities ?? []) {
+      const severity = (v.Severity ?? '').toUpperCase()
+      rows.push({
+        id: v.VulnerabilityID ?? '—',
+        pkg: v.PkgName ?? '—',
+        installed: v.InstalledVersion ?? '',
+        fixed: v.FixedVersion ?? '',
+        severity: severity in SEVERITY_RANK ? (severity as Severity) : 'UNKNOWN',
+        title: v.Title ?? '',
+        url: v.PrimaryURL ?? '',
+        target: result.Target ?? '',
+      })
+    }
+  }
+  return rows.sort(
+    (a, b) => SEVERITY_RANK[a.severity] - SEVERITY_RANK[b.severity] || a.pkg.localeCompare(b.pkg),
+  )
+}
+
+export async function getScanVulnerabilities(id: number): Promise<Vulnerability[]> {
+  return parseTrivyReport(await req<unknown>(`/scans/${id}/report`))
 }
 
 export interface SigningPolicy {
@@ -641,6 +783,15 @@ export interface HealthInfo {
   registry?: string
   version?: string
   mirror?: { hits: number; misses: number }
+  storage?: {
+    ok: boolean
+    latency_ms: number
+    error?: string
+    blobs?: number
+    bytes?: number
+    repositories?: number
+    free_bytes?: number
+  }
 }
 
 export async function getHealth(): Promise<HealthInfo> {

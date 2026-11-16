@@ -1,107 +1,100 @@
 import { useState } from 'react'
-import { TrendingUp } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { RepoSize, StatsSample } from '../api'
+import type { RepoSize, StatsSample } from '@/api'
+import { formatBytes, formatDateTime } from '@/lib/format'
+import { Link, repoHref } from '@/lib/router'
 import GrowthChart from './GrowthChart'
-import { formatBytes } from '@/lib/format'
+import { Panel, Section } from './kit'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
 interface Props {
   topRepos: RepoSize[]
   history: StatsSample[]
 }
 
-// InsightsSection shows the largest repositories and storage growth; hidden
-// for non-admins (403) and in proxy mode. Data is fetched once by the parent
-// (StorageTab) and shared with the "Storage used" sparkline.
+/** Where the space goes and how fast it grows. */
 export default function InsightsSection({ topRepos, history }: Props) {
   const { t } = useTranslation()
   const [showTable, setShowTable] = useState(false)
 
-  const maxSize = Math.max(1, ...topRepos.map(r => r.size_bytes))
-  // One point per day at most, most recent last.
-  const growth = history.slice(-14)
+  const maxSize = Math.max(1, ...topRepos.map(repo => repo.size_bytes))
+  const growth = history.slice(-28)
 
   return (
-    <div>
-      <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">
-        {t('insights.title')}
-      </h3>
-      <div className="grid gap-3 lg:grid-cols-2">
-        <Card className="p-4 rounded-xl gap-3">
-          <p className="text-sm font-medium">{t('insights.largestRepos')}</p>
+    <div className="grid gap-6 lg:grid-cols-2">
+      <Section title={t('insights.largest')} description={t('insights.largestBody')}>
+        <Panel className="p-4">
           {topRepos.length === 0 ? (
-            <p className="text-xs text-muted-foreground">{t('insights.noRepo')}</p>
+            <p className="py-6 text-center text-sm text-muted-foreground">{t('insights.noRepo')}</p>
           ) : (
-            <div className="space-y-2">
-              {topRepos.map(r => (
-                <div key={r.name} className="text-xs">
-                  <div className="flex justify-between mb-0.5">
-                    <span className="font-mono truncate">{r.name}</span>
-                    <span className="text-muted-foreground shrink-0 ml-2">
-                      {r.size_human} · {t('insights.tagCount', { count: r.tags })}
+            <ul className="space-y-3">
+              {topRepos.map(repo => (
+                <li key={repo.name} className="space-y-1 text-xs">
+                  <div className="flex items-baseline justify-between gap-3">
+                    <Link to={repoHref(repo.name)} className="min-w-0 truncate font-mono text-[13px] hover:underline">
+                      {repo.name}
+                    </Link>
+                    <span className="shrink-0 tabular-nums">
+                      {repo.size_human}
+                      <span className="text-muted-foreground"> · {t('insights.tagCount', { count: repo.tags })}</span>
                     </span>
                   </div>
-                  <div className="h-1.5 rounded-full bg-muted overflow-hidden">
+                  <div className="h-1.5 overflow-hidden rounded-full bg-muted">
                     <div
-                      className="h-full rounded-full bg-blue-500/70 dark:bg-blue-400/70"
-                      style={{ width: `${Math.max(2, (r.size_bytes / maxSize) * 100)}%` }}
+                      className="h-full rounded-full bg-primary/70"
+                      style={{ width: `${Math.max(2, (repo.size_bytes / maxSize) * 100)}%` }}
                     />
                   </div>
-                </div>
+                </li>
               ))}
-            </div>
+            </ul>
           )}
-        </Card>
+        </Panel>
+      </Section>
 
-        <Card className="p-4 rounded-xl gap-3">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <TrendingUp className="size-4 text-muted-foreground" strokeWidth={1.5} />
-              <p className="text-sm font-medium">{t('insights.growth')}</p>
-            </div>
-            {growth.length >= 2 && (
-              <Button variant="ghost" size="sm" className="text-xs text-muted-foreground -my-1" onClick={() => setShowTable(v => !v)}>
-                {showTable ? t('insights.viewAsChart') : t('insights.viewAsTable')}
-              </Button>
-            )}
-          </div>
-
+      <Section
+        title={t('insights.growth')}
+        description={t('insights.growthBody')}
+        actions={
+          growth.length >= 2 && (
+            <Button variant="ghost" size="sm" className="text-muted-foreground" onClick={() => setShowTable(v => !v)}>
+              {showTable ? t('insights.viewAsChart') : t('insights.viewAsTable')}
+            </Button>
+          )
+        }
+      >
+        <Panel className={showTable && growth.length >= 2 ? undefined : 'p-4'}>
           {growth.length < 2 ? (
-            <p className="text-xs text-muted-foreground">
-              {t('insights.notEnoughSamples')}
-            </p>
+            <p className="py-6 text-center text-sm text-muted-foreground text-pretty">{t('insights.notEnoughSamples')}</p>
           ) : showTable ? (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="text-left text-muted-foreground border-b">
-                    <th className="py-1.5 pr-3 font-medium">{t('insights.date')}</th>
-                    <th className="py-1.5 pr-3 font-medium">{t('insights.size')}</th>
-                    <th className="py-1.5 pr-3 font-medium">{t('insights.blobs')}</th>
-                    <th className="py-1.5 font-medium">{t('insights.repos')}</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {growth.map(s => (
-                    <tr key={s.at} className="border-b last:border-0">
-                      <td className="py-1.5 pr-3 whitespace-nowrap text-muted-foreground">
-                        {new Date(s.at).toLocaleString()}
-                      </td>
-                      <td className="py-1.5 pr-3">{formatBytes(s.total_size)}</td>
-                      <td className="py-1.5 pr-3">{s.blob_count}</td>
-                      <td className="py-1.5">{s.repo_count}</td>
-                    </tr>
+            <div className="max-h-72 overflow-y-auto">
+              <Table>
+                <TableHeader>
+                  <TableRow className="hover:bg-transparent">
+                    <TableHead className="px-4">{t('insights.date')}</TableHead>
+                    <TableHead className="text-right">{t('insights.size')}</TableHead>
+                    <TableHead className="text-right">{t('insights.blobs')}</TableHead>
+                    <TableHead className="px-4 text-right">{t('insights.repos')}</TableHead>
+                  </TableRow>
+                </TableHeader>
+                <TableBody>
+                  {[...growth].reverse().map(sample => (
+                    <TableRow key={sample.at}>
+                      <TableCell className="px-4 text-xs text-muted-foreground">{formatDateTime(sample.at)}</TableCell>
+                      <TableCell className="text-right">{formatBytes(sample.total_size)}</TableCell>
+                      <TableCell className="text-right">{sample.blob_count}</TableCell>
+                      <TableCell className="px-4 text-right">{sample.repo_count}</TableCell>
+                    </TableRow>
                   ))}
-                </tbody>
-              </table>
+                </TableBody>
+              </Table>
             </div>
           ) : (
             <GrowthChart samples={growth} />
           )}
-        </Card>
-      </div>
+        </Panel>
+      </Section>
     </div>
   )
 }

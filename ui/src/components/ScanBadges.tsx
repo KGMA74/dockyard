@@ -1,42 +1,55 @@
 import { useTranslation } from 'react-i18next'
-import { Badge } from '@/components/ui/badge'
-import type { ScanResult } from '../api'
+import type { ScanResult, Severity } from '@/api'
+import { StatusBadge, type Tone } from './kit'
 
-const STATUS_STYLE: Record<ScanResult['status'], string> = {
-  queued: 'text-muted-foreground',
-  running: 'text-blue-600 dark:text-blue-400 border-blue-500/30 bg-blue-500/10',
-  succeeded: 'text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
-  failed: 'text-destructive border-destructive/30 bg-destructive/10',
+const STATUS_TONE: Record<ScanResult['status'], Tone> = {
+  queued: 'neutral',
+  running: 'info',
+  succeeded: 'success',
+  failed: 'danger',
 }
 
 export function ScanStatusBadge({ status }: { status: ScanResult['status'] }) {
   const { t } = useTranslation()
+  return <StatusBadge tone={STATUS_TONE[status]}>{t(`scan.status.${status}`)}</StatusBadge>
+}
+
+export const SEVERITY_TONE: Record<Severity, Tone> = {
+  CRITICAL: 'danger',
+  HIGH: 'warning',
+  MEDIUM: 'info',
+  LOW: 'neutral',
+  UNKNOWN: 'neutral',
+}
+
+export function SeverityBadge({ severity, count }: { severity: Severity; count?: number }) {
+  const { t } = useTranslation()
   return (
-    <Badge variant="outline" className={`capitalize ${STATUS_STYLE[status]}`}>
-      {t(`scanBadges.status.${status}`)}
-    </Badge>
+    <StatusBadge tone={SEVERITY_TONE[severity]}>
+      {t(`scan.severity.${severity}`)}
+      {count !== undefined && <span className="tabular-nums">{count}</span>}
+    </StatusBadge>
   )
 }
 
-const SEVERITY_STYLE = {
-  critical: 'text-destructive border-destructive/30 bg-destructive/10',
-  high: 'text-orange-600 dark:text-orange-400 border-orange-500/30 bg-orange-500/10',
-  medium: 'text-amber-600 dark:text-amber-400 border-amber-500/30 bg-amber-500/10',
-  low: 'text-muted-foreground',
-} as const
-
-export function SeverityBadge({
-  count,
-  tone,
-}: {
-  count: number
-  tone: keyof typeof SEVERITY_STYLE
-}) {
+/** Severity counts of a finished scan; "No known vulnerabilities" when clean
+ *  (an empty row of badges reads as "not scanned"). */
+export function SeverityCounts({ scan }: { scan: ScanResult }) {
   const { t } = useTranslation()
-  if (count === 0) return null
+  const counts: [Severity, number][] = [
+    ['CRITICAL', scan.critical_count],
+    ['HIGH', scan.high_count],
+    ['MEDIUM', scan.medium_count],
+    ['LOW', scan.low_count],
+    ['UNKNOWN', scan.unknown_count],
+  ]
+  const present = counts.filter(([, count]) => count > 0)
+  if (present.length === 0) return <StatusBadge tone="success">{t('scan.clean')}</StatusBadge>
   return (
-    <Badge variant="outline" className={SEVERITY_STYLE[tone]}>
-      {t(`scanBadges.severity.${tone}`)} {count}
-    </Badge>
+    <span className="flex flex-wrap items-center gap-1.5">
+      {present.map(([severity, count]) => (
+        <SeverityBadge key={severity} severity={severity} count={count} />
+      ))}
+    </span>
   )
 }

@@ -1,192 +1,197 @@
-import { useCallback, useEffect, useState } from 'react'
-import { toast } from 'sonner'
-import { Gauge, Plus, RotateCcw, Trash2, X } from 'lucide-react'
+import { useState } from 'react'
+import { Gauge, Plus, RotateCcw, Trash2 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { toast } from 'sonner'
+import { deleteQuota, resetQuotaUsage, setQuota, type Quota, type QuotaScopeType } from '@/api'
+import { formatBytes } from '@/lib/format'
+import { keys, useInvalidate, useQuotas } from '@/lib/queries'
+import { cn } from '@/lib/utils'
 import {
-  deleteQuota, listQuotas, Quota, QuotaScopeType, QuotaUsage, resetQuotaUsage, setQuota,
-} from '../api'
-import { Badge } from '@/components/ui/badge'
+  ConfirmDialog,
+  EmptyState,
+  Field,
+  FormDialog,
+  NativeSelect,
+  Panel,
+  QueryPanel,
+  RowAction,
+  Section,
+  StatusBadge,
+} from './kit'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 
-function formatBytes(n: number): string {
-  const units = ['B', 'KB', 'MB', 'GB', 'TB']
-  let v = n
-  let i = 0
-  while (v >= 1024 && i < units.length - 1) {
-    v /= 1024
-    i++
-  }
-  return `${v.toFixed(v >= 10 || i === 0 ? 0 : 1)} ${units[i]}`
-}
+const GIB = 1024 ** 3
 
-// QuotasSection lives in the Settings tab (admin only). Quota enforcement
-// happens at blob-upload commit in embedded/mirror mode — proxy mode
-// doesn't own the storage writes, so quotas configured there are
-// informational only until pushes land through an embedded/mirror instance.
-export default function QuotasSection() {
-  const { t } = useTranslation()
-  const [quotas, setQuotas] = useState<Quota[] | null>(null)
-  const [usage, setUsage] = useState<QuotaUsage[]>([])
-  const [showCreate, setShowCreate] = useState(false)
-
-  const load = useCallback(() => {
-    listQuotas()
-      .then(r => {
-        setQuotas(r.quotas)
-        setUsage(r.usage)
-      })
-      .catch(() => setQuotas(null))
-  }, [])
-
-  useEffect(load, [load])
-
-  if (quotas === null) return null
-
-  function usageFor(scopeType: QuotaScopeType, scopeValue: string): number {
-    return usage.find(u => u.scope_type === scopeType && u.scope_value === scopeValue)?.bytes_used ?? 0
-  }
-
-  async function handleDelete(id: number) {
-    try {
-      await deleteQuota(id)
-      toast.success(t('quotas.deleted'))
-      load()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('quotas.deleteFailed'))
-    }
-  }
-
-  async function handleReset(scopeType: QuotaScopeType, scopeValue: string) {
-    try {
-      await resetQuotaUsage(scopeType, scopeValue)
-      toast.success(t('quotas.usageReset'))
-      load()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('quotas.resetFailed'))
-    }
-  }
-
+function UsageMeter({ used, max, warnPercent }: { used: number; max: number; warnPercent: number }) {
+  const percent = max > 0 ? Math.min(100, Math.round((used / max) * 100)) : 0
+  const tone = percent >= 100 ? 'bg-destructive' : percent >= warnPercent ? 'bg-warning' : 'bg-primary'
   return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest">
-          {t('quotas.title')}
-        </h2>
-        <Button variant="outline" size="sm" onClick={() => setShowCreate(v => !v)}>
-          {showCreate ? <X /> : <Plus />}
-          {showCreate ? t('common.cancel') : t('quotas.newQuota')}
-        </Button>
+    <div className="w-full min-w-32 space-y-1 sm:w-56">
+      <div className="flex justify-between text-xs tabular-nums">
+        <span>
+          {formatBytes(used)} <span className="text-muted-foreground">/ {formatBytes(max)}</span>
+        </span>
+        <span className={cn(percent >= warnPercent ? 'font-medium' : 'text-muted-foreground')}>{percent}%</span>
       </div>
-
-      {showCreate && (
-        <CreateQuotaForm
-          onCreated={() => {
-            setShowCreate(false)
-            load()
-          }}
-        />
-      )}
-
-      <Card className="p-4 rounded-xl gap-3">
-        <div className="flex items-center gap-3">
-          <div className="size-9 rounded-full bg-muted flex items-center justify-center shrink-0">
-            <Gauge className="size-4 text-muted-foreground" strokeWidth={1.5} />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {t('quotas.description')}
-          </p>
-        </div>
-
-        {quotas.length === 0 ? (
-          <p className="text-xs text-muted-foreground">{t('quotas.noQuota')}</p>
-        ) : (
-          <div className="space-y-2">
-            {quotas.map(q => {
-              const used = usageFor(q.scope_type, q.scope_value)
-              const pct = q.max_bytes > 0 ? Math.min(100, Math.round((used / q.max_bytes) * 100)) : 0
-              const over = pct >= q.warn_percent
-              return (
-                <div key={q.id} className="flex items-center gap-3 bg-muted/50 border rounded-lg px-3 py-2">
-                  <Badge variant="outline" className="shrink-0">{q.scope_type}</Badge>
-                  <span className="font-mono text-xs flex-1 truncate">{q.scope_value}</span>
-                  <span className="text-xs text-muted-foreground shrink-0">
-                    {formatBytes(used)} / {formatBytes(q.max_bytes)}
-                  </span>
-                  <Badge
-                    variant="outline"
-                    className={over ? 'text-amber-600 dark:text-amber-400 border-amber-500/30 bg-amber-500/10 shrink-0' : 'text-muted-foreground shrink-0'}
-                  >
-                    {pct}%
-                  </Badge>
-                  <Button variant="ghost" size="icon-sm" onClick={() => handleReset(q.scope_type, q.scope_value)} title={t('quotas.resetUsage')}>
-                    <RotateCcw className="size-4" />
-                  </Button>
-                  <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(q.id)} title={t('quotas.deleteQuota')}>
-                    <Trash2 className="size-4" />
-                  </Button>
-                </div>
-              )
-            })}
-          </div>
-        )}
-      </Card>
+      <div
+        role="meter"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={percent}
+        className="h-1.5 overflow-hidden rounded-full bg-muted"
+      >
+        <div className={cn('h-full rounded-full', tone)} style={{ width: `${Math.max(percent, used > 0 ? 2 : 0)}%` }} />
+      </div>
     </div>
   )
 }
 
-function CreateQuotaForm({ onCreated }: { onCreated: () => void }) {
+function QuotaDialog({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation()
+  const invalidate = useInvalidate()
   const [scopeType, setScopeType] = useState<QuotaScopeType>('repo')
   const [scopeValue, setScopeValue] = useState('')
-  const [maxGB, setMaxGB] = useState('10')
-  const [warnPercent, setWarnPercent] = useState('90')
-  const [busy, setBusy] = useState(false)
+  const [limitGB, setLimitGB] = useState('')
+  const [warnPercent, setWarnPercent] = useState('80')
 
-  async function submit(e: React.SubmitEvent) {
-    e.preventDefault()
-    if (!scopeValue.trim()) {
-      toast.error(t('quotas.scopeRequired'))
-      return
-    }
-    const maxBytes = Math.round(parseFloat(maxGB) * 1024 * 1024 * 1024)
-    if (!(maxBytes > 0)) {
-      toast.error(t('quotas.invalidLimit'))
-      return
-    }
-    setBusy(true)
-    try {
-      await setQuota(scopeType, scopeValue.trim(), maxBytes, parseInt(warnPercent, 10) || 90)
-      toast.success(t('quotas.saved'))
-      onCreated()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('quotas.saveFailed'))
-    } finally {
-      setBusy(false)
-    }
+  const limit = parseFloat(limitGB)
+  const warn = parseInt(warnPercent, 10)
+  const valid = scopeValue.trim() !== '' && limit > 0 && warn >= 1 && warn <= 100
+
+  async function submit() {
+    await setQuota(scopeType, scopeValue.trim(), Math.round(limit * GIB), warn)
+    toast.success(t('quotas.saved'))
+    await invalidate(keys.quotas)
+    onClose()
   }
 
-  const inputClass = 'w-full text-sm bg-transparent border rounded-md px-3 py-1.5'
   return (
-    <Card className="p-4 rounded-xl mb-3">
-      <form onSubmit={submit} className="grid gap-2 sm:grid-cols-4">
-        <select className={inputClass} value={scopeType} onChange={e => setScopeType(e.target.value as QuotaScopeType)}>
-          <option value="repo">{t('quotas.repository')}</option>
-          <option value="user">{t('quotas.user')}</option>
-        </select>
-        <input
-          className={inputClass}
-          placeholder={scopeType === 'repo' ? 'team/api' : 'alice'}
-          value={scopeValue}
-          onChange={e => setScopeValue(e.target.value)}
+    <FormDialog title={t('quotas.newQuota')} submitLabel={t('quotas.save')} onSubmit={submit} onClose={onClose} canSubmit={valid}>
+      <div className="grid gap-3 sm:grid-cols-[8rem_1fr]">
+        <Field label={t('quotas.appliesTo')}>
+          {ids => (
+            <NativeSelect {...ids} value={scopeType} onChange={e => setScopeType(e.target.value as QuotaScopeType)}>
+              <option value="repo">{t('quotas.scope_repo')}</option>
+              <option value="user">{t('quotas.scope_user')}</option>
+            </NativeSelect>
+          )}
+        </Field>
+        <Field label={scopeType === 'repo' ? t('quotas.repositoryName') : t('quotas.username')}>
+          {ids => (
+            <Input
+              {...ids}
+              value={scopeValue}
+              onChange={e => setScopeValue(e.target.value)}
+              placeholder={scopeType === 'repo' ? 'team/app' : 'alice'}
+              className="font-mono"
+              required
+            />
+          )}
+        </Field>
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label={t('quotas.limitGB')}>
+          {ids => (
+            <Input {...ids} type="number" min="0.01" step="0.01" inputMode="decimal" value={limitGB} onChange={e => setLimitGB(e.target.value)} placeholder="50" required />
+          )}
+        </Field>
+        <Field label={t('quotas.warnAt')} hint={t('quotas.warnAtHint')}>
+          {ids => (
+            <Input {...ids} type="number" min="1" max="100" inputMode="numeric" value={warnPercent} onChange={e => setWarnPercent(e.target.value)} required />
+          )}
+        </Field>
+      </div>
+    </FormDialog>
+  )
+}
+
+// Quotas are enforced when a blob upload completes, in embedded and mirror
+// modes. Usage counts bytes pushed — not deduplicated size on disk.
+export default function QuotasSection() {
+  const { t } = useTranslation()
+  const quotas = useQuotas()
+  const invalidate = useInvalidate()
+  const [creating, setCreating] = useState(false)
+  const [toDelete, setToDelete] = useState<Quota | null>(null)
+  const [toReset, setToReset] = useState<Quota | null>(null)
+
+  return (
+    <Section
+      id="quotas"
+      title={t('quotas.title')}
+      description={t('quotas.description')}
+      actions={
+        quotas.isSuccess && (
+          <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
+            <Plus />
+            {t('quotas.newQuota')}
+          </Button>
+        )
+      }
+    >
+      <QueryPanel
+        query={quotas}
+        unavailable={{ title: t('quotas.unavailableTitle') }}
+        isEmpty={data => data.quotas.length === 0}
+        empty={<EmptyState icon={Gauge} title={t('quotas.emptyTitle')} description={t('quotas.emptyBody')} />}
+      >
+        {data => (
+          <Panel>
+            <ul className="divide-y">
+              {data.quotas.map(quota => {
+                const used =
+                  data.usage.find(u => u.scope_type === quota.scope_type && u.scope_value === quota.scope_value)?.bytes_used ?? 0
+                return (
+                  <li key={quota.id} className="flex flex-wrap items-center gap-x-3 gap-y-2 px-4 py-2.5">
+                    <StatusBadge>{t(`quotas.scope_${quota.scope_type}`)}</StatusBadge>
+                    <code className="min-w-0 flex-1 truncate text-xs font-medium">{quota.scope_value}</code>
+                    <UsageMeter used={used} max={quota.max_bytes} warnPercent={quota.warn_percent} />
+                    <span className="flex">
+                      <RowAction label={t('quotas.resetUsage')} onClick={() => setToReset(quota)}>
+                        <RotateCcw />
+                      </RowAction>
+                      <RowAction label={t('quotas.deleteQuota')} onClick={() => setToDelete(quota)} destructive>
+                        <Trash2 />
+                      </RowAction>
+                    </span>
+                  </li>
+                )
+              })}
+            </ul>
+          </Panel>
+        )}
+      </QueryPanel>
+
+      {creating && <QuotaDialog onClose={() => setCreating(false)} />}
+
+      {toReset && (
+        <ConfirmDialog
+          title={t('quotas.resetUsage')}
+          description={t('quotas.resetBody', { scope: toReset.scope_value })}
+          confirmLabel={t('quotas.resetUsage')}
+          onConfirm={async () => {
+            await resetQuotaUsage(toReset.scope_type, toReset.scope_value)
+            setToReset(null)
+            await invalidate(keys.quotas)
+          }}
+          onCancel={() => setToReset(null)}
         />
-        <input className={inputClass} type="number" min="0.01" step="0.01" placeholder={t('quotas.limitGB')} value={maxGB} onChange={e => setMaxGB(e.target.value)} />
-        <input className={inputClass} type="number" min="1" max="100" placeholder={t('quotas.warnPercent')} value={warnPercent} onChange={e => setWarnPercent(e.target.value)} />
-        <Button type="submit" size="sm" disabled={busy} className="justify-self-start self-center sm:col-span-4">
-          <Plus />
-          {t('quotas.saveQuota')}
-        </Button>
-      </form>
-    </Card>
+      )}
+      {toDelete && (
+        <ConfirmDialog
+          title={t('quotas.deleteQuota')}
+          description={t('quotas.deleteBody', { scope: toDelete.scope_value })}
+          confirmLabel={t('common.delete')}
+          destructive
+          onConfirm={async () => {
+            await deleteQuota(toDelete.id)
+            setToDelete(null)
+            await invalidate(keys.quotas)
+          }}
+          onCancel={() => setToDelete(null)}
+        />
+      )}
+    </Section>
   )
 }

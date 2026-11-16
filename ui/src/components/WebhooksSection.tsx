@@ -1,156 +1,177 @@
-import { useCallback, useEffect, useState } from 'react'
-import { toast } from 'sonner'
-import { Plus, Send, Trash2, Webhook, X } from 'lucide-react'
+import { useState } from 'react'
+import { useMutation } from '@tanstack/react-query'
+import { Plus, Send, Trash2, Webhook } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { createWebhook, deleteWebhook, listWebhooks, testWebhook, WebhookInfo } from '../api'
-import { Badge } from '@/components/ui/badge'
+import { toast } from 'sonner'
+import { createWebhook, deleteWebhook, testWebhook, type RegistryEventType, type WebhookInfo } from '@/api'
+import { keys, useInvalidate, useWebhooks } from '@/lib/queries'
+import {
+  Checkbox,
+  ConfirmDialog,
+  EmptyState,
+  errorMessage,
+  Field,
+  FormDialog,
+  NativeSelect,
+  Panel,
+  QueryPanel,
+  RowAction,
+  Section,
+  Spinner,
+  StatusBadge,
+} from './kit'
 import { Button } from '@/components/ui/button'
-import { Card } from '@/components/ui/card'
+import { Input } from '@/components/ui/input'
 
-const EVENT_TYPES = ['push', 'delete', 'retention', 'gc', 'scan', 'import', 'quota_warning'] as const
+const EVENT_TYPES: RegistryEventType[] = ['push', 'delete', 'retention', 'gc', 'scan', 'import', 'quota_warning']
 
-// WebhooksSection lives in the Settings tab; hidden for non-admins (403).
-export default function WebhooksSection() {
+function WebhookDialog({ onClose }: { onClose: () => void }) {
   const { t } = useTranslation()
-  const [hooks, setHooks] = useState<WebhookInfo[] | null>(null)
-  const [showCreate, setShowCreate] = useState(false)
-
-  const load = useCallback(() => {
-    listWebhooks()
-      .then(r => setHooks(r.webhooks))
-      .catch(() => setHooks(null))
-  }, [])
-
-  useEffect(load, [load])
-
-  if (hooks === null) return null
-
-  async function handleDelete(id: number) {
-    try {
-      await deleteWebhook(id)
-      toast.success(t('webhooks.deleted'))
-      load()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('webhooks.deleteFailed'))
-    }
-  }
-
-  async function handleTest(id: number) {
-    try {
-      await testWebhook(id)
-      toast.success(t('webhooks.testDelivered'))
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('webhooks.testFailed'))
-    }
-  }
-
-  return (
-    <div>
-      <div className="flex items-center justify-between mb-3">
-        <h2 className="text-xs font-medium text-muted-foreground uppercase tracking-widest">
-          {t('webhooks.title')}
-        </h2>
-        <Button variant="outline" size="sm" onClick={() => setShowCreate(v => !v)}>
-          {showCreate ? <X /> : <Plus />}
-          {showCreate ? t('common.cancel') : t('webhooks.newWebhook')}
-        </Button>
-      </div>
-
-      {showCreate && (
-        <CreateWebhookForm
-          onCreated={() => {
-            setShowCreate(false)
-            load()
-          }}
-        />
-      )}
-
-      <Card className="p-4 rounded-xl gap-3">
-        <div className="flex items-center gap-3">
-          <div className="size-9 rounded-full bg-muted flex items-center justify-center shrink-0">
-            <Webhook className="size-4 text-muted-foreground" strokeWidth={1.5} />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {t('webhooks.descriptionPrefix')} <span className="font-mono">X-Dockyard-Signature</span> {t('webhooks.descriptionSuffix')}
-          </p>
-        </div>
-
-        {hooks.length === 0 ? (
-          <p className="text-xs text-muted-foreground">{t('webhooks.noWebhook')}</p>
-        ) : (
-          <div className="space-y-2">
-            {hooks.map(h => (
-              <div key={h.id} className="flex items-center gap-3 bg-muted/50 border rounded-lg px-3 py-2">
-                <span className="font-mono text-xs flex-1 truncate" title={h.url}>{h.url}</span>
-                <span className="text-xs text-muted-foreground shrink-0">{h.events.join(', ')}</span>
-                {h.format !== 'generic' && (
-                  <Badge variant="outline" className="text-muted-foreground capitalize">{h.format}</Badge>
-                )}
-                <Button variant="ghost" size="icon-sm" onClick={() => handleTest(h.id)} title={t('webhooks.sendTest')}>
-                  <Send className="size-4" />
-                </Button>
-                <Button variant="ghost" size="icon-sm" onClick={() => handleDelete(h.id)} title={t('webhooks.deleteWebhook')}>
-                  <Trash2 className="size-4" />
-                </Button>
-              </div>
-            ))}
-          </div>
-        )}
-      </Card>
-    </div>
-  )
-}
-
-function CreateWebhookForm({ onCreated }: { onCreated: () => void }) {
-  const { t } = useTranslation()
+  const invalidate = useInvalidate()
   const [url, setUrl] = useState('')
   const [secret, setSecret] = useState('')
   const [format, setFormat] = useState('generic')
-  const [selected, setSelected] = useState<string[]>(['push'])
-  const [busy, setBusy] = useState(false)
+  const [events, setEvents] = useState<string[]>(['push'])
 
-  function toggleEvent(ev: string) {
-    setSelected(cur => (cur.includes(ev) ? cur.filter(e => e !== ev) : [...cur, ev]))
+  function toggle(event: string) {
+    setEvents(current => (current.includes(event) ? current.filter(e => e !== event) : [...current, event]))
   }
 
-  async function submit(e: React.SubmitEvent) {
-    e.preventDefault()
-    setBusy(true)
-    try {
-      await createWebhook({ url, secret, events: selected, format })
-      toast.success(t('webhooks.created'))
-      onCreated()
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('webhooks.createFailed'))
-    } finally {
-      setBusy(false)
-    }
+  async function submit() {
+    await createWebhook({ url: url.trim(), secret, events, format })
+    toast.success(t('webhooks.created'))
+    await invalidate(keys.webhooks)
+    onClose()
   }
 
-  const inputClass = 'w-full text-sm bg-transparent border rounded-md px-3 py-1.5'
   return (
-    <Card className="p-4 rounded-xl mb-3">
-      <form onSubmit={submit} className="grid gap-2 sm:grid-cols-2">
-        <input className={inputClass} type="url" placeholder="https://hooks.example.com/…" value={url} onChange={e => setUrl(e.target.value)} required />
-        <input className={inputClass} placeholder={t('webhooks.secretPlaceholder')} value={secret} onChange={e => setSecret(e.target.value)} />
-        <select className={inputClass} value={format} onChange={e => setFormat(e.target.value)}>
-          <option value="generic">{t('webhooks.formatGeneric')}</option>
-          <option value="slack">Slack</option>
-          <option value="discord">Discord</option>
-        </select>
-        <div className="flex items-center gap-3 flex-wrap text-xs">
-          {EVENT_TYPES.map(ev => (
-            <label key={ev} className="flex items-center gap-1.5 cursor-pointer">
-              <input type="checkbox" checked={selected.includes(ev)} onChange={() => toggleEvent(ev)} />
-              {ev}
+    <FormDialog
+      title={t('webhooks.newWebhook')}
+      submitLabel={t('webhooks.create')}
+      onSubmit={submit}
+      onClose={onClose}
+      canSubmit={url.trim() !== '' && events.length > 0}
+      className="sm:max-w-lg"
+    >
+      <Field label={t('webhooks.url')}>
+        {ids => (
+          <Input {...ids} type="url" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://hooks.example.com/dockyard" className="font-mono" required />
+        )}
+      </Field>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <Field label={t('webhooks.format')}>
+          {ids => (
+            <NativeSelect {...ids} value={format} onChange={e => setFormat(e.target.value)}>
+              <option value="generic">{t('webhooks.formatGeneric')}</option>
+              <option value="slack">Slack</option>
+              <option value="discord">Discord</option>
+            </NativeSelect>
+          )}
+        </Field>
+        <Field label={t('webhooks.secret')} hint={t('webhooks.secretHint')} optional>
+          {ids => <Input {...ids} type="password" autoComplete="new-password" value={secret} onChange={e => setSecret(e.target.value)} />}
+        </Field>
+      </div>
+      <fieldset className="space-y-2">
+        <legend className="text-xs font-medium">{t('webhooks.events')}</legend>
+        <div className="grid grid-cols-2 gap-x-4 gap-y-1.5 sm:grid-cols-3">
+          {EVENT_TYPES.map(event => (
+            <label key={event} className="flex cursor-pointer items-center gap-2 text-sm">
+              <Checkbox checked={events.includes(event)} onChange={() => toggle(event)} />
+              {t(`eventTypes.${event}`)}
             </label>
           ))}
         </div>
-        <Button type="submit" size="sm" disabled={busy || selected.length === 0} className="justify-self-start">
-          <Plus />
-          {t('webhooks.createWebhook')}
-        </Button>
-      </form>
-    </Card>
+      </fieldset>
+    </FormDialog>
+  )
+}
+
+export default function WebhooksSection() {
+  const { t } = useTranslation()
+  const hooks = useWebhooks()
+  const invalidate = useInvalidate()
+  const [creating, setCreating] = useState(false)
+  const [toDelete, setToDelete] = useState<WebhookInfo | null>(null)
+
+  const test = useMutation({
+    mutationFn: (id: number) => testWebhook(id),
+    onSuccess: () => toast.success(t('webhooks.testDelivered')),
+    onError: err => toast.error(errorMessage(err, t('webhooks.testFailed'))),
+  })
+
+  return (
+    <Section
+      id="webhooks"
+      title={t('webhooks.title')}
+      description={
+        <>
+          {t('webhooks.descriptionPrefix')} <code className="text-foreground">X-Dockyard-Signature</code> {t('webhooks.descriptionSuffix')}
+        </>
+      }
+      actions={
+        hooks.isSuccess && (
+          <Button variant="outline" size="sm" onClick={() => setCreating(true)}>
+            <Plus />
+            {t('webhooks.newWebhook')}
+          </Button>
+        )
+      }
+    >
+      <QueryPanel
+        query={hooks}
+        unavailable={{ title: t('webhooks.unavailableTitle') }}
+        isEmpty={data => data.length === 0}
+        empty={<EmptyState icon={Webhook} title={t('webhooks.emptyTitle')} description={t('webhooks.emptyBody')} />}
+      >
+        {data => (
+          <Panel>
+            <ul className="divide-y">
+              {data.map(hook => (
+                <li key={hook.id} className="flex flex-wrap items-center gap-x-3 gap-y-1.5 px-4 py-2.5">
+                  <code className="min-w-0 flex-1 basis-64 truncate text-xs font-medium" title={hook.url}>
+                    {hook.url}
+                  </code>
+                  <span className="flex flex-wrap items-center gap-1.5">
+                    {hook.format !== 'generic' && <StatusBadge tone="info">{hook.format === 'slack' ? 'Slack' : 'Discord'}</StatusBadge>}
+                    {hook.events.map(event => (
+                      <StatusBadge key={event}>{t(`eventTypes.${event}`, event)}</StatusBadge>
+                    ))}
+                  </span>
+                  <span className="flex">
+                    <RowAction
+                      label={t('webhooks.sendTest')}
+                      onClick={() => test.mutate(hook.id)}
+                      disabled={test.isPending && test.variables === hook.id}
+                    >
+                      {test.isPending && test.variables === hook.id ? <Spinner /> : <Send />}
+                    </RowAction>
+                    <RowAction label={t('webhooks.deleteWebhook')} onClick={() => setToDelete(hook)} destructive>
+                      <Trash2 />
+                    </RowAction>
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </Panel>
+        )}
+      </QueryPanel>
+
+      {creating && <WebhookDialog onClose={() => setCreating(false)} />}
+      {toDelete && (
+        <ConfirmDialog
+          title={t('webhooks.deleteWebhook')}
+          description={t('webhooks.deleteBody', { url: toDelete.url })}
+          confirmLabel={t('common.delete')}
+          destructive
+          onConfirm={async () => {
+            await deleteWebhook(toDelete.id)
+            setToDelete(null)
+            await invalidate(keys.webhooks)
+          }}
+          onCancel={() => setToDelete(null)}
+        />
+      )}
+    </Section>
   )
 }
