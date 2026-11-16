@@ -1,6 +1,7 @@
 package server
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 	"time"
@@ -10,63 +11,67 @@ import (
 	"dockyard/internal/storage"
 )
 
-// gcable mirrors admin.gcBackend — keeps the scheduler self-contained.
-type gcable interface {
-	AllBlobs() ([]string, error)
-	BlobSize(digest string) (int64, error)
-	ReferencedBlobs() (map[string]struct{}, error)
-	RemoveBlob(digest string) error
-}
+// staleUploadAge is how long an upload session may sit untouched before the
+// nightly maintenance drops it. Generous on purpose: a slow push of a very
+// large layer keeps appending, which keeps its session fresh.
+const staleUploadAge = 24 * time.Hour
 
-// scheduleMaintenance runs retention then garbage collection every day at
-// midnight UTC — retention first, so the blobs it orphans are reclaimed in
-// the same pass. No-op if the backend does not implement GC (proxy mode).
-func scheduleMaintenance(backend storage.Backend, retention interface{ Run() }, hub *events.Hub) {
-	gc, ok := backend.(gcable)
-	if !ok {
+// scheduleMaintenance runs retention, garbage collection and the stale-upload
+// purge every day at midnight UTC — retention first, so the blobs it orphans
+// are candidates in the same pass (subject to the GC grace period). No-op if
+// the backend cannot be collected (proxy mode).
+func scheduleMaintenance(backend storage.Backend, retention interface{ Run() }, hub *events.Hub, gcGrace time.Duration) {
+	if _, ok := backend.(storage.GCBackend); !ok {
 		return
 	}
-	slog.Info("maintenance: retention + gc scheduled daily at midnight UTC")
+	slog.Info("maintenance: retention + gc scheduled daily at midnight UTC", "gc_grace_period", gcGrace.String())
 	go func() {
 		for {
 			time.Sleep(timeUntilMidnightUTC())
 			if retention != nil {
 				retention.Run()
 			}
-			runGC(gc, hub)
+			runGC(backend, hub, gcGrace)
+			purgeStaleUploads(backend)
 		}
 	}()
 }
 
-func runGC(gc gcable, hub *events.Hub) {
+func runGC(backend any, hub *events.Hub, grace time.Duration) {
 	slog.Info("gc: starting scheduled garbage collection")
 	start := time.Now()
-	referenced, err := gc.ReferencedBlobs()
+	res, err := storage.CollectGarbage(backend, storage.GCOptions{GracePeriod: grace})
 	if err != nil {
-		slog.Error("gc: cannot list referenced blobs", "err", err)
+		if !errors.Is(err, storage.ErrGCUnsupported) {
+			// Nothing was deleted: CollectGarbage aborts before the sweep.
+			slog.Error("gc: aborted, nothing removed", "err", err)
+		}
 		return
 	}
-	allBlobs, err := gc.AllBlobs()
-	if err != nil {
-		slog.Error("gc: cannot list blobs", "err", err)
-		return
-	}
-	var freed int64
-	var count int
-	for _, digest := range allBlobs {
-		if _, ok := referenced[digest]; ok {
-			continue
-		}
-		size, _ := gc.BlobSize(digest)
-		if err := gc.RemoveBlob(digest); err == nil {
-			freed += size
-			count++
-		}
-	}
-	metrics.ObserveGC(freed, time.Since(start))
-	slog.Info("gc: done", "removed", count, "freed", gcHumanSize(freed))
-	if hub != nil && count > 0 {
+	metrics.ObserveGC(res.FreedBytes, time.Since(start))
+	slog.Info("gc: done",
+		"removed", len(res.Removed),
+		"freed", gcHumanSize(res.FreedBytes),
+		"skipped_recent", res.SkippedRecent,
+		"failed", res.Failed,
+	)
+	if hub != nil && len(res.Removed) > 0 {
 		hub.Publish(events.Event{Type: "gc", Actor: "scheduler"})
+	}
+}
+
+func purgeStaleUploads(backend any) {
+	purger, ok := backend.(storage.UploadPurger)
+	if !ok {
+		return
+	}
+	removed, err := purger.PurgeStaleUploads(staleUploadAge)
+	if err != nil {
+		slog.Error("maintenance: stale upload purge failed", "err", err)
+		return
+	}
+	if removed > 0 {
+		slog.Info("maintenance: purged abandoned upload sessions", "count", removed)
 	}
 }
 

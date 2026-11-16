@@ -1,32 +1,25 @@
 package admin
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"io/fs"
 	"net/http"
 	"os"
 	"path/filepath"
-	"strings"
 	"time"
 
 	"dockyard/internal/auth"
 	"dockyard/internal/cosign"
 	"dockyard/internal/events"
 	"dockyard/internal/metrics"
+	"dockyard/internal/reference"
 	"dockyard/internal/storage"
 	"dockyard/internal/store"
 
 	"github.com/labstack/echo/v4"
 )
-
-// gcBackend: GC operations — implemented by both LocalBackend and S3Backend.
-type gcBackend interface {
-	AllBlobs() ([]string, error)
-	BlobSize(digest string) (int64, error)
-	ReferencedBlobs() (map[string]struct{}, error)
-	RemoveBlob(digest string) error
-}
 
 // treeBackend: local filesystem tree — LocalBackend only.
 type treeBackend interface {
@@ -35,18 +28,20 @@ type treeBackend interface {
 
 type Handler struct {
 	store     storage.Backend
-	gcStore   gcBackend   // non-nil for local and S3
 	treeStore treeBackend // non-nil for local only
 	signing   *cosign.Policy
-	db        *store.Store // SQLite — scan results, used by Search
-	hub       *events.Hub  // optional; manual GC publishes a "gc" event when set
+	db        *store.Store  // SQLite — scan results, used by Search
+	hub       *events.Hub   // optional; manual GC publishes a "gc" event when set
+	gcGrace   time.Duration // blobs younger than this survive GC (see storage.GCOptions)
 }
 
 func New(backend storage.Backend, signing *cosign.Policy, db *store.Store) *Handler {
-	gc, _ := backend.(gcBackend)
 	tree, _ := backend.(treeBackend)
-	return &Handler{store: backend, gcStore: gc, treeStore: tree, signing: signing, db: db}
+	return &Handler{store: backend, treeStore: tree, signing: signing, db: db}
 }
+
+// SetGCGracePeriod protects recently written blobs from manual GC runs.
+func (h *Handler) SetGCGracePeriod(d time.Duration) { h.gcGrace = d }
 
 // SetHub makes manual GC (POST /gc) publish a "gc" event on completion (SSE + webhooks).
 func (h *Handler) SetHub(hub *events.Hub) { h.hub = hub }
@@ -65,6 +60,9 @@ func (h *Handler) GetRepositories(c echo.Context) error {
 	}
 	result := make([]repoInfo, 0, len(repos))
 	for _, name := range repos {
+		if !auth.CanAccessRepo(c, name) {
+			continue
+		}
 		tags, _ := h.store.ListTags(name)
 		var lastPushed time.Time
 		for _, tag := range tags {
@@ -114,11 +112,11 @@ func (h *Handler) GetTags(c echo.Context) error {
 // GET /api/admin/repositories/manifest?name=<image>&reference=<tag-or-digest>
 func (h *Handler) GetManifestDetails(c echo.Context) error {
 	name := c.QueryParam("name")
-	reference := c.QueryParam("reference")
-	if name == "" || reference == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "params 'name' and 'reference' required"})
+	ref := c.QueryParam("reference")
+	if !reference.ValidReference(ref) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "param 'reference' must be a tag or a sha256 digest"})
 	}
-	result, err := h.manifestDetails(name, reference)
+	result, err := h.manifestDetails(name, ref)
 	if err != nil {
 		return c.JSON(http.StatusNotFound, err500(err))
 	}
@@ -128,8 +126,8 @@ func (h *Handler) GetManifestDetails(c echo.Context) error {
 // manifestDetails resolves reference and parses its manifest, tagging the
 // result with signed status when cosign keys are configured. Shared by
 // GetManifestDetails and GetTagDiff.
-func (h *Handler) manifestDetails(name, reference string) (map[string]any, error) {
-	raw, digest, err := h.store.GetManifest(name, reference)
+func (h *Handler) manifestDetails(name, ref string) (map[string]any, error) {
+	raw, digest, err := h.store.GetManifest(name, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -158,8 +156,8 @@ func (h *Handler) GetTagDiff(c echo.Context) error {
 	name := c.QueryParam("name")
 	refA := c.QueryParam("reference_a")
 	refB := c.QueryParam("reference_b")
-	if name == "" || refA == "" || refB == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "params 'name', 'reference_a' and 'reference_b' required"})
+	if !reference.ValidReference(refA) || !reference.ValidReference(refB) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "params 'reference_a' and 'reference_b' must be tags or sha256 digests"})
 	}
 	a, err := h.manifestDetails(name, refA)
 	if err != nil {
@@ -174,10 +172,9 @@ func (h *Handler) GetTagDiff(c echo.Context) error {
 
 // GET /api/admin/repositories/layer?name=<image>&digest=sha256:<layer-digest>
 func (h *Handler) GetLayerEntries(c echo.Context) error {
-	name := c.QueryParam("name")
 	digest := c.QueryParam("digest")
-	if name == "" || digest == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "params 'name' and 'digest' required"})
+	if !reference.ValidDigest(digest) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "param 'digest' must be sha256:<64 hex chars>"})
 	}
 	if entries, ok := layerEntriesCache.Get(digest); ok {
 		return c.JSON(http.StatusOK, map[string]any{"digest": digest, "entries": entries, "count": len(entries)})
@@ -199,11 +196,8 @@ func (h *Handler) GetLayerEntries(c echo.Context) error {
 func (h *Handler) DeleteManifest(c echo.Context) error {
 	name := c.QueryParam("name")
 	digest := c.QueryParam("digest")
-	if name == "" || digest == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "params 'name' and 'digest' required"})
-	}
-	if !strings.HasPrefix(digest, "sha256:") {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "digest must start with sha256:"})
+	if !reference.ValidDigest(digest) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "param 'digest' must be sha256:<64 hex chars>"})
 	}
 	if err := h.store.DeleteManifest(name, digest); err != nil {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": err.Error()})
@@ -242,42 +236,32 @@ func (h *Handler) StorageStats(c echo.Context) error {
 }
 
 // POST /api/admin/gc — removes blobs not referenced by any manifest.
-// With ?dryRun=true, only reports what would be removed (mark phase, no sweep).
+//
+//	?dryRun=true  report what would be removed, remove nothing
+//	?force=true   ignore the grace period that protects recently pushed blobs
+//	              (only safe when no push is in flight)
 func (h *Handler) GarbageCollect(c echo.Context) error {
-	if h.gcStore == nil {
+	dryRun := c.QueryParam("dryRun") == "true"
+	grace := h.gcGrace
+	if c.QueryParam("force") == "true" {
+		grace = 0
+	}
+	start := time.Now()
+	res, err := storage.CollectGarbage(h.store, storage.GCOptions{DryRun: dryRun, GracePeriod: grace})
+	if errors.Is(err, storage.ErrGCUnsupported) {
 		return c.JSON(http.StatusNotImplemented, map[string]string{
 			"error": "garbage collection is only available in embedded mode (local and s3 backends), not in proxy mode",
 		})
 	}
-	dryRun := c.QueryParam("dryRun") == "true"
-	start := time.Now()
-	referenced, err := h.gcStore.ReferencedBlobs()
 	if err != nil {
-		return c.JSON(http.StatusInternalServerError, err500(err))
-	}
-	allBlobs, err := h.gcStore.AllBlobs()
-	if err != nil {
-		return c.JSON(http.StatusInternalServerError, err500(err))
-	}
-	var freed int64
-	var removed []string
-	for _, digest := range allBlobs {
-		if _, ok := referenced[digest]; ok {
-			continue
-		}
-		size, _ := h.gcStore.BlobSize(digest)
-		if dryRun {
-			freed += size
-			removed = append(removed, digest)
-			continue
-		}
-		if err := h.gcStore.RemoveBlob(digest); err == nil {
-			freed += size
-			removed = append(removed, digest)
-		}
+		// CollectGarbage aborts before deleting anything when it cannot read
+		// every manifest — say so, it is the reassuring half of the message.
+		return c.JSON(http.StatusInternalServerError, map[string]string{
+			"error": "garbage collection aborted, nothing was removed: " + err.Error(),
+		})
 	}
 	if !dryRun {
-		metrics.ObserveGC(freed, time.Since(start))
+		metrics.ObserveGC(res.FreedBytes, time.Since(start))
 		if h.hub != nil {
 			actor := ""
 			if p, ok := auth.CurrentPrincipal(c); ok {
@@ -287,12 +271,15 @@ func (h *Handler) GarbageCollect(c echo.Context) error {
 		}
 	}
 	return c.JSON(http.StatusOK, map[string]any{
-		"removed":       removed,
-		"count":         len(removed),
-		"freed_bytes":   freed,
-		"freed_human":   humanSize(freed),
-		"dry_run":       dryRun,
-		"scanned_blobs": len(allBlobs),
+		"removed":              res.Removed,
+		"count":                len(res.Removed),
+		"freed_bytes":          res.FreedBytes,
+		"freed_human":          humanSize(res.FreedBytes),
+		"dry_run":              dryRun,
+		"scanned_blobs":        res.ScannedBlobs,
+		"skipped_recent":       res.SkippedRecent,
+		"failed":               res.Failed,
+		"grace_period_seconds": int(grace.Seconds()),
 	})
 }
 

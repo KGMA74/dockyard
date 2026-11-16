@@ -3,12 +3,13 @@
 package audit
 
 import (
+	"net"
 	"net/http"
-	"regexp"
 	"strconv"
 	"strings"
 
 	"dockyard/internal/auth"
+	"dockyard/internal/reference"
 	"dockyard/internal/store"
 
 	"github.com/labstack/echo/v4"
@@ -16,9 +17,20 @@ import (
 
 type Recorder struct {
 	store *store.Store
+	// ipOf resolves the client address of a plain net/http request (the V2
+	// engine is not echo-based). Defaults to the socket address.
+	ipOf func(*http.Request) string
 }
 
-func New(st *store.Store) *Recorder { return &Recorder{store: st} }
+func New(st *store.Store) *Recorder { return &Recorder{store: st, ipOf: remoteIP} }
+
+// SetIPExtractor makes V2 audit entries use the same trusted-proxy-aware
+// client IP as the rest of the server (see server.clientIPExtractor).
+func (r *Recorder) SetIPExtractor(fn func(*http.Request) string) {
+	if fn != nil {
+		r.ipOf = fn
+	}
+}
 
 // Record satisfies auth.AuditSink. Failures are deliberately swallowed: audit
 // must never break the operation being audited.
@@ -63,16 +75,14 @@ func (r *Recorder) AdminMiddleware() echo.MiddlewareFunc {
 	}
 }
 
-var reAuditManifest = regexp.MustCompile(`^/v2/(.+)/manifests/([^/]+)$`)
-
 // V2Wrapper audits manifest pushes and deletions on the V2 protocol. Blob
 // uploads are deliberately skipped (several requests per layer — pure noise);
 // the manifest PUT that concludes a push is the meaningful event.
 func (r *Recorder) V2Wrapper() func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
-			m := reAuditManifest.FindStringSubmatch(req.URL.Path)
-			if m == nil || (req.Method != http.MethodPut && req.Method != http.MethodDelete) {
+			route := reference.ParseV2Path(req.URL.Path)
+			if route.Route != reference.RouteManifest || (req.Method != http.MethodPut && req.Method != http.MethodDelete) {
 				next.ServeHTTP(w, req)
 				return
 			}
@@ -87,12 +97,12 @@ func (r *Recorder) V2Wrapper() func(http.Handler) http.Handler {
 			if req.Method == http.MethodDelete {
 				action = "delete-manifest"
 			}
-			repo, ref := m[1], m[2]
+			repo, ref := route.Name, route.Ref
 			tag := ref
-			if strings.HasPrefix(ref, "sha256:") {
+			if reference.IsDigest(ref) {
 				tag = ""
 			}
-			r.Record(actor, action, repo, tag, clientIP(req), strconv.Itoa(sw.status), ref)
+			r.Record(actor, action, repo, tag, r.ipOf(req), strconv.Itoa(sw.status), ref)
 		})
 	}
 }
@@ -121,16 +131,14 @@ func (w *statusWriter) WriteHeader(code int) {
 	w.ResponseWriter.WriteHeader(code)
 }
 
-func clientIP(r *http.Request) string {
-	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
-		if i := strings.IndexByte(xff, ','); i > 0 {
-			return strings.TrimSpace(xff[:i])
-		}
-		return xff
-	}
-	host := r.RemoteAddr
-	if i := strings.LastIndexByte(host, ':'); i > 0 {
-		host = host[:i]
+// remoteIP is the socket peer address. X-Forwarded-For is deliberately not
+// consulted here: it is client-controlled, so an audit trail built on it can
+// be made to name any address. Trusted-proxy handling is injected through
+// SetIPExtractor.
+func remoteIP(r *http.Request) string {
+	host, _, err := net.SplitHostPort(r.RemoteAddr)
+	if err != nil {
+		return r.RemoteAddr
 	}
 	return host
 }

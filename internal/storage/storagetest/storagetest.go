@@ -430,4 +430,101 @@ func RunBackendContract(t *testing.T, newBackend func(t *testing.T) storage.Back
 			}
 		}
 	})
+
+	// A blob is shared by every image that references its digest. An upload
+	// that claims an existing digest but carries other bytes (corrupted
+	// client, interrupted transfer, or a malicious pusher) must fail without
+	// touching the blob already stored.
+	t.Run("BadReuploadKeepsExistingBlob", func(t *testing.T) {
+		b := newBackend(t)
+		content := []byte("layer shared by many images")
+		dgst := Digest(content)
+		if err := b.PutBlob(dgst, bytes.NewReader(content), int64(len(content))); err != nil {
+			t.Fatalf("PutBlob: %v", err)
+		}
+
+		assertIntact := func(step string) {
+			t.Helper()
+			rc, _, err := b.GetBlob(dgst)
+			if err != nil {
+				t.Fatalf("%s: existing blob is gone: %v", step, err)
+			}
+			got, _ := io.ReadAll(rc)
+			_ = rc.Close()
+			if !bytes.Equal(got, content) {
+				t.Fatalf("%s: existing blob was altered: %q", step, got)
+			}
+		}
+
+		bogus := []byte("not the same bytes")
+		if err := b.PutBlob(dgst, bytes.NewReader(bogus), int64(len(bogus))); err == nil {
+			t.Fatal("PutBlob with mismatching content succeeded")
+		}
+		assertIntact("after bad monolithic upload")
+
+		const id = "baduploadsession"
+		if err := b.InitUpload(id); err != nil {
+			t.Fatalf("InitUpload: %v", err)
+		}
+		if err := b.AppendUpload(id, bytes.NewReader(bogus)); err != nil {
+			t.Fatalf("AppendUpload: %v", err)
+		}
+		if err := b.CommitUpload(id, dgst); err == nil {
+			t.Fatal("CommitUpload with mismatching content succeeded")
+		}
+		assertIntact("after bad chunked upload")
+
+		// Re-uploading the right bytes is a no-op that still succeeds.
+		if err := b.PutBlob(dgst, bytes.NewReader(content), int64(len(content))); err != nil {
+			t.Fatalf("idempotent PutBlob: %v", err)
+		}
+		assertIntact("after idempotent re-upload")
+	})
+
+	// Names, tags, digests and upload ids become paths / object keys. None of
+	// them may carry a traversal sequence into the backend.
+	t.Run("RejectsUnsafeIdentifiers", func(t *testing.T) {
+		b := newBackend(t)
+		manifest := ManifestFor(Digest([]byte("cfg")), Digest([]byte("layer")))
+		dgst := Digest(manifest)
+
+		for _, name := range []string{"..", "../escape", "team-a/../team-b", "/abs", "a//b", `a\b`, ""} {
+			if err := b.PutManifest(name, "latest", dgst, manifest); err == nil {
+				t.Errorf("PutManifest accepted repository name %q", name)
+			}
+			if _, _, err := b.GetManifest(name, "latest"); err == nil {
+				t.Errorf("GetManifest accepted repository name %q", name)
+			}
+			if err := b.DeleteRepository(name); err == nil {
+				t.Errorf("DeleteRepository accepted repository name %q", name)
+			}
+		}
+		for _, ref := range []string{"..", "../x", "a/b", `a\b`, "sha256:../../x", "sha256:abc", ""} {
+			if err := b.PutManifest("safe/repo", ref, dgst, manifest); err == nil {
+				t.Errorf("PutManifest accepted reference %q", ref)
+			}
+			if err := b.DeleteManifest("safe/repo", ref); err == nil {
+				t.Errorf("DeleteManifest accepted reference %q", ref)
+			}
+		}
+		for _, digest := range []string{"sha256:a", "sha256:../../../etc/passwd", "../../x", ""} {
+			if err := b.PutBlob(digest, strings.NewReader("x"), 1); err == nil {
+				t.Errorf("PutBlob accepted digest %q", digest)
+			}
+			if _, _, err := b.GetBlob(digest); err == nil {
+				t.Errorf("GetBlob accepted digest %q", digest)
+			}
+			if ok, _ := b.BlobExists(digest); ok {
+				t.Errorf("BlobExists(%q) = true", digest)
+			}
+		}
+		for _, id := range []string{"..", "../x", "a/b", `a\b`, ""} {
+			if err := b.InitUpload(id); err == nil {
+				t.Errorf("InitUpload accepted id %q", id)
+			}
+			if err := b.DeleteUpload(id); err == nil {
+				t.Errorf("DeleteUpload accepted id %q", id)
+			}
+		}
+	})
 }

@@ -3,8 +3,10 @@ package admin
 import (
 	"errors"
 	"net/http"
+	"strings"
 
 	"dockyard/internal/auth"
+	"dockyard/internal/reference"
 	"dockyard/internal/store"
 
 	"github.com/labstack/echo/v4"
@@ -40,8 +42,14 @@ func (h *UsersHandler) Create(c echo.Context) error {
 	if err := c.Bind(&body); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
 	}
-	if body.Username == "" || !store.ValidRole(body.Role) {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "username and a valid role (admin, pusher, reader) are required"})
+	if !store.ValidRole(body.Role) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "a valid role (admin, pusher, reader) is required"})
+	}
+	if msg := usernameProblem(body.Username); msg != "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": msg})
+	}
+	if msg := patternsProblem(body.RepoPatterns); msg != "" {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": msg})
 	}
 	if len(body.Password) < 8 {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "password must be at least 8 characters"})
@@ -69,6 +77,9 @@ func (h *UsersHandler) Update(c echo.Context) error {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
 	}
 	if body.Role != nil {
+		if msg := patternsProblem(body.RepoPatterns); msg != "" {
+			return c.JSON(http.StatusBadRequest, map[string]string{"error": msg})
+		}
 		if err := h.store.UpdateUserAccess(username, *body.Role, body.RepoPatterns); err != nil {
 			return userError(c, err)
 		}
@@ -83,6 +94,13 @@ func (h *UsersHandler) Update(c echo.Context) error {
 		}
 		if err := h.store.UpdateUserPassword(username, string(hash)); err != nil {
 			return userError(c, err)
+		}
+		// An admin resetting a password is locking someone out: end the
+		// account's sessions (unless the admin is resetting their own).
+		if target, err := h.store.GetUser(username); err == nil {
+			if p, ok := auth.CurrentPrincipal(c); !ok || p.Username != username {
+				_ = h.store.DeleteUserSessions(target.ID)
+			}
 		}
 	}
 	u, err := h.store.GetUser(username)
@@ -103,6 +121,40 @@ func (h *UsersHandler) Delete(c echo.Context) error {
 		return userError(c, err)
 	}
 	return c.JSON(http.StatusOK, map[string]string{"message": "user deleted"})
+}
+
+// usernameProblem returns why a username is unacceptable, or "".
+func usernameProblem(username string) string {
+	if username == "" {
+		return "username is required"
+	}
+	if len(username) > 64 {
+		return "username must be at most 64 characters"
+	}
+	for _, r := range username {
+		ok := r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || r >= '0' && r <= '9' ||
+			r == '.' || r == '_' || r == '-' || r == '@'
+		if !ok {
+			return "username may only contain letters, digits and . _ - @"
+		}
+	}
+	// "anonymous" is the subject of anonymous-pull registry tokens.
+	if strings.EqualFold(username, "anonymous") {
+		return "\"anonymous\" is a reserved username"
+	}
+	return ""
+}
+
+// patternsProblem rejects repository patterns that can never match a valid
+// repository name (and would silently lock the account out of everything).
+func patternsProblem(patterns []string) string {
+	for _, p := range patterns {
+		probe := strings.ReplaceAll(p, "*", "x")
+		if p == "" || !reference.ValidName(probe) {
+			return "invalid repository pattern \"" + p + "\" — use repository names with * as wildcard, e.g. team-a/*"
+		}
+	}
+	return ""
 }
 
 func userError(c echo.Context, err error) error {

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"dockyard/internal/reference"
 	"dockyard/internal/store"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -122,9 +123,15 @@ func (m *Manager) cleanupLoop() {
 	}
 }
 
+// dummyHash is compared against when the username does not exist, so a
+// failed login costs one bcrypt either way. Without it, unknown usernames
+// answered ~1000x faster than known ones — a free account-enumeration oracle.
+var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("dockyard-timing-equalizer"), bcrypt.DefaultCost)
+
 func (m *Manager) verify(username, password string) (*store.User, bool) {
 	u, err := m.users.GetUser(username)
 	if err != nil {
+		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
 		return nil, false
 	}
 	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) != nil {
@@ -195,20 +202,33 @@ func (m *Manager) validate(raw string) (Principal, error) {
 	}
 	p := Principal{}
 	p.Username, _ = claims["sub"].(string)
-	p.Role, _ = claims["role"].(string)
-	if p.Role == "" {
-		// Token issued before the RBAC migration — the only account then was
-		// the admin, keep it working until it expires.
-		p.Role = store.RoleAdmin
-	}
 	if sid, ok := claims["sid"].(string); ok {
 		p.SessionID, _ = strconv.ParseInt(sid, 10, 64)
 	}
-	if rawRepos, ok := claims["repos"].([]any); ok {
-		for _, r := range rawRepos {
-			if s, ok := r.(string); ok {
-				p.RepoPatterns = append(p.RepoPatterns, s)
-			}
+
+	// Anonymous-pull registry tokens are not backed by an account: they are
+	// always a plain reader, whatever a same-named account might be.
+	if p.Username == anonymousUser {
+		p.Role = store.RoleReader
+		return p, nil
+	}
+
+	// The token proves *who* is calling; *what they may do* is read from the
+	// database on every request. Trusting the role/repos claims instead meant
+	// a demoted or deleted account kept its old rights until the token
+	// expired (up to 15 minutes on the admin API).
+	u, err := m.users.GetUser(p.Username)
+	if err != nil {
+		return Principal{}, errors.New("account no longer exists")
+	}
+	p.Role = u.Role
+	p.RepoPatterns = u.RepoPatterns
+
+	// Same reasoning for sessions: revoking one must cut access now, not when
+	// the access token happens to expire. Registry tokens carry no session.
+	if p.SessionID != 0 {
+		if alive, err := m.users.SessionExists(p.SessionID); err == nil && !alive {
+			return Principal{}, errors.New("session has been revoked")
 		}
 	}
 	return p, nil
@@ -269,6 +289,41 @@ func wildcardMatch(pattern, s string) bool {
 	}
 	return strings.HasSuffix(s, parts[len(parts)-1])
 }
+
+// CanAccessRepo reports whether the request's principal may read repo. Admin
+// API handlers use it to apply the same repository patterns the V2 protocol
+// enforces — the UI must not show a restricted account what docker pull
+// would refuse it.
+func CanAccessRepo(c echo.Context, repo string) bool {
+	p, ok := CurrentPrincipal(c)
+	return ok && Authorize(p, ActionPull, repo)
+}
+
+// RequireRepoAccess guards admin routes that address one repository through a
+// query parameter: the name must be well-formed and within the principal's
+// repository patterns.
+func RequireRepoAccess(param string) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			name := c.QueryParam(param)
+			if name == "" {
+				return c.JSON(http.StatusBadRequest, map[string]string{"error": "query param '" + param + "' required"})
+			}
+			if !reference.ValidName(name) {
+				return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid repository name"})
+			}
+			if !CanAccessRepo(c, name) {
+				return c.JSON(http.StatusForbidden, map[string]string{"error": "access to this repository is not allowed for your account"})
+			}
+			return next(c)
+		}
+	}
+}
+
+// SetPrincipal installs p as the request's authenticated identity. The auth
+// middlewares call it; it is exported so handler tests in other packages can
+// build an authenticated context without minting a JWT.
+func SetPrincipal(c echo.Context, p Principal) { c.Set(principalKey, p) }
 
 // CurrentPrincipal returns the Principal set by Middleware, if any.
 func CurrentPrincipal(c echo.Context) (Principal, bool) {
@@ -444,8 +499,12 @@ func (m *Manager) ChangePassword(c echo.Context) error {
 	if err := c.Bind(&body); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
 	}
-	if _, ok := m.verify(p.Username, body.CurrentPassword); !ok {
-		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "wrong current password"})
+	u, ok := m.verify(p.Username, body.CurrentPassword)
+	if !ok {
+		// 403, not 401: the caller *is* authenticated. A 401 here made the UI
+		// treat a mistyped current password as an expired session and log out.
+		m.auditRecord(p.Username, "change-password", c.RealIP(), "failure", "wrong current password")
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "wrong current password"})
 	}
 	if len(body.NewPassword) < 8 {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "password must be at least 8 characters"})
@@ -457,6 +516,9 @@ func (m *Manager) ChangePassword(c echo.Context) error {
 	if err := m.users.UpdateUserPassword(p.Username, string(hash)); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to update password"})
 	}
+	// A password change is how a user evicts someone who got hold of the old
+	// one: every other session of the account dies with it.
+	_ = m.users.DeleteUserSessionsExcept(u.ID, p.SessionID)
 	m.auditRecord(p.Username, "change-password", c.RealIP(), "success", "")
 	return c.JSON(http.StatusOK, map[string]string{"message": "password updated"})
 }

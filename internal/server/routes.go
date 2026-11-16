@@ -34,6 +34,14 @@ import (
 func (s *Server) RegisterRoutes() http.Handler {
 	e := echo.New()
 	e.HideBanner = true
+
+	// Client IP resolution for rate limiting and the audit log — see
+	// clientIPExtractor for why X-Forwarded-For is not believed blindly.
+	ipExtractor, err := clientIPExtractor(s.trustedProxies)
+	if err != nil {
+		panic(err.Error())
+	}
+	e.IPExtractor = ipExtractor
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
 		LogMethod:  true,
 		LogURI:     true,
@@ -43,7 +51,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
 			attrs := []any{
 				"method", v.Method,
-				"uri", v.URI,
+				"uri", redactURI(v.URI),
 				"status", v.Status,
 				"duration_ms", v.Latency / time.Millisecond,
 			}
@@ -161,6 +169,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 	// Audit sits inside the auth wrapper so it sees the authenticated actor;
 	// with auth disabled every V2 actor is recorded as "anonymous".
 	auditor := audit.New(s.store)
+	auditor.SetIPExtractor(ipExtractor)
 	s.auth.SetAuditSink(auditor)
 	v2h = auditor.V2Wrapper()(v2h)
 
@@ -188,6 +197,10 @@ func (s *Server) RegisterRoutes() http.Handler {
 		}
 	})
 
+	// Registered after the V2 interceptor on purpose: it only wraps what is
+	// left — the UI, the admin API and /health.
+	e.Use(securityHeaders)
+
 	// ── Auth ──────────────────────────────────────────────────────────────────
 	e.POST("/api/admin/auth/login", s.auth.Login, strictLimiter)
 	e.POST("/api/admin/auth/logout", s.auth.Logout)
@@ -197,32 +210,38 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	// ── Admin API ─────────────────────────────────────────────────────────────
 	api := e.Group("/api/admin", s.auth.Middleware(), auditor.AdminMiddleware())
+	// Routes that address one repository (?name=) validate the name and apply
+	// the caller's repository patterns — the same RBAC /v2 enforces. Listing
+	// routes filter their results inside the handlers.
+	repoScoped := auth.RequireRepoAccess("name")
 	if s.mode == modeProxy {
 		h := admin.NewRemote(s.proxy, s.signingPolicy, s.store)
 		api.GET("/repositories", h.GetRepositories)
-		api.GET("/repositories/tags", h.GetTags)
-		api.GET("/repositories/manifest", h.GetManifestDetails)
-		api.GET("/repositories/diff", h.GetTagDiff)
+		api.GET("/repositories/tags", h.GetTags, repoScoped)
+		api.GET("/repositories/manifest", h.GetManifestDetails, repoScoped)
+		api.GET("/repositories/diff", h.GetTagDiff, repoScoped)
 		api.GET("/repositories/search", h.Search)
-		api.GET("/repositories/layer", h.GetLayerEntries)
-		api.DELETE("/repositories/manifests", h.DeleteManifest, auth.RequireAdmin)
-		api.DELETE("/repositories", h.DeleteRepository, auth.RequireAdmin)
+		api.GET("/repositories/layer", h.GetLayerEntries, repoScoped)
+		api.DELETE("/repositories/manifests", h.DeleteManifest, auth.RequireAdmin, repoScoped)
+		api.DELETE("/repositories", h.DeleteRepository, auth.RequireAdmin, repoScoped)
 		api.GET("/storage/stats", admin.NotSupported)
-		api.GET("/storage/tree", admin.NotSupported)
-		api.POST("/gc", admin.NotSupported)
+		api.GET("/storage/tree", admin.NotSupported, auth.RequireAdmin)
+		api.POST("/gc", admin.NotSupported, auth.RequireAdmin)
 	} else {
 		h := admin.New(s.backend, s.signingPolicy, s.store)
 		h.SetHub(s.events)
+		h.SetGCGracePeriod(s.gcGracePeriod)
 		api.GET("/repositories", h.GetRepositories)
-		api.GET("/repositories/tags", h.GetTags)
-		api.GET("/repositories/manifest", h.GetManifestDetails)
-		api.GET("/repositories/diff", h.GetTagDiff)
+		api.GET("/repositories/tags", h.GetTags, repoScoped)
+		api.GET("/repositories/manifest", h.GetManifestDetails, repoScoped)
+		api.GET("/repositories/diff", h.GetTagDiff, repoScoped)
 		api.GET("/repositories/search", h.Search)
-		api.GET("/repositories/layer", h.GetLayerEntries)
-		api.DELETE("/repositories/manifests", h.DeleteManifest, auth.RequireAdmin)
-		api.DELETE("/repositories", h.DeleteRepository, auth.RequireAdmin)
+		api.GET("/repositories/layer", h.GetLayerEntries, repoScoped)
+		api.DELETE("/repositories/manifests", h.DeleteManifest, auth.RequireAdmin, repoScoped)
+		api.DELETE("/repositories", h.DeleteRepository, auth.RequireAdmin, repoScoped)
 		api.GET("/storage/stats", h.StorageStats)
-		api.GET("/storage/tree", h.StorageTree)
+		// Lists every file of every repository: admin only.
+		api.GET("/storage/tree", h.StorageTree, auth.RequireAdmin)
 		api.POST("/gc", h.GarbageCollect, auth.RequireAdmin)
 	}
 	api.POST("/auth/password", s.auth.ChangePassword)
@@ -400,7 +419,9 @@ func (s *Server) RegisterRoutes() http.Handler {
 		if err != nil {
 			return c.String(http.StatusServiceUnavailable, "UI not built — run: make ui\n")
 		}
-		c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
+		// index.html names the hashed bundles: it must be revalidated on
+		// every load or a deploy keeps serving the previous UI.
+		c.Response().Header().Set("Cache-Control", "no-cache")
 		return c.HTMLBlob(http.StatusOK, content)
 	}
 
@@ -409,18 +430,28 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	e.GET("/*", func(c echo.Context) error {
 		path := c.Param("*")
-		if f, err := staticFS.Open(path); err == nil {
-			_ = f.Close()
-			fileServer.ServeHTTP(c.Response(), c.Request())
-			return nil
+		// An unknown API path is a client error, not a page: answering it
+		// with the SPA shell (200 + HTML) hid typos and broke JSON clients.
+		if path == "api" || strings.HasPrefix(path, "api/") {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "unknown API endpoint"})
 		}
+		if f, err := staticFS.Open(path); err == nil {
+			info, statErr := f.Stat()
+			_ = f.Close()
+			if statErr == nil && !info.IsDir() {
+				if strings.HasPrefix(path, "assets/") {
+					// Vite content-hashes everything under assets/.
+					c.Response().Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+				} else {
+					c.Response().Header().Set("Cache-Control", "no-cache")
+				}
+				fileServer.ServeHTTP(c.Response(), c.Request())
+				return nil
+			}
+		}
+		// Anything else is a client-side route (/images/team/app, /storage…).
 		return serveIndex(c)
 	})
 
 	return e
-}
-
-// HelloWorldHandler kept for the existing test.
-func (s *Server) HelloWorldHandler(c echo.Context) error {
-	return c.JSON(http.StatusOK, map[string]string{"message": "Hello World"})
 }

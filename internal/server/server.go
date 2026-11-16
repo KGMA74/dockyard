@@ -45,6 +45,8 @@ type Server struct {
 	corsAllowedOrigins   []string
 	rateLimitLoginPerMin int
 	rateLimitGlobalRPS   int
+	trustedProxies       []string
+	gcGracePeriod        time.Duration
 	mirrorTagTTL         time.Duration
 	metricsEnabled       bool
 	stats                *statsCache
@@ -91,6 +93,8 @@ func NewServer() (*http.Server, func(context.Context) error) {
 		corsAllowedOrigins:   cfg.CORSAllowedOrigins,
 		rateLimitLoginPerMin: cfg.RateLimitLoginPerMin,
 		rateLimitGlobalRPS:   cfg.RateLimitGlobalRPS,
+		trustedProxies:       cfg.TrustedProxies,
+		gcGracePeriod:        cfg.GCGracePeriod,
 		metricsEnabled:       cfg.MetricsEnabled,
 
 		scanEnabled:           cfg.ScanEnabled,
@@ -176,10 +180,14 @@ func NewServer() (*http.Server, func(context.Context) error) {
 	// Daily maintenance (retention then GC) needs both the backend and the
 	// policy store, hence scheduled after both exist.
 	if srv.backend != nil {
-		scheduleMaintenance(srv.backend, retention.New(st, srv.backend), srv.events)
+		scheduleMaintenance(srv.backend, retention.New(st, srv.backend), srv.events, srv.gcGracePeriod)
 		go srv.sampleStatsLoop()
 	}
 
+	if _, err := clientIPExtractor(cfg.TrustedProxies); err != nil {
+		slog.Error("invalid configuration", "err", err)
+		os.Exit(1)
+	}
 	if cfg.AuthUsername == "" || cfg.AuthPassword == "" || cfg.JWTSecret == "" {
 		slog.Error("AUTH_USERNAME, AUTH_PASSWORD and JWT_SECRET must be set")
 		os.Exit(1)

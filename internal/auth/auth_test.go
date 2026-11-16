@@ -206,8 +206,10 @@ func TestChangePassword(t *testing.T) {
 		return rec.Code
 	}
 
-	if got := change("wrong-current", "new-password-123"); got != http.StatusUnauthorized {
-		t.Errorf("wrong current password: status = %d, want 401", got)
+	// 403, not 401: the caller is authenticated, only the password is wrong.
+	// (The UI logs out on 401 — a typo must not end the session.)
+	if got := change("wrong-current", "new-password-123"); got != http.StatusForbidden {
+		t.Errorf("wrong current password: status = %d, want 403", got)
 	}
 	if got := change(testPassword, "short"); got != http.StatusBadRequest {
 		t.Errorf("too-short new password: status = %d, want 400", got)

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"dockyard/internal/auth"
 	"dockyard/internal/cosign"
 	"dockyard/internal/store"
 
@@ -101,6 +102,9 @@ func (h *Handler) Search(c echo.Context) error {
 
 	var results []SearchResult
 	for _, repo := range repos {
+		if !auth.CanAccessRepo(c, repo) {
+			continue
+		}
 		tags, err := h.store.ListTags(repo)
 		if err != nil {
 			continue
@@ -148,6 +152,9 @@ func (h *RemoteHandler) Search(c echo.Context) error {
 
 	var results []SearchResult
 	for _, repo := range repos {
+		if !auth.CanAccessRepo(c, repo) {
+			continue
+		}
 		tags, err := h.client.Tags(repo)
 		if err != nil {
 			continue
