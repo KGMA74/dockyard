@@ -109,15 +109,12 @@ This does not delete the PVC created for local storage; remove it manually if yo
 | `tls.acmeEmail`                | ACME account email (`acme` mode only)                                                 | `""`       |
 | `tls.existingCertSecret`       | `kubernetes.io/tls` Secret (`tls.crt`/`tls.key`) mounted read-only (`static` mode)     | `""`       |
 
-### Autoscaling and availability
+### Replicas and availability
+
+Dockyard runs as **a single replica**. Users, sessions, retention/replication policies and the audit log live in SQLite on the pod's volume; a second replica would serve its own divergent copy (a user created on one pod unknown to the other, sessions rejected at random). The chart refuses to render with `replicaCount > 1` or `autoscaling.enabled: true`, and uses the `Recreate` update strategy whenever a volume is mounted, since a ReadWriteOnce volume cannot be attached to the old and new pod at once.
 
 | Name                                     | Description                                                                                     | Value  |
 | ------------------------------------------- | --------------------------------------------------------------------------------------------------- | -------- |
-| `autoscaling.enabled`                        | Horizontal Pod Autoscaler. Requires `registry.storage.backend: s3` — local storage uses a ReadWriteOnce PVC that only one pod can mount, so the chart refuses to render the HPA otherwise | `false` |
-| `autoscaling.minReplicas`                    | Minimum replicas                                                                                    | `2`     |
-| `autoscaling.maxReplicas`                    | Maximum replicas                                                                                    | `10`    |
-| `autoscaling.targetCPUUtilizationPercentage` | Target CPU utilization                                                                              | `75`    |
-| `autoscaling.targetMemoryUtilizationPercentage` | Target memory utilization. Empty = no memory-based scaling target                               | `""`    |
 | `podDisruptionBudget.enabled`                | Protect against voluntary disruptions (node drains, cluster upgrades) evicting too many replicas at once | `false` |
 | `podDisruptionBudget.minAvailable`           | Minimum available replicas (takes precedence over `maxUnavailable` if both are set)                 | `1`     |
 | `podDisruptionBudget.maxUnavailable`         | Maximum unavailable replicas                                                                        | `""`    |
@@ -144,9 +141,11 @@ This does not delete the PVC created for local storage; remove it manually if yo
 
 ### Persistence
 
+The volume is mounted at `registry.storage.path` **with both storage backends**. With `local` it holds the images and Dockyard's state; with `s3` the images go to the bucket and the volume only holds the state — users, sessions, policies and audit log (SQLite), the Trivy cache and ACME certificates — so 1–2Gi is enough. With `persistence.enabled: false` all of that is lost on every pod restart.
+
 | Name                          | Description                              | Value          |
 | ------------------------------- | ------------------------------------------- | ---------------- |
-| `persistence.enabled`             | Create a PVC for local storage              | `true`         |
+| `persistence.enabled`             | Create a PVC mounted at `registry.storage.path` (both backends) | `true`         |
 | `persistence.storageClass`        | StorageClass to use                         | `""`           |
 | `persistence.accessMode`          | PVC access mode                             | `ReadWriteOnce`|
 | `persistence.size`                | PVC size                                    | `10Gi`         |
