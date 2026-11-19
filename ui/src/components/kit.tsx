@@ -9,7 +9,6 @@ import { toast } from 'sonner'
 import { ApiError } from '@/api'
 import { formatDateTime, relativeTime, shortDigest } from '@/lib/format'
 import { cn } from '@/lib/utils'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
   Dialog,
@@ -90,13 +89,17 @@ export function Panel({ children, className }: { children: React.ReactNode; clas
 
 export type Tone = 'neutral' | 'info' | 'success' | 'warning' | 'danger'
 
-const TONE_CLASS: Record<Tone, string> = {
-  neutral: 'border-border bg-muted/60 text-muted-foreground',
-  info: 'border-primary/25 bg-primary/10 text-primary',
-  success: 'border-success/30 bg-success/10 text-success',
-  warning: 'border-warning/35 bg-warning/10 text-warning',
-  danger: 'border-destructive/30 bg-destructive/10 text-destructive',
+// Colour lives in a small dot only; the chip itself stays neutral. Tinted pills
+// everywhere turn a screen into confetti — here colour is rare, so it is read.
+const TONE_DOT: Record<Tone, string | null> = {
+  neutral: null,
+  info: 'bg-primary',
+  success: 'bg-success',
+  warning: 'bg-warning',
+  danger: 'bg-destructive',
 }
+
+const CHIP = 'inline-flex h-5 w-fit max-w-full shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[5px] px-1.5 text-xs'
 
 /** The one badge used for every state in the app, so "green" always means the
  *  same green. Colour is never the only signal: the label carries the state. */
@@ -111,26 +114,36 @@ export function StatusBadge({
   className?: string
   mono?: boolean
 }) {
+  const dot = TONE_DOT[tone]
   return (
-    <Badge variant="outline" className={cn(TONE_CLASS[tone], mono && 'font-mono', className)}>
+    <span
+      data-tone={tone}
+      className={cn(
+        CHIP,
+        'border font-medium',
+        dot ? 'text-foreground' : 'text-muted-foreground',
+        mono && 'font-mono font-normal',
+        className,
+      )}
+    >
+      {dot && <span aria-hidden="true" className={cn('size-1.5 shrink-0 rounded-full', dot)} />}
       {children}
-    </Badge>
+    </span>
   )
 }
 
+/** A tag is an identifier, not a state: set like inline code, no colour. */
 export function TagBadge({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
-    <StatusBadge tone="info" mono className={cn('max-w-full', className)}>
+    <span className={cn(CHIP, 'bg-muted font-mono text-foreground', className)}>
       <span className="truncate">{children}</span>
-    </StatusBadge>
+    </span>
   )
 }
-
-const ROLE_TONE: Record<string, Tone> = { admin: 'info', pusher: 'warning', reader: 'neutral' }
 
 export function RoleBadge({ role }: { role: string }) {
   const { t } = useTranslation()
-  return <StatusBadge tone={ROLE_TONE[role] ?? 'neutral'}>{t(`roles.${role}`, role)}</StatusBadge>
+  return <StatusBadge>{t(`roles.${role}`, role)}</StatusBadge>
 }
 
 // ── Copy ─────────────────────────────────────────────────────────────────────

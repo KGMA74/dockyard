@@ -129,7 +129,7 @@ export default function AppSidebar({ current, onLogout }: Props) {
               tooltip={`${username} · ${t('nav.settings')}`}
             >
               <Link to="/settings" aria-current={active === 'settings' ? 'page' : undefined}>
-                <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-primary/10 text-xs font-semibold uppercase text-primary">
+                <span className="flex size-6 shrink-0 items-center justify-center rounded-md border bg-muted text-xs font-semibold uppercase text-foreground">
                   {username.slice(0, 1)}
                 </span>
                 <span className="flex min-w-0 flex-1 flex-col gap-0.5 leading-none">

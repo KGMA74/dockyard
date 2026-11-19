@@ -7,7 +7,6 @@ import { formatEventMessage, logout, subscribeToEvents, type RegistryEvent } fro
 import { invalidateForEvent } from '@/lib/queries'
 import { Link, useLocation, type PageId, type Route } from '@/lib/router'
 import { useSession } from '@/lib/session'
-import { cn } from '@/lib/utils'
 import CommandPalette from './CommandPalette'
 import { LanguageToggle, ThemeToggle } from './HeaderToggles'
 import { EmptyState, Page, Spinner } from './kit'
@@ -29,7 +28,10 @@ const AccessPage = lazy(() => import('@/pages/AccessPage'))
 const IntegrationsPage = lazy(() => import('@/pages/IntegrationsPage'))
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'))
 
-const ADMIN_PAGES: PageId[] = ['activity', 'storage', 'security', 'access', 'integrations']
+/** How long the live feed may be down before the header says so. */
+const OFFLINE_GRACE_MS = 5000
+
+const ADMIN_PAGES: PageId[] =['activity', 'storage', 'security', 'access', 'integrations']
 
 // The shadcn Sidebar persists its state in a cookie; this is a SPA (no SSR),
 // so read it back here to seed `defaultOpen` across reloads.
@@ -111,7 +113,10 @@ export default function AppShell({ onLogout }: { onLogout: () => void }) {
   const [notifications, setNotifications] = useState<NotificationItem[]>([])
   const [unread, setUnread] = useState(0)
   const [bellOpen, setBellOpen] = useState(false)
-  const [live, setLive] = useState(true)
+  // Only a lasting outage is worth showing: the feed drops and reconnects
+  // within a second on a server restart or a proxy idle timeout, and a
+  // permanent "live" badge says nothing while everything works.
+  const [offline, setOffline] = useState(false)
   const [paletteOpen, setPaletteOpen] = useState(false)
   const nextId = useRef(0)
   const me = session.username
@@ -132,7 +137,17 @@ export default function AppShell({ onLogout }: { onLogout: () => void }) {
       else if (event.type === 'quota_warning') toast.warning(message)
       else toast.info(message)
     }
-    return subscribeToEvents(onEvent, setLive)
+    let offlineTimer: ReturnType<typeof setTimeout> | undefined
+    function onStatus(connected: boolean) {
+      clearTimeout(offlineTimer)
+      if (connected) setOffline(false)
+      else offlineTimer = setTimeout(() => setOffline(true), OFFLINE_GRACE_MS)
+    }
+    const unsubscribe = subscribeToEvents(onEvent, onStatus)
+    return () => {
+      clearTimeout(offlineTimer)
+      unsubscribe()
+    }
   }, [queryClient, me])
 
   useEffect(() => {
@@ -192,22 +207,21 @@ export default function AppShell({ onLogout }: { onLogout: () => void }) {
             <Search />
           </Button>
 
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <span
-                role="status"
-                className="hidden items-center gap-1.5 px-1 text-xs text-muted-foreground md:flex"
-                aria-label={live ? t('shell.liveOn') : t('shell.liveOff')}
-              >
+          {offline && (
+            <Tooltip>
+              <TooltipTrigger asChild>
                 <span
-                  className={cn('size-1.5 rounded-full', live ? 'bg-success' : 'animate-pulse bg-warning')}
-                  aria-hidden="true"
-                />
-                {live ? t('shell.live') : t('shell.reconnecting')}
-              </span>
-            </TooltipTrigger>
-            <TooltipContent>{live ? t('shell.liveOn') : t('shell.liveOff')}</TooltipContent>
-          </Tooltip>
+                  role="status"
+                  className="flex h-6 shrink-0 items-center gap-1.5 rounded-md border px-2 text-xs font-medium text-foreground"
+                  aria-label={t('shell.liveOff')}
+                >
+                  <span className="size-1.5 animate-pulse rounded-full bg-warning" aria-hidden="true" />
+                  <span className="hidden sm:inline">{t('shell.reconnecting')}</span>
+                </span>
+              </TooltipTrigger>
+              <TooltipContent className="max-w-64">{t('shell.liveOff')}</TooltipContent>
+            </Tooltip>
+          )}
 
           <div className="flex items-center gap-0.5">
             <ThemeToggle />

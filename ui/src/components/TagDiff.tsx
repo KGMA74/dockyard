@@ -3,8 +3,7 @@ import { ArrowRight } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { getTagDiff } from '../api'
 import { formatBytes } from '../lib/format'
-import { ErrorState, TableSkeleton } from './kit'
-import { Badge } from '@/components/ui/badge'
+import { ErrorState, StatusBadge, TableSkeleton } from './kit'
 import {
   Dialog,
   DialogContent,
@@ -61,20 +60,14 @@ export default function TagDiff({ imageName, tagA, tagB, onClose }: Props) {
 
             <div>
               <p className="text-xs text-muted-foreground font-medium mb-2">{t('tagDiff.sizeDelta')}</p>
-              <Badge
-                variant="outline"
-                className={
-                  diff.size_delta_bytes > 0
-                    ? 'text-destructive border-destructive/30 bg-destructive/10'
-                    : diff.size_delta_bytes < 0
-                      ? 'text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
-                      : 'text-muted-foreground'
-                }
+              <StatusBadge
+                tone={diff.size_delta_bytes > 0 ? 'warning' : diff.size_delta_bytes < 0 ? 'success' : 'neutral'}
+                className="tabular-nums"
               >
                 {diff.size_delta_bytes === 0
                   ? t('tagDiff.noSizeChange')
                   : `${diff.size_delta_bytes > 0 ? '+' : '−'}${formatBytes(Math.abs(diff.size_delta_bytes))}`}
-              </Badge>
+              </StatusBadge>
             </div>
 
             <div>
@@ -92,10 +85,10 @@ export default function TagDiff({ imageName, tagA, tagB, onClose }: Props) {
               ) : (
                 <div className="space-y-1.5">
                   {diff.layers_only_a.map(d => (
-                    <LayerRow key={`a-${d}`} digest={d} label={t('tagDiff.onlyIn', { tag: tagA })} tone="destructive" />
+                    <LayerRow key={`a-${d}`} digest={d} label={t('tagDiff.onlyIn', { tag: tagA })} side="a" />
                   ))}
                   {diff.layers_only_b.map(d => (
-                    <LayerRow key={`b-${d}`} digest={d} label={t('tagDiff.onlyIn', { tag: tagB })} tone="success" />
+                    <LayerRow key={`b-${d}`} digest={d} label={t('tagDiff.onlyIn', { tag: tagB })} side="b" />
                   ))}
                 </div>
               )}
@@ -111,27 +104,23 @@ function ColumnField({ label, value, diff }: { label: string; value?: string; di
   return (
     <div>
       <p className="text-xs text-muted-foreground font-medium">{label}</p>
-      <p className={`text-sm mt-0.5 ${diff ? 'text-amber-600 dark:text-amber-400 font-medium' : ''}`}>
+      <p className={`text-sm mt-0.5 ${diff ? 'text-warning font-medium' : ''}`}>
         {value ?? '—'}
       </p>
     </div>
   )
 }
 
-function LayerRow({ digest, label, tone }: { digest: string; label: string; tone: 'destructive' | 'success' }) {
+// Which side a layer belongs to is a fact, not good or bad news: the two sides
+// are told apart by a neutral marker (−/+, as in a diff), not red and green.
+function LayerRow({ digest, label, side }: { digest: string; label: string; side: 'a' | 'b' }) {
   return (
-    <div className="flex items-center justify-between gap-3 bg-muted/50 border rounded-lg px-3 py-2">
-      <span className="font-mono text-xs text-muted-foreground truncate">{digest.slice(0, 19)}…</span>
-      <Badge
-        variant="outline"
-        className={
-          tone === 'destructive'
-            ? 'text-destructive border-destructive/30 bg-destructive/10 shrink-0'
-            : 'text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10 shrink-0'
-        }
-      >
-        {label}
-      </Badge>
+    <div className="flex items-center justify-between gap-3 rounded-lg border px-3 py-2">
+      <span className="flex min-w-0 items-center gap-2 font-mono text-xs">
+        <span aria-hidden="true" className="w-2 shrink-0 text-muted-foreground">{side === 'a' ? '−' : '+'}</span>
+        <span className="truncate text-muted-foreground">{digest.slice(0, 19)}…</span>
+      </span>
+      <StatusBadge>{label}</StatusBadge>
     </div>
   )
 }
