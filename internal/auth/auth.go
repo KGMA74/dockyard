@@ -91,8 +91,6 @@ type Manager struct {
 	// verification (JWT_SECRET_PREVIOUS rotation grace window).
 	secrets [][]byte
 	audit   AuditSink
-	// scannerSecret authenticates the internal scanner (see ScannerCredentials).
-	scannerSecret string
 	// oidc holds the active single sign-on configuration, nil when SSO is
 	// off. Swapped whole when an admin changes it from the console.
 	oidc     atomic.Pointer[oidcState]
@@ -126,8 +124,6 @@ func New(username, initialPassword, jwtSecret, previousSecret, dataDir string, u
 		users:    users,
 		username: username,
 		secrets:  [][]byte{[]byte(jwtSecret)},
-
-		scannerSecret: newScannerSecret(),
 	}
 	if previousSecret != "" {
 		m.secrets = append(m.secrets, []byte(previousSecret))
@@ -272,11 +268,8 @@ func (m *Manager) validate(raw string) (Principal, error) {
 		return p, nil
 	}
 	if scanner, _ := claims["scn"].(bool); scanner {
-		// Only this process can mint them: the scanner secret is per-process.
-		if p.Username != ScannerUsername {
-			return Principal{}, errors.New("invalid claims")
-		}
-		return Principal{Username: ScannerUsername, Role: store.RoleReader, Scanner: true, Registry: true}, nil
+		// Minted by IssueScannerToken for one scan of one repository.
+		return scannerPrincipal(claims, p.Username, p.Registry)
 	}
 	if rid, ok := claims["rid"].(float64); ok {
 		robot, ok := m.robotPrincipal(int64(rid))

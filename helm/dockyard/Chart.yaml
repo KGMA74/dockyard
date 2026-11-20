@@ -2,8 +2,8 @@ apiVersion: v2
 name: dockyard
 description: A self-hosted Docker Registry V2 server
 type: application
-version: 0.7.0
-appVersion: "0.7.0"
+version: 0.7.1
+appVersion: "0.7.1"
 keywords:
   - docker
   - registry
@@ -32,12 +32,14 @@ annotations:
   # tag being released (a hand-written changelog). Otherwise the workflow
   # overwrites it from the GitHub release notes of that tag.
   artifacthub.io/changes: |
-    - kind: added
-      description: Configure single sign-on from the console (Settings → Single sign-on), applied at once without a restart, with an issuer connection test
-    - kind: added
-      description: The SSO client secret set in the console is stored encrypted (AES-256-GCM, key derived from JWT_SECRET) and survives a JWT_SECRET rotation
+    - kind: fixed
+      description: Vulnerability scans failed with 401 Unauthorized when registry auth was on (V2_AUTH_ENABLED=true) and anonymous pull off; trivy now pulls with a token of its own, nothing to configure
+    - kind: security
+      description: The scanner token is short-lived (SCAN_TIMEOUT + 1 minute), pull only and limited to the scanned repository; it is passed to trivy in its environment, never on the command line, in logs or in stored reports
+    - kind: security
+      description: Trivy runs with an explicit, minimal environment (PATH, proxy and CA variables) instead of inheriting all of Dockyard's, JWT_SECRET included
     - kind: changed
-      description: oidc.enabled=true keeps working and makes the console read-only; oidc.clientSecret alone keeps just the secret in Kubernetes
+      description: The scanner no longer has a per-process password for /v2; a scan that still gets a 401 says whether trivy had a token
   artifacthub.io/images: |
     - name: dockyard
-      image: ghcr.io/kgma74/dockyard:0.7.0
+      image: ghcr.io/kgma74/dockyard:0.7.1

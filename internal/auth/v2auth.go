@@ -60,9 +60,10 @@ func v2Scope(r *http.Request) (Action, string) {
 }
 
 // IssueRegistryToken signs a short-lived token for the V2 protocol carrying
-// the same role/repos claims the admin API uses. Robot and scanner tokens are
-// marked so validate resolves them against the right identity. The audience
-// confines it to /v2: the admin API refuses it.
+// the same role/repos claims the admin API uses. Robot tokens are marked so
+// validate resolves them against the robot account. The audience confines it
+// to /v2: the admin API refuses it. Scanner tokens come from
+// IssueScannerToken, never from here.
 func (m *Manager) IssueRegistryToken(p Principal) (string, error) {
 	claims := jwt.MapClaims{
 		"aud":   audRegistry,
@@ -74,9 +75,6 @@ func (m *Manager) IssueRegistryToken(p Principal) (string, error) {
 	}
 	if p.RobotID != 0 {
 		claims["rid"] = p.RobotID
-	}
-	if p.Scanner {
-		claims["scn"] = true
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(m.secrets[0])
 }
