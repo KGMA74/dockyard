@@ -65,6 +65,10 @@ type Server struct {
 	signingPolicy *cosign.Policy
 
 	tracingEnabled bool
+
+	// configSummary is what GET /api/admin/config shows: built once from
+	// the loaded config, secrets left out (see newConfigSummary).
+	configSummary []ConfigGroup
 }
 
 // NewServer builds the HTTP server. The second return value flushes and
@@ -173,6 +177,7 @@ func NewServer() (*http.Server, func(context.Context) error) {
 		os.Exit(1)
 	}
 	srv.signingPolicy = cosign.NewPolicy(cfg.RequireSignedPush, cosignKeys, st)
+	srv.configSummary = newConfigSummary(cfg, m, len(cosignKeys), tracingEnabled, cfg.GCGracePeriod.String())
 	if cfg.RequireSignedPush && len(cosignKeys) == 0 {
 		slog.Warn("REQUIRE_SIGNED_PUSH is on but no cosign public keys are configured — all gated pushes will be rejected until COSIGN_PUBLIC_KEYS_DIR is set")
 	}

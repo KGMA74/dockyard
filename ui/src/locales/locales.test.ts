@@ -70,6 +70,15 @@ describe('locales', () => {
       'scan.severity': ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW', 'UNKNOWN'],
       eventTypes: ['push', 'delete', 'retention', 'gc', 'scan', 'import', 'quota_warning'],
       'audit.actions': ['login', 'logout', 'change-password', 'push', 'delete-manifest', 'scan'],
+      // Keys the server sends in GET /api/admin/config (internal/server/config_summary.go).
+      'settings.configGroups': ['registry', 'access', 'security', 'maintenance', 'observability'],
+      'settings.configKeys': [
+        'mode', 'upstream', 'mirror_tag_ttl', 'storage_backend', 's3_bucket', 's3_endpoint', 'data_path',
+        'v2_auth', 'anonymous_pull', 'tls', 'login_rate_limit', 'global_rate_limit', 'trusted_proxies',
+        'cors_origins', 'scanning', 'scanner', 'scan_offline', 'require_signed_push', 'cosign_keys',
+        'maintenance_schedule', 'gc_grace_period', 'metrics', 'tracing',
+      ],
+      'settings.storageBackends': ['local', 's3'],
     }
     const missing = Object.entries(families).flatMap(([family, members]) =>
       members.map(member => `${family}.${member}`).filter(key => !known.has(key)),

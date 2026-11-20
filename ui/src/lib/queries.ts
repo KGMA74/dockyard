@@ -11,12 +11,14 @@ import {
   getManifestDetails,
   getRepositories,
   getScanVulnerabilities,
+  getServerConfig,
   getSigningStatus,
   getStorageStats,
   getTags,
   listQuotas,
   listReplicationTargets,
   listRetentionPolicies,
+  listMySessions,
   listScans,
   listSessions,
   listSigningPolicies,
@@ -37,6 +39,8 @@ export const keys = {
   scanReport: (id: number) => ['scan-report', id] as const,
   users: ['users'] as const,
   sessions: ['sessions'] as const,
+  mySessions: ['sessions', 'mine'] as const,
+  serverConfig: ['server-config'] as const,
   retention: ['retention'] as const,
   quotas: ['quotas'] as const,
   webhooks: ['webhooks'] as const,
@@ -102,6 +106,15 @@ export const useScanReport = (id: number | null) =>
 
 export const useUsers = () => useQuery({ queryKey: keys.users, queryFn: listUsers, select: data => data.users })
 export const useSessions = () => useQuery({ queryKey: keys.sessions, queryFn: listSessions })
+export const useMySessions = () => useQuery({ queryKey: keys.mySessions, queryFn: listMySessions })
+export const useServerConfig = (enabled: boolean) =>
+  useQuery({
+    queryKey: keys.serverConfig,
+    queryFn: getServerConfig,
+    enabled,
+    staleTime: Infinity, // read from env at startup: only a restart changes it
+    select: data => data.groups,
+  })
 export const useRetentionPolicies = () =>
   useQuery({ queryKey: keys.retention, queryFn: listRetentionPolicies, select: data => data.policies })
 export const useQuotas = () => useQuery({ queryKey: keys.quotas, queryFn: listQuotas })

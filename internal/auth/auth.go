@@ -485,6 +485,71 @@ func (m *Manager) RevokeSession(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"message": "session revoked"})
 }
 
+// ownSessions returns the caller's sessions only.
+func (m *Manager) ownSessions(username string) ([]*store.Session, error) {
+	all, err := m.users.ListSessions()
+	if err != nil {
+		return nil, err
+	}
+	mine := []*store.Session{}
+	for _, s := range all {
+		if s.Username == username {
+			mine = append(mine, s)
+		}
+	}
+	return mine, nil
+}
+
+// ListMySessions — GET /api/admin/sessions/mine. Any signed-in user can see
+// where they are signed in; the full list stays admin-only.
+func (m *Manager) ListMySessions(c echo.Context) error {
+	p, ok := CurrentPrincipal(c)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "not authenticated"})
+	}
+	sessions, err := m.ownSessions(p.Username)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"sessions":   sessions,
+		"count":      len(sessions),
+		"current_id": p.SessionID,
+	})
+}
+
+// RevokeMySession — DELETE /api/admin/sessions/mine/:id. Only the caller's
+// own sessions: another user's id answers 404, exactly like a missing one,
+// so the endpoint can't be used to probe which sessions exist.
+func (m *Manager) RevokeMySession(c echo.Context) error {
+	p, ok := CurrentPrincipal(c)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "not authenticated"})
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid session id"})
+	}
+	sessions, err := m.ownSessions(p.Username)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	owned := false
+	for _, s := range sessions {
+		if s.ID == id {
+			owned = true
+			break
+		}
+	}
+	if !owned {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "session not found"})
+	}
+	if err := m.users.DeleteSession(id); err != nil && !errors.Is(err, store.ErrSessionNotFound) {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"message": "session revoked"})
+}
+
 // ChangePassword — POST /api/admin/auth/password (JWT requis). Changes the
 // password of the authenticated user.
 func (m *Manager) ChangePassword(c echo.Context) error {

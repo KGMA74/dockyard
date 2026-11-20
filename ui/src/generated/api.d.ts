@@ -386,7 +386,7 @@ export interface paths {
         post?: never;
         /**
          * Revoke a session (admin only)
-         * @description Kills the refresh token; outstanding access tokens die within 15 minutes.
+         * @description Kills the refresh token; access tokens of that session are rejected on their next request.
          */
         delete: {
             parameters: {
@@ -404,6 +404,132 @@ export interface paths {
                 404: components["responses"]["NotFound"];
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/sessions/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the caller's own sessions (any signed-in user) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Sessions of the caller */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            sessions?: components["schemas"]["Session"][];
+                            count?: number;
+                            /** @description Session id of this request. */
+                            current_id?: number;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/sessions/mine/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Sign out one of the caller's own sessions
+         * @description Another user's session id answers 404, like a missing one.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                200: components["responses"]["Message"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Effective server configuration (admin only)
+         * @description Grouped settings with the environment variable controlling each one. Never includes passwords, keys, JWT secrets or S3 credentials; credentials embedded in URLs are removed.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Configuration */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            groups?: {
+                                /** @enum {string} */
+                                id?: "registry" | "access" | "security" | "maintenance" | "observability";
+                                items?: {
+                                    key?: string;
+                                    /** @description boolean, number, string or string array */
+                                    value?: unknown;
+                                    env?: string;
+                                }[];
+                            }[];
+                        };
+                    };
+                };
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;

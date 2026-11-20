@@ -3,6 +3,7 @@ import { MonitorSmartphone, Pencil, Plus, Trash2, X } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { createUser, deleteUser, revokeSession, updateUser, type Role, type SessionInfo, type UserInfo } from '@/api'
+import { describeClient } from '@/lib/client'
 import { keys, useInvalidate, useSessions, useUsers } from '@/lib/queries'
 import { useSession } from '@/lib/session'
 import {
@@ -135,35 +136,6 @@ function EditUserDialog({ user, isSelf, onClose }: { user: UserInfo; isSelf: boo
       </Field>
     </FormDialog>
   )
-}
-
-/** "Mozilla/5.0 (…) Chrome/126…" → something a human can scan in a table. */
-function describeClient(userAgent: string): string {
-  if (!userAgent) return '—'
-  if (/dockyard-cli/i.test(userAgent)) return 'dockyard-cli'
-  if (/^docker\//i.test(userAgent)) return 'Docker'
-  if (/curl\//i.test(userAgent)) return 'curl'
-  const browser = /Edg\//.test(userAgent)
-    ? 'Edge'
-    : /Firefox\//.test(userAgent)
-      ? 'Firefox'
-      : /Chrome\//.test(userAgent)
-        ? 'Chrome'
-        : /Safari\//.test(userAgent)
-          ? 'Safari'
-          : ''
-  const os = /Windows/.test(userAgent)
-    ? 'Windows'
-    : /Mac OS X|Macintosh/.test(userAgent)
-      ? 'macOS'
-      : /Android/.test(userAgent)
-        ? 'Android'
-        : /iPhone|iPad/.test(userAgent)
-          ? 'iOS'
-          : /Linux/.test(userAgent)
-            ? 'Linux'
-            : ''
-  return [browser, os].filter(Boolean).join(' · ') || userAgent.slice(0, 40)
 }
 
 export default function AccessPage() {

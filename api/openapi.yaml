@@ -219,13 +219,74 @@ paths:
     delete:
       tags: [sessions]
       summary: Revoke a session (admin only)
-      description: Kills the refresh token; outstanding access tokens die within 15 minutes.
+      description: Kills the refresh token; access tokens of that session are rejected on their next request.
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
         "200": { $ref: "#/components/responses/Message" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/admin/sessions/mine:
+    get:
+      tags: [sessions]
+      summary: List the caller's own sessions (any signed-in user)
+      responses:
+        "200":
+          description: Sessions of the caller
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items: { $ref: "#/components/schemas/Session" }
+                  count: { type: integer }
+                  current_id: { type: integer, description: Session id of this request. }
+
+  /api/admin/sessions/mine/{id}:
+    delete:
+      tags: [sessions]
+      summary: Sign out one of the caller's own sessions
+      description: Another user's session id answers 404, like a missing one.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/admin/config:
+    get:
+      tags: [system]
+      summary: Effective server configuration (admin only)
+      description: >
+        Grouped settings with the environment variable controlling each one.
+        Never includes passwords, keys, JWT secrets or S3 credentials;
+        credentials embedded in URLs are removed.
+      responses:
+        "200":
+          description: Configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  groups:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, enum: [registry, access, security, maintenance, observability] }
+                        items:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              key: { type: string }
+                              value: { description: "boolean, number, string or string array" }
+                              env: { type: string }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   /api/admin/repositories:
     get:

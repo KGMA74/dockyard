@@ -16,7 +16,7 @@ const ADMIN_ROUTES: [RegExp, string][] = [
   [/^POST \/api\/admin\/users$/, 'createUser'],
   [/^PUT \/api\/admin\/users\/[^/]+$/, 'updateUser'],
   [/^DELETE \/api\/admin\/users\/[^/]+$/, 'deleteUser'],
-  [/^DELETE \/api\/admin\/sessions\/[^/]+$/, 'revokeSession'],
+  [/^DELETE \/api\/admin\/sessions\/(?:mine\/)?[^/]+$/, 'revokeSession'],
   [/^POST \/api\/admin\/retention$/, 'createRetention'],
   [/^DELETE \/api\/admin\/retention\/[^/]+$/, 'deleteRetention'],
   [/^POST \/api\/admin\/retention\/run$/, 'runRetention'],

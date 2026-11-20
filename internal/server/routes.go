@@ -257,6 +257,12 @@ func (s *Server) RegisterRoutes() http.Handler {
 	// access tokens die within 15 minutes.
 	api.GET("/sessions", s.auth.ListSessions, auth.RequireAdmin)
 	api.DELETE("/sessions/:id", s.auth.RevokeSession, auth.RequireAdmin)
+	// Everyone can see and end their own sessions (Settings page).
+	api.GET("/sessions/mine", s.auth.ListMySessions)
+	api.DELETE("/sessions/mine/:id", s.auth.RevokeMySession)
+
+	// Effective server configuration, secrets left out.
+	api.GET("/config", s.handleConfig, auth.RequireAdmin)
 
 	// Audit trail of sensitive actions (logins, pushes, deletions, GC).
 	api.GET("/audit", auditor.List, auth.RequireAdmin)

@@ -510,6 +510,28 @@ export async function revokeSession(id: number): Promise<void> {
   return req(`/sessions/${id}`, { method: 'DELETE' })
 }
 
+/** The caller's own sessions — any signed-in user. */
+export async function listMySessions(): Promise<{ sessions: SessionInfo[]; count: number; current_id: number }> {
+  return req('/sessions/mine')
+}
+
+export async function revokeMySession(id: number): Promise<void> {
+  return req(`/sessions/mine/${id}`, { method: 'DELETE' })
+}
+
+export type ConfigGroupId = 'registry' | 'access' | 'security' | 'maintenance' | 'observability'
+
+export interface ConfigItem {
+  key: string
+  value: boolean | number | string | string[]
+  env?: string
+}
+
+/** Effective server configuration, secrets left out (admin only). */
+export async function getServerConfig(): Promise<{ groups: { id: ConfigGroupId; items: ConfigItem[] }[] }> {
+  return req('/config')
+}
+
 export interface AuditEntry {
   id: number
   at: string
