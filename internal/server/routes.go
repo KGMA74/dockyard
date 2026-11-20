@@ -189,17 +189,12 @@ func (s *Server) RegisterRoutes() http.Handler {
 	}
 	var scanDispatcher *scan.Dispatcher
 	if s.scanEnabled {
-		scannerUser, scannerPass := s.auth.ScannerCredentials()
 		scanDispatcher = scan.NewDispatcher(s.store, scan.Config{
 			TrivyBin:       s.trivyBinPath,
 			TrivyServerURL: s.trivyServerURL,
 			TrivyCacheDir:  s.trivyCacheDir,
 			RegistryURL:    fmt.Sprintf("localhost:%d", s.port),
-			// Its own identity, not the bootstrap admin's: that password
-			// may have been changed in the UI since, and the scanner's
-			// pulls must bypass the vulnerability gate.
-			RegistryUser:   scannerUser,
-			RegistryPass:   scannerPass,
+			RegistryToken:  s.scannerTokenSource(),
 			Insecure:       s.trivyInsecureRegistry,
 			Offline:        s.trivyOffline,
 			Timeout:        s.scanTimeout,

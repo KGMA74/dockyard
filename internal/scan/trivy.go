@@ -14,7 +14,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"os"
 	"os/exec"
+	"slices"
 	"strings"
 	"time"
 
@@ -152,26 +154,98 @@ func buildTrivyArgs(server, cacheDir, imageRef string, insecure, offline bool, t
 	return append(args, imageRef)
 }
 
-// runTrivy shells out to `trivy image` (standalone or --server, depending on
-// whether server is set) and returns the raw JSON report. user/pass
-// authenticate trivy's own registry pull against Dockyard.
-func runTrivy(ctx context.Context, bin, server, cacheDir, imageRef, user, pass string, insecure, offline bool, timeout time.Duration, maxBytes int64) ([]byte, error) {
-	args := buildTrivyArgs(server, cacheDir, imageRef, insecure, offline, timeout)
-	cmd := exec.CommandContext(ctx, bin, args...) //nolint:gosec // bin/server/imageRef are operator/config-controlled, not end-user input
-	// TMPDIR: the final image runs FROM scratch, which has no /tmp — trivy's
-	// own DB download and layer extraction need a writable temp dir, so point
-	// it at cacheDir (already created by the server at startup).
-	cmd.Env = append(cmd.Environ(), "TMPDIR="+cacheDir)
-	if user != "" {
-		cmd.Env = append(cmd.Env, "DOCKER_USERNAME="+user, "DOCKER_PASSWORD="+pass)
+// trivyRun is one `trivy image` invocation.
+type trivyRun struct {
+	bin, server, cacheDir, imageRef string
+	insecure, offline               bool
+	timeout                         time.Duration
+	maxBytes                        int64
+	// registryToken is the bearer token trivy pulls the image with; empty
+	// means an anonymous pull. It only ever travels in the child's
+	// environment as TRIVY_REGISTRY_TOKEN: never on the command line (ps
+	// shows it to every local user), in a log, an error or a stored report.
+	registryToken string
+}
+
+// command builds the trivy process. Trivy 0.56 reads registry credentials
+// from TRIVY_USERNAME/TRIVY_PASSWORD or TRIVY_REGISTRY_TOKEN only. The token
+// is the one that fits Dockyard: trivy sends it as-is as a Bearer header on
+// /v2/* without going through /v2/token, where it would need a password.
+func (r trivyRun) command(ctx context.Context) *exec.Cmd {
+	args := buildTrivyArgs(r.server, r.cacheDir, r.imageRef, r.insecure, r.offline, r.timeout)
+	cmd := exec.CommandContext(ctx, r.bin, args...) //nolint:gosec // bin/server/imageRef are operator/config-controlled, not end-user input
+	var extra []string
+	if r.registryToken != "" {
+		extra = append(extra, "TRIVY_REGISTRY_TOKEN="+r.registryToken)
 	}
-	return runTrivyWithCmd(cmd, maxBytes)
+	cmd.Env = trivyEnv(r.cacheDir, extra...)
+	return cmd
+}
+
+// runTrivy shells out to `trivy image` (standalone or --server, depending on
+// whether server is set) and returns the raw JSON report.
+func runTrivy(ctx context.Context, r trivyRun) ([]byte, error) {
+	return runTrivyWithCmd(r.command(ctx), r.maxBytes, r.registryToken)
+}
+
+// trivyPassEnv lists the only variables trivy inherits from Dockyard's
+// environment: what a process needs to run, and to reach the network (DB
+// download, an external trivy server) through a proxy or with a private CA.
+// Everything else stays out: Dockyard's environment holds JWT_SECRET, the
+// admin password, storage and upstream registry credentials. Names are
+// matched case-insensitively (http_proxy, and Windows' Path/SystemRoot).
+var trivyPassEnv = []string{
+	"PATH",
+	"HTTP_PROXY", "HTTPS_PROXY", "NO_PROXY",
+	"SSL_CERT_FILE", "SSL_CERT_DIR",
+	"SYSTEMROOT", // Windows: needed by the network and crypto stacks
+}
+
+// trivyEnv builds the explicit environment of a trivy process: the
+// pass-through list above, TMPDIR and HOME pointed at cacheDir, then extra.
+// TMPDIR: the final image runs FROM scratch, which has no /tmp — trivy's
+// DB download and layer extraction need a writable temp dir, and cacheDir is
+// created by the server at startup. HOME likewise, so nothing trivy derives
+// from it lands outside the cache.
+func trivyEnv(cacheDir string, extra ...string) []string {
+	var env []string
+	for _, kv := range os.Environ() {
+		key, _, ok := strings.Cut(kv, "=")
+		if !ok || key == "" {
+			continue
+		}
+		if slices.ContainsFunc(trivyPassEnv, func(name string) bool { return strings.EqualFold(name, key) }) {
+			env = append(env, kv)
+		}
+	}
+	env = append(env, "TMPDIR="+cacheDir)
+	if cacheDir != "" {
+		env = append(env, "HOME="+cacheDir)
+	}
+	return append(env, extra...)
+}
+
+const redacted = "[REDACTED]"
+
+// redact removes secret from s, as a whole and its signature alone (the
+// part of a JWT that makes it usable), in case trivy echoes either back.
+func redact(s []byte, secret string) []byte {
+	if secret == "" {
+		return s
+	}
+	s = bytes.ReplaceAll(s, []byte(secret), []byte(redacted))
+	if i := strings.LastIndexByte(secret, '.'); i >= 0 && len(secret)-i > 16 {
+		s = bytes.ReplaceAll(s, []byte(secret[i+1:]), []byte(redacted))
+	}
+	return s
 }
 
 // runTrivyWithCmd runs a pre-built trivy command and returns its stdout,
 // capped at maxBytes. Split out from runTrivy so tests can substitute a fake
-// binary without touching the real command construction.
-func runTrivyWithCmd(cmd *exec.Cmd, maxBytes int64) ([]byte, error) {
+// binary without touching the real command construction. secret is the
+// registry token the command carries, if any: it is scrubbed from both the
+// error and the report before either leaves this function.
+func runTrivyWithCmd(cmd *exec.Cmd, maxBytes int64, secret string) ([]byte, error) {
 	stdout := &cappedBuffer{maxBytes: maxBytes}
 	var stderr bytes.Buffer
 	cmd.Stdout = stdout
@@ -179,16 +253,16 @@ func runTrivyWithCmd(cmd *exec.Cmd, maxBytes int64) ([]byte, error) {
 
 	err := cmd.Run()
 	if err != nil {
-		msg := strings.TrimSpace(stderr.String())
+		msg := strings.TrimSpace(string(redact(stderr.Bytes(), secret)))
 		if msg == "" {
-			msg = err.Error()
+			msg = string(redact([]byte(err.Error()), secret))
 		}
-		return nil, fmt.Errorf("scan: trivy failed: %s%s", msg, trivyErrorHint(msg))
+		return nil, fmt.Errorf("scan: trivy failed: %s%s", msg, trivyErrorHint(msg, secret != ""))
 	}
 	if stdout.exceeded {
 		return nil, errReportTooLarge
 	}
-	return stdout.buf.Bytes(), nil
+	return redact(stdout.buf.Bytes(), secret), nil
 }
 
 // downloadTrivyDB refreshes the vulnerability DB in the given cache dir. Used
@@ -196,7 +270,7 @@ func runTrivyWithCmd(cmd *exec.Cmd, maxBytes int64) ([]byte, error) {
 // (which is as old as the build) is current before the first user scan.
 func downloadTrivyDB(ctx context.Context, bin, cacheDir string) error {
 	cmd := exec.CommandContext(ctx, bin, "--cache-dir", cacheDir, "image", "--download-db-only") //nolint:gosec // bin is operator/config-controlled
-	cmd.Env = append(cmd.Environ(), "TMPDIR="+cacheDir)
+	cmd.Env = trivyEnv(cacheDir)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
 	if err := cmd.Run(); err != nil {
@@ -210,16 +284,24 @@ func downloadTrivyDB(ctx context.Context, bin, cacheDir string) error {
 }
 
 // trivyErrorHint maps common trivy failures to an actionable suggestion,
-// appended to the raw error the operator sees.
-func trivyErrorHint(stderr string) string {
+// appended to the raw error the operator sees. withToken tells whether trivy
+// was given a registry token for its pull.
+func trivyErrorHint(stderr string, withToken bool) string {
 	s := strings.ToLower(stderr)
 	switch {
 	case strings.Contains(s, "vulnerability db") && (strings.Contains(s, "download") || strings.Contains(s, "update")):
 		return " (hint: no internet access to fetch the vulnerability DB — set TRIVY_OFFLINE=true to use only the DB shipped in the image, or point TRIVY_SERVER_URL at a shared trivy server)"
 	case strings.Contains(s, "deadline exceeded") || strings.Contains(s, "timeout"):
 		return " (hint: the scan timed out — raise SCAN_TIMEOUT; the first scan is slower while the DB is prepared)"
-	case strings.Contains(s, "manifest_unknown") || strings.Contains(s, "manifest unknown") || strings.Contains(s, "401") || strings.Contains(s, "unauthorized"):
-		return " (hint: trivy could not pull the image from Dockyard — check the image still exists and the registry credentials)"
+	case strings.Contains(s, "401") || strings.Contains(s, "unauthorized"):
+		if withToken {
+			return " (hint: the registry refused the short-lived pull token Dockyard gave the scanner for this repository (401) — trivy pulls from this Dockyard instance through localhost on its own PORT; if another service answers on that port, the token never reaches Dockyard)"
+		}
+		return " (hint: trivy pulled without credentials and the registry answered 401 — Dockyard gives the scanner a pull token only in embedded mode with V2_AUTH_ENABLED=true; in proxy mode the pull goes through Dockyard's registry authentication with none)"
+	case strings.Contains(s, "manifest_unknown") || strings.Contains(s, "manifest unknown"):
+		return " (hint: trivy could not find the image in Dockyard — check it still exists, it may have been deleted or garbage-collected since the scan was queued)"
+	case strings.Contains(s, "403 forbidden"):
+		return " (hint: the registry refused trivy's pull (403) — the scanner's token covers only the repository being scanned, read-only)"
 	default:
 		return ""
 	}
@@ -227,8 +309,10 @@ func trivyErrorHint(stderr string) string {
 
 // trivyVersion runs `trivy --version` once and extracts the version string,
 // e.g. "Version: 0.56.2" -> "0.56.2".
-func trivyVersion(ctx context.Context, bin string) (string, error) {
-	return trivyVersionWithCmd(exec.CommandContext(ctx, bin, "--version")) //nolint:gosec // bin is operator/config-controlled
+func trivyVersion(ctx context.Context, bin, cacheDir string) (string, error) {
+	cmd := exec.CommandContext(ctx, bin, "--version") //nolint:gosec // bin is operator/config-controlled
+	cmd.Env = trivyEnv(cacheDir)
+	return trivyVersionWithCmd(cmd)
 }
 
 func trivyVersionWithCmd(cmd *exec.Cmd) (string, error) {

@@ -4,13 +4,17 @@ import (
 	"crypto/rand"
 	"crypto/subtle"
 	"encoding/base64"
+	"errors"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
 	"time"
 
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/labstack/echo/v4"
 
+	"dockyard/internal/reference"
 	"dockyard/internal/store"
 )
 
@@ -24,7 +28,8 @@ const (
 	robotSecretPrefix = "dkr_"
 
 	// ScannerUsername is the internal identity trivy uses to pull the images
-	// it scans. Its password is random per process and never stored.
+	// it scans. It has no password: it exists only in the tokens
+	// IssueScannerToken signs, one repository at a time.
 	ScannerUsername = "dockyard-scanner"
 )
 
@@ -38,27 +43,59 @@ func NewRobotSecret() (secret, hash string, err error) {
 	return secret, hashToken(secret), nil
 }
 
-// ScannerCredentials are what the scan dispatcher hands trivy. Pulls made
-// with them are exempt from the vulnerability gate — a blocked image must
-// still be re-scannable.
-func (m *Manager) ScannerCredentials() (username, password string) {
-	return ScannerUsername, m.scannerSecret
+// IssueScannerToken signs the registry token the scan dispatcher hands trivy
+// for one scan: the internal scanner identity, pull only, on repo alone, for
+// ttl. It is signed and audienced like the tokens /v2/token issues, so the
+// admin API refuses it; nothing stores it, and only this server can mint
+// one. Pulls made with it skip the vulnerability gate, so a blocked image
+// can still be scanned again.
+func (m *Manager) IssueScannerToken(repo string, ttl time.Duration) (string, error) {
+	if !reference.ValidName(repo) {
+		return "", fmt.Errorf("scanner token: %w %q", reference.ErrInvalidName, repo)
+	}
+	if ttl <= 0 {
+		return "", errors.New("scanner token: lifetime must be positive")
+	}
+	now := time.Now()
+	claims := jwt.MapClaims{
+		"aud":   audRegistry,
+		"sub":   ScannerUsername,
+		"scn":   true,
+		"role":  store.RoleReader,
+		"repos": []string{repo},
+		"iat":   now.Unix(),
+		"exp":   now.Add(ttl).Unix(),
+	}
+	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(m.secrets[0])
 }
 
-func newScannerSecret() string {
-	b := make([]byte, 32)
-	_, _ = rand.Read(b)
-	return base64.RawURLEncoding.EncodeToString(b)
+// scannerPrincipal checks the claims of a scanner token and returns the
+// identity it grants: a reader confined to the one repository it names. A
+// token naming no repository, several, or a pattern is not one this server
+// signed and is refused.
+func scannerPrincipal(claims jwt.MapClaims, sub string, registry bool) (Principal, error) {
+	repos, _ := claims["repos"].([]any)
+	if sub != ScannerUsername || !registry || len(repos) != 1 {
+		return Principal{}, errors.New("invalid claims")
+	}
+	repo, _ := repos[0].(string)
+	if !reference.ValidName(repo) { // also rules out '*' patterns
+		return Principal{}, errors.New("invalid claims")
+	}
+	return Principal{
+		Username:     ScannerUsername,
+		Role:         store.RoleReader,
+		RepoPatterns: []string{repo},
+		Scanner:      true,
+		Registry:     true,
+	}, nil
 }
 
-// authenticate checks registry credentials: the internal scanner, a robot
-// account or a user. Only the registry protocol calls it; the console login
-// accepts users only.
+// authenticate checks registry credentials: a robot account or a user. Only
+// the registry protocol calls it; the console login accepts users only.
 func (m *Manager) authenticate(username, password string) (Principal, bool) {
-	if username == ScannerUsername && m.scannerSecret != "" {
-		if subtle.ConstantTimeCompare([]byte(password), []byte(m.scannerSecret)) == 1 {
-			return Principal{Username: ScannerUsername, Role: store.RoleReader, Scanner: true}, true
-		}
+	if username == ScannerUsername {
+		// The scanner has no password, only per-scan tokens.
 		return Principal{}, false
 	}
 	if name, ok := strings.CutPrefix(username, RobotPrefix); ok {

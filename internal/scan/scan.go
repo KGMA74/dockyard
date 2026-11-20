@@ -16,18 +16,24 @@ import (
 
 // Config holds the operator-provided settings the dispatcher needs.
 type Config struct {
-	TrivyBin       string        // path to the trivy binary, e.g. "/trivy"
-	TrivyServerURL string        // TRIVY_SERVER_URL — optional; empty = standalone mode (trivy manages its own DB)
-	TrivyCacheDir  string        // persistent dir for trivy's vulnerability DB / image cache
-	RegistryURL    string        // how trivy reaches Dockyard's own /v2 endpoint
-	RegistryUser   string        // credentials trivy uses to pull from Dockyard
-	RegistryPass   string
+	TrivyBin       string // path to the trivy binary, e.g. "/trivy"
+	TrivyServerURL string // TRIVY_SERVER_URL — optional; empty = standalone mode (trivy manages its own DB)
+	TrivyCacheDir  string // persistent dir for trivy's vulnerability DB / image cache
+	RegistryURL    string // how trivy reaches Dockyard's own /v2 endpoint
+	// RegistryToken, when set, mints the credential trivy pulls with: a
+	// token for repo alone, pull only, valid for ttl. Nil when the registry
+	// trivy pulls from needs none from Dockyard (V2 auth off, proxy mode).
+	RegistryToken  func(repo string, ttl time.Duration) (string, error)
 	Insecure       bool          // pass --insecure to trivy (plain HTTP / self-signed local pulls)
 	Offline        bool          // TRIVY_OFFLINE — scan with only the seeded/cached DB, never hit the network
 	Timeout        time.Duration // per-scan subprocess timeout
 	MaxReportBytes int64
 	DedupWindow    time.Duration // reuse a recent successful scan instead of re-running
 }
+
+// scanTokenGrace is how much longer than the scan timeout the scanner's
+// registry token lives.
+const scanTokenGrace = time.Minute
 
 // Dispatcher runs at most one trivy scan at a time (image pulls + extraction
 // are CPU/disk heavy; unbounded parallelism is a real risk on a small host).
@@ -173,8 +179,26 @@ func (d *Dispatcher) execute(sc *store.ScanResult) error {
 	ctx, cancel := context.WithTimeout(context.Background(), d.cfg.Timeout)
 	defer cancel()
 
-	imageRef := fmt.Sprintf("%s/%s@%s", d.cfg.RegistryURL, sc.Name, sc.Digest)
-	report, err := runTrivy(ctx, d.cfg.TrivyBin, d.cfg.TrivyServerURL, d.cfg.TrivyCacheDir, imageRef, d.cfg.RegistryUser, d.cfg.RegistryPass, d.cfg.Insecure, d.cfg.Offline, d.cfg.Timeout, d.cfg.MaxReportBytes)
+	run := trivyRun{
+		bin:      d.cfg.TrivyBin,
+		server:   d.cfg.TrivyServerURL,
+		cacheDir: d.cfg.TrivyCacheDir,
+		imageRef: fmt.Sprintf("%s/%s@%s", d.cfg.RegistryURL, sc.Name, sc.Digest),
+		insecure: d.cfg.Insecure,
+		offline:  d.cfg.Offline,
+		timeout:  d.cfg.Timeout,
+		maxBytes: d.cfg.MaxReportBytes,
+	}
+	if d.cfg.RegistryToken != nil {
+		// Trivy does not refresh it, so it must outlive the scan, whose
+		// subprocess is killed at Timeout.
+		token, err := d.cfg.RegistryToken(sc.Name, d.cfg.Timeout+scanTokenGrace)
+		if err != nil {
+			return fmt.Errorf("scan: issue the scanner's registry token: %w", err)
+		}
+		run.registryToken = token
+	}
+	report, err := runTrivy(ctx, run)
 	if err != nil {
 		return err
 	}
@@ -191,7 +215,7 @@ func (d *Dispatcher) execute(sc *store.ScanResult) error {
 	if err := d.store.RecordScanVulnerabilities(sc.ID, vulns); err != nil {
 		return fmt.Errorf("scan: record vulnerabilities: %w", err)
 	}
-	version, err := trivyVersion(ctx, d.cfg.TrivyBin)
+	version, err := trivyVersion(ctx, d.cfg.TrivyBin, d.cfg.TrivyCacheDir)
 	if err != nil {
 		version = ""
 	}

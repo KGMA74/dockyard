@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"dockyard/internal/auth"
 	"dockyard/internal/storage/storagetest"
 	"dockyard/internal/store"
 )
@@ -43,13 +44,13 @@ func setPolicy(t *testing.T, base, adminJWT string, scanOnPush bool, block strin
 
 func TestVulnerabilityGate(t *testing.T) {
 	var st *store.Store
-	var scannerUser, scannerPass string
+	var mgr *auth.Manager
 	srv := httptest.NewServer(newTestServer(t, func(s *Server) {
 		s.v2AuthEnabled = true
 		s.scanEnabled = true
 		s.trivyOffline = true // no DB download in tests; no trivy binary either
 		st = s.store
-		scannerUser, scannerPass = s.auth.ScannerCredentials()
+		mgr = s.auth
 	}))
 	t.Cleanup(srv.Close)
 	adminJWT := loginAs(t, srv.URL, "admin", "test-password")
@@ -106,7 +107,10 @@ func TestVulnerabilityGate(t *testing.T) {
 	})
 
 	t.Run("the scanner can still pull a blocked image to re-scan it", func(t *testing.T) {
-		token := fetchToken(t, srv.URL, scannerUser, scannerPass)
+		token, err := mgr.IssueScannerToken("team/app", time.Minute)
+		if err != nil {
+			t.Fatal(err)
+		}
 		if got := authedStatus(t, srv.URL, http.MethodGet, "/v2/team/app/manifests/1.0", token, nil); got != http.StatusOK {
 			t.Fatalf("scanner pull = %d", got)
 		}

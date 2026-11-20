@@ -96,6 +96,14 @@ SCAN_MAX_REPORT_BYTES=20971520       # cap on the raw trivy JSON report (20 MiB)
 SCAN_DEDUP_WINDOW=1h                 # reuse a recent successful scan for the same digest
 TRIVY_INSECURE_REGISTRY=true         # trivy pulls from Dockyard over plain HTTP on localhost
 
+# Nothing to set for registry auth. With V2_AUTH_ENABLED=true (embedded mode)
+# each scan hands trivy its own token, in its environment only: pull only, on
+# the scanned repository alone, valid for SCAN_TIMEOUT + 1 minute, signed with
+# JWT_SECRET. Trivy runs with an explicit environment: it inherits only PATH,
+# HTTP_PROXY, HTTPS_PROXY, NO_PROXY, SSL_CERT_FILE and SSL_CERT_DIR (and
+# SYSTEMROOT on Windows) from Dockyard's, never JWT_SECRET or other secrets —
+# so TRIVY_* variables meant for trivy itself are not passed through either.
+
 # ── Signed-push enforcement (cosign) ──────────────────────────────────────────
 # Off by default. When on, tag pushes are rejected unless a valid cosign
 # signature already exists for the digest — verified server-side against
