@@ -54,6 +54,12 @@ auth:
 #   https://<your-host>/api/admin/auth/oidc/callback
 # Accounts are created on first sign-in; password sign-in keeps working for
 # local accounts (the bootstrap admin included).
+#
+# Not required: SSO can also be set up from the console (Settings → Single
+# sign-on), with no redeploy. enabled=true here makes these values the source
+# of truth and the console read-only. To configure SSO in the console but keep
+# the client secret in Kubernetes, leave enabled=false and set clientSecret
+# only (or OIDC_CLIENT_SECRET in auth.existingSecret).
 oidc:
   enabled: false
   issuerURL: ""          # e.g. https://auth.example.com/application/o/dockyard/

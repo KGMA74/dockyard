@@ -16,6 +16,17 @@ CORS_ALLOWED_ORIGINS=https://tools.example.com
 # Any OIDC provider: Authentik, Keycloak, Authelia, Zitadel, Entra ID, Google,
 # Dex… Register Dockyard as a confidential client with the redirect URI
 #   https://<host>/api/admin/auth/oidc/callback
+#
+# Two ways to configure it — pick one:
+#   · From the console: Settings → Single sign-on (admins). Applied at once,
+#     no restart, with a button that tests the issuer. The client secret is
+#     stored encrypted (AES-256-GCM, key derived from JWT_SECRET). Leave every
+#     OIDC_* variable below unset — except, optionally, OIDC_CLIENT_SECRET to
+#     keep the secret in the deployment (a Kubernetes Secret) instead.
+#   · From the environment: set OIDC_ISSUER_URL and the rest below. The
+#     environment then owns the configuration and the console shows it
+#     read-only (GitOps-friendly: nothing changed behind your back).
+#
 # Setting the issuer is what turns SSO on. Accounts are created on first
 # sign-in (matched on the provider's subject, never on the username, so an
 # SSO identity cannot take over a local account of the same name). Password
