@@ -22,6 +22,7 @@ Un serveur Docker Registry V2 léger, écrit en Go. Livré sous forme d'un **bin
 - **Garbage collection, politiques de rétention, réplication, quotas** — tous avec prévisualisation dry-run ; le GC fonctionne sur les backends local et S3
 - **Diff de tags, explorateur de layers, recherche serveur** — inspecter et comparer les images depuis l'UI
 - **Notifications in-app, journal d'audit, webhooks** — sur le même flux d'événements
+- **SSO** — tout fournisseur OpenID Connect (Authentik, Keycloak, Authelia, Entra ID…), rôles depuis les groupes, comptes créés à la première connexion ; secrets CLI pour docker login
 - **Auth JWT** sur l'API admin, token auth Docker sur `/v2/*`, logs JSON structurés, tracing OpenTelemetry optionnel
 
 ## Modes
