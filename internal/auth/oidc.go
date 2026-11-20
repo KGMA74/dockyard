@@ -110,6 +110,12 @@ func (m *Manager) EnableOIDC(cfg OIDCConfig) {
 	if cfg.DisplayName == "" {
 		cfg.DisplayName = "SSO"
 	}
+	if cfg.RedirectURL == "" {
+		// Then it is rebuilt per request from Host and X-Forwarded-Proto —
+		// headers a client chooses. The provider's redirect URI allow-list is
+		// what still holds; an exact value does not depend on it.
+		slog.Warn("oidc: OIDC_REDIRECT_URL is not set; the callback URL is derived from request headers. Set it to the exact URL registered at the provider.")
+	}
 	m.oidc = &oidcState{cfg: cfg, codes: map[string]pendingLogin{}}
 }
 
@@ -201,6 +207,9 @@ func (m *Manager) OIDCLogin(c echo.Context) error {
 	}
 	state, nonce, verifier := randomHex(16), randomHex(16), oauth2.GenerateVerifier()
 	flow, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		// Signed with the session key, so it must never pass for a session
+		// token (validate refuses this audience) — nor one for it.
+		"aud": audOIDCFlow,
 		"st":  state,
 		"nc":  nonce,
 		"pv":  verifier,
@@ -252,6 +261,9 @@ func (m *Manager) OIDCCallback(c echo.Context) error {
 		return oidcFailure(c, "expired", err)
 	}
 	flow, _ := flowTok.Claims.(jwt.MapClaims)
+	if aud, err := flow.GetAudience(); err != nil || len(aud) != 1 || aud[0] != audOIDCFlow {
+		return oidcFailure(c, "expired", errors.New("not an sso flow token"))
+	}
 	state, _ := flow["st"].(string)
 	nonce, _ := flow["nc"].(string)
 	verifier, _ := flow["pv"].(string)

@@ -40,10 +40,30 @@ type Principal struct {
 	// Neither may use the admin API.
 	RobotID int64
 	Scanner bool
+	// Registry is set when the principal came from a registry token (minted
+	// by /v2/token). Those are trade-ins for registry credentials — a
+	// password, but also a CLI secret or nothing at all with anonymous pull —
+	// so they are only good on /v2, never on the admin API.
+	Registry bool
 }
 
 // Machine reports whether the principal is a robot or the internal scanner.
 func (p Principal) Machine() bool { return p.RobotID != 0 || p.Scanner }
+
+// consoleAllowed reports whether the principal may use the admin API: a
+// person who signed in to the console, not a robot, the scanner, the
+// anonymous puller or a registry token.
+func (p Principal) consoleAllowed() bool {
+	return !p.Machine() && !p.Registry && p.Username != anonymousUser
+}
+
+// Token audiences. Console access tokens carry none (they predate the claim);
+// every other token Dockyard signs names its one use, so it cannot be
+// replayed somewhere else.
+const (
+	audRegistry = v2Service
+	audOIDCFlow = "dockyard-oidc-flow"
+)
 
 // Action is a permission checked by Authorize.
 type Action string
@@ -215,7 +235,12 @@ func (m *Manager) validate(raw string) (Principal, error) {
 	if !ok {
 		return Principal{}, errors.New("invalid claims")
 	}
-	p := Principal{}
+	aud, err := claims.GetAudience()
+	if err != nil || len(aud) > 1 || (len(aud) == 1 && aud[0] != audRegistry) {
+		// An OIDC flow cookie, or anything else signed for another purpose.
+		return Principal{}, errors.New("invalid token")
+	}
+	p := Principal{Registry: len(aud) == 1}
 	p.Username, _ = claims["sub"].(string)
 	if sid, ok := claims["sid"].(string); ok {
 		p.SessionID, _ = strconv.ParseInt(sid, 10, 64)
@@ -225,6 +250,7 @@ func (m *Manager) validate(raw string) (Principal, error) {
 	// always a plain reader, whatever a same-named account might be.
 	if p.Username == anonymousUser {
 		p.Role = store.RoleReader
+		p.Registry = true
 		return p, nil
 	}
 	if scanner, _ := claims["scn"].(bool); scanner {
@@ -232,13 +258,14 @@ func (m *Manager) validate(raw string) (Principal, error) {
 		if p.Username != ScannerUsername {
 			return Principal{}, errors.New("invalid claims")
 		}
-		return Principal{Username: ScannerUsername, Role: store.RoleReader, Scanner: true}, nil
+		return Principal{Username: ScannerUsername, Role: store.RoleReader, Scanner: true, Registry: true}, nil
 	}
 	if rid, ok := claims["rid"].(float64); ok {
 		robot, ok := m.robotPrincipal(int64(rid))
 		if !ok {
 			return Principal{}, errors.New("robot account no longer exists or has expired")
 		}
+		robot.Registry = true
 		return robot, nil
 	}
 
@@ -619,7 +646,23 @@ func (m *Manager) ChangePassword(c echo.Context) error {
 
 func (m *Manager) Username() string { return m.username }
 
-const machineDenied = "robot accounts can only use the registry API (/v2)"
+const (
+	machineDenied  = "robot accounts can only use the registry API (/v2)"
+	registryDenied = "registry tokens are only valid on the registry API (/v2); sign in to the console instead"
+)
+
+// consoleRefusal is the 403 message for a principal the admin API refuses,
+// or "" when it may proceed.
+func consoleRefusal(p Principal) string {
+	switch {
+	case p.consoleAllowed():
+		return ""
+	case p.Machine():
+		return machineDenied
+	default:
+		return registryDenied
+	}
+}
 
 // Middleware vérifie le JWT, rejette les tokens révoqués et installe le
 // Principal dans le contexte.
@@ -634,8 +677,8 @@ func (m *Manager) Middleware() echo.MiddlewareFunc {
 			if err != nil {
 				return c.JSON(http.StatusUnauthorized, map[string]string{"error": err.Error()})
 			}
-			if p.Machine() {
-				return c.JSON(http.StatusForbidden, map[string]string{"error": machineDenied})
+			if msg := consoleRefusal(p); msg != "" {
+				return c.JSON(http.StatusForbidden, map[string]string{"error": msg})
 			}
 			c.Set(principalKey, p)
 			return next(c)
@@ -661,8 +704,8 @@ func (m *Manager) MiddlewareEventStream() echo.MiddlewareFunc {
 			if err != nil {
 				return c.JSON(http.StatusUnauthorized, map[string]string{"error": err.Error()})
 			}
-			if p.Machine() {
-				return c.JSON(http.StatusForbidden, map[string]string{"error": machineDenied})
+			if msg := consoleRefusal(p); msg != "" {
+				return c.JSON(http.StatusForbidden, map[string]string{"error": msg})
 			}
 			c.Set(principalKey, p)
 			return next(c)
