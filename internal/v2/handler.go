@@ -162,7 +162,7 @@ func (h *Handler) manifests(w http.ResponseWriter, r *http.Request, name, ref st
 		w.Header().Set("Content-Type", mediaType(content))
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(content)))
 		// The scanner pulling an image to scan it is not someone using it.
-		if p, ok := auth.PrincipalFromRequest(r); h.onPull != nil && r.Method == http.MethodGet && !(ok && p.Scanner) {
+		if p, ok := auth.PrincipalFromRequest(r); h.onPull != nil && r.Method == http.MethodGet && (!ok || !p.Scanner) {
 			h.onPull(name, ref)
 		}
 		if r.Method == http.MethodHead {
