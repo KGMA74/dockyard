@@ -56,6 +56,8 @@ func newTestDispatcher(t *testing.T, st *store.Store, extraCfg func(*Config)) *D
 		RegistryURL:    "registry.local",
 		Timeout:        5 * time.Second,
 		DedupWindow:    time.Hour,
+		// No DB refresh unless a test asks: it would hold the scan lock.
+		Offline: true,
 	}
 	if extraCfg != nil {
 		extraCfg(&cfg)
@@ -271,19 +273,6 @@ func captureLogs(t *testing.T) *syncBuffer {
 	return logs
 }
 
-func readHelperRecord(t *testing.T, path string) helperRecord {
-	t.Helper()
-	raw, err := os.ReadFile(path)
-	if err != nil {
-		t.Fatalf("the fake trivy left no record: %v", err)
-	}
-	var rec helperRecord
-	if err := json.Unmarshal(raw, &rec); err != nil {
-		t.Fatal(err)
-	}
-	return rec
-}
-
 // fakeScannerToken stands in for auth.Manager.IssueScannerToken.
 type fakeScannerToken struct {
 	mu    sync.Mutex
@@ -309,16 +298,19 @@ var (
 func TestDispatcherHandsTrivyAPerScanRegistryToken(t *testing.T) {
 	st := openTestStore(t)
 	logs := captureLogs(t)
-	out := filepath.Join(t.TempDir(), "trivy-call.json")
+	cache := t.TempDir()
+	out := filepath.Join(t.TempDir(), "trivy-runs.jsonl")
 	t.Setenv("HELPER_MODE", "report")
 	t.Setenv("HELPER_OUT", out)
 	// trivy echoing the token in its report must not get it stored.
 	t.Setenv("HELPER_REPORT", `{"Results":[{"Target":"`+testScannerToken+`","Vulnerabilities":[{"VulnerabilityID":"CVE-1","Severity":"HIGH"}]}]}`)
 	t.Setenv("JWT_SECRET", "dockyard-signing-key-must-not-reach-trivy")
+	t.Setenv("TRIVY_REGISTRY_TOKEN", "a-global-token-must-not-reach-trivy")
 
 	tokens := &fakeScannerToken{token: testScannerToken}
 	d := newTestDispatcher(t, st, func(c *Config) {
 		c.Timeout = 3 * time.Second
+		c.TrivyCacheDir = cache
 		c.RegistryToken = tokens.issue
 	})
 	res, err := d.Enqueue("team/app", "1.0", "sha256:withtoken", "admin")
@@ -336,9 +328,26 @@ func TestDispatcherHandsTrivyAPerScanRegistryToken(t *testing.T) {
 	}
 	tokens.mu.Unlock()
 
-	rec := readHelperRecord(t, out)
-	if !slices.Contains(rec.Env, "TRIVY_REGISTRY_TOKEN="+testScannerToken) {
-		t.Fatalf("trivy did not get the token in TRIVY_REGISTRY_TOKEN: %v", rec.Env)
+	rec := scanRun(t, readHelperRuns(t, out))
+	if got := rec.registryToken("registry.local"); got != testScannerToken {
+		t.Fatalf("trivy's docker config has %q for registry.local, want the scan token (config: %s)", got, rec.DockerConfig)
+	}
+	var cfg dockerConfig
+	if err := json.Unmarshal([]byte(rec.DockerConfig), &cfg); err != nil || len(cfg.Auths) != 1 {
+		t.Fatalf("docker config = %s, want registry.local alone", rec.DockerConfig)
+	}
+	if !isWindows() && rec.DockerConfigMode != "700 600" {
+		t.Fatalf("docker config permissions = %q, want 700 600", rec.DockerConfigMode)
+	}
+	dir, _ := rec.env("DOCKER_CONFIG")
+	if filepath.Dir(dir) != scratchDir(cache) {
+		t.Fatalf("DOCKER_CONFIG = %q, want a directory under %q", dir, scratchDir(cache))
+	}
+	if fileExists(dir) {
+		t.Fatalf("the scan's registry auth %s was not removed", dir)
+	}
+	if tmp, _ := rec.env("TMPDIR"); tmp != scratchDir(cache) || !fileExists(tmp) {
+		t.Fatalf("TMPDIR = %q, want the existing %q", tmp, scratchDir(cache))
 	}
 	if strings.Contains(strings.Join(rec.Args, " "), testScannerToken) {
 		t.Fatalf("token on trivy's command line: %v", rec.Args)
@@ -347,8 +356,11 @@ func TestDispatcherHandsTrivyAPerScanRegistryToken(t *testing.T) {
 		t.Fatalf("image ref = %q", rec.Args[len(rec.Args)-1])
 	}
 	for _, kv := range rec.Env {
-		if strings.Contains(kv, "dockyard-signing-key") || strings.HasPrefix(kv, "DOCKER_USERNAME=") || strings.HasPrefix(kv, "DOCKER_PASSWORD=") {
-			t.Fatalf("trivy inherited %q", kv)
+		if strings.HasPrefix(kv, "HELPER_REPORT=") {
+			continue // the fake's own switch, carrying the token on purpose
+		}
+		if strings.Contains(kv, testScannerSignature) || strings.Contains(kv, "must-not-reach-trivy") || strings.HasPrefix(kv, "DOCKER_USERNAME=") {
+			t.Fatalf("trivy's environment carries %q", kv)
 		}
 	}
 
@@ -366,7 +378,7 @@ func TestDispatcherHandsTrivyAPerScanRegistryToken(t *testing.T) {
 
 func TestDispatcherWithoutTokenSourcePullsAnonymously(t *testing.T) {
 	st := openTestStore(t)
-	out := filepath.Join(t.TempDir(), "trivy-call.json")
+	out := filepath.Join(t.TempDir(), "trivy-runs.jsonl")
 	t.Setenv("HELPER_MODE", "report")
 	t.Setenv("HELPER_OUT", out)
 	t.Setenv("HELPER_REPORT", `{"Results":[]}`)
@@ -377,8 +389,8 @@ func TestDispatcherWithoutTokenSourcePullsAnonymously(t *testing.T) {
 		t.Fatal(err)
 	}
 	waitForStatus(t, st, res.Scan.ID, "succeeded")
-	for _, kv := range readHelperRecord(t, out).Env {
-		if strings.HasPrefix(kv, "TRIVY_REGISTRY_TOKEN=") || strings.HasPrefix(kv, "TRIVY_USERNAME=") {
+	for _, kv := range scanRun(t, readHelperRuns(t, out)).Env {
+		if strings.HasPrefix(kv, "DOCKER_CONFIG=") || strings.HasPrefix(kv, "TRIVY_REGISTRY_TOKEN=") || strings.HasPrefix(kv, "TRIVY_USERNAME=") {
 			t.Fatalf("anonymous scan handed trivy %q", kv)
 		}
 	}
@@ -387,10 +399,14 @@ func TestDispatcherWithoutTokenSourcePullsAnonymously(t *testing.T) {
 func TestDispatcherRefusedTokenFailsClearlyWithoutLeaking(t *testing.T) {
 	st := openTestStore(t)
 	logs := captureLogs(t)
+	cache := t.TempDir()
 	t.Setenv("HELPER_MODE", "unauthorized") // echoes the token on stderr
 
 	tokens := &fakeScannerToken{token: testScannerToken}
-	d := newTestDispatcher(t, st, func(c *Config) { c.RegistryToken = tokens.issue })
+	d := newTestDispatcher(t, st, func(c *Config) {
+		c.TrivyCacheDir = cache
+		c.RegistryToken = tokens.issue
+	})
 	res, err := d.Enqueue("team/app", "1.0", "sha256:refused", "admin")
 	if err != nil {
 		t.Fatal(err)
@@ -409,5 +425,83 @@ func TestDispatcherRefusedTokenFailsClearlyWithoutLeaking(t *testing.T) {
 	}
 	if l := logs.String(); !strings.Contains(l, "scan: failed") || strings.Contains(l, testScannerSignature) {
 		t.Fatalf("want a failure log line without the token, got:\n%s", l)
+	}
+	// A failed scan cleans up its registry auth as well.
+	if entries, _ := os.ReadDir(scratchDir(cache)); len(entries) != 0 {
+		t.Fatalf("scratch dir after a failed scan: %v", entries)
+	}
+}
+
+// Online, the dispatcher downloads both databases itself before the first
+// scan — without any credential — and the scan of a Java image then runs
+// with both skip flags and the Java DB already in the cache: nothing for it
+// to fetch from ghcr.io.
+func TestJavaImageScanUsesTheDatabasesTheDispatcherDownloaded(t *testing.T) {
+	st := openTestStore(t)
+	cache := t.TempDir()
+	out := filepath.Join(t.TempDir(), "trivy-runs.jsonl")
+	t.Setenv("HELPER_MODE", "java")
+	t.Setenv("HELPER_OUT", out)
+	t.Setenv("HELPER_REPORT", `{"Results":[{"Target":"app.jar","Vulnerabilities":[{"VulnerabilityID":"CVE-2021-44228","Severity":"CRITICAL"}]}]}`)
+
+	tokens := &fakeScannerToken{token: testScannerToken}
+	d := newTestDispatcher(t, st, func(c *Config) {
+		c.TrivyServerURL = "" // standalone
+		c.TrivyCacheDir = cache
+		c.Offline = false
+		c.RegistryToken = tokens.issue
+	})
+	// Queued at once: it must wait for the databases, not race them.
+	res, err := d.Enqueue("team/java-app", "1.0", "sha256:java", "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := waitForStatus(t, st, res.Scan.ID, "succeeded")
+	if got.CriticalCount != 1 {
+		t.Fatalf("counts = %+v", got)
+	}
+
+	runs := readHelperRuns(t, out)
+	var downloads []string
+	for i, r := range runs {
+		if !isDBDownload(r) {
+			continue
+		}
+		for _, flag := range []string{vulnDB, javaDB} {
+			if slices.Contains(r.Args, flag) {
+				downloads = append(downloads, flag)
+			}
+		}
+		if _, set := r.env("DOCKER_CONFIG"); set || r.DockerConfig != "" {
+			t.Errorf("DB download %d ran with registry auth: %v", i, r.Env)
+		}
+	}
+	if !slices.Equal(downloads, []string{vulnDB, javaDB}) {
+		t.Fatalf("DB downloads = %v, want the vulnerability DB then the Java DB", downloads)
+	}
+	scan := scanRun(t, runs)
+	if scanIdx := slices.IndexFunc(runs, func(r helperRecord) bool { return !isDBDownload(r) && slices.Contains(r.Args, "image") }); scanIdx < 2 {
+		t.Fatalf("the scan ran before the DB downloads finished (run %d)", scanIdx)
+	}
+	for _, flag := range []string{"--skip-db-update", "--skip-java-db-update"} {
+		if !slices.Contains(scan.Args, flag) {
+			t.Errorf("scan ran without %s: %v", flag, scan.Args)
+		}
+	}
+}
+
+// Offline (or a failed download), nothing is fetched and a Java scan says
+// plainly what is missing instead of reaching for ghcr.io.
+func TestJavaImageScanWithoutJavaDBExplainsWhy(t *testing.T) {
+	st := openTestStore(t)
+	t.Setenv("HELPER_MODE", "java")
+	d := newTestDispatcher(t, st, func(c *Config) { c.TrivyCacheDir = t.TempDir() }) // offline, empty cache
+	res, err := d.Enqueue("team/java-app", "1.0", "sha256:nojavadb", "admin")
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := waitForStatus(t, st, res.Scan.ID, "failed")
+	if !strings.Contains(got.Error, "Java DB is not in TRIVY_CACHE_DIR") {
+		t.Fatalf("error = %q, want the Java DB hint", got.Error)
 	}
 }

@@ -127,7 +127,11 @@ func (c *cappedBuffer) Write(p []byte) (int, error) {
 // scratch with no HOME, so trivy's default cache-dir resolution is
 // unreliable even in server mode (it still pulls and unpacks image layers
 // locally to scan them, regardless of where the vulnerability DB lives).
-func buildTrivyArgs(server, cacheDir, imageRef string, insecure, offline bool, timeout time.Duration) []string {
+//
+// A scan never downloads a database: the dispatcher refreshes them on its
+// own schedule (refreshDBs), so a scan is not the one that fetches ~1 GB of
+// Java DB, and the scan's registry token is never near a DB download.
+func buildTrivyArgs(server, cacheDir, imageRef string, insecure bool, timeout time.Duration) []string {
 	args := []string{
 		"image",
 		"--cache-dir", cacheDir,
@@ -141,11 +145,12 @@ func buildTrivyArgs(server, cacheDir, imageRef string, insecure, offline bool, t
 		// context cancellation.
 		args = append(args, "--timeout", timeout.String())
 	}
-	if offline {
-		// Scan with only the seeded/cached DB — never touch the network.
-		args = append(args, "--skip-db-update", "--skip-java-db-update")
-	}
-	if server != "" {
+	// The Java DB is used client-side in both modes; the vulnerability DB
+	// only in standalone mode (a trivy server keeps its own).
+	args = append(args, "--skip-java-db-update")
+	if server == "" {
+		args = append(args, "--skip-db-update")
+	} else {
 		args = append(args, "--server", server)
 	}
 	if insecure {
@@ -157,26 +162,25 @@ func buildTrivyArgs(server, cacheDir, imageRef string, insecure, offline bool, t
 // trivyRun is one `trivy image` invocation.
 type trivyRun struct {
 	bin, server, cacheDir, imageRef string
-	insecure, offline               bool
+	insecure                        bool
 	timeout                         time.Duration
 	maxBytes                        int64
-	// registryToken is the bearer token trivy pulls the image with; empty
-	// means an anonymous pull. It only ever travels in the child's
-	// environment as TRIVY_REGISTRY_TOKEN: never on the command line (ps
-	// shows it to every local user), in a log, an error or a stored report.
-	registryToken string
+	// dockerConfig is the per-scan DOCKER_CONFIG directory holding the
+	// registry token for Dockyard's host alone (writeRegistryAuth); empty
+	// means an anonymous pull. The token itself never reaches the command
+	// line (ps shows it to every local user) or the environment.
+	dockerConfig string
+	// secret is that token, scrubbed from trivy's output before it reaches
+	// a log, an error or a stored report.
+	secret string
 }
 
-// command builds the trivy process. Trivy 0.56 reads registry credentials
-// from TRIVY_USERNAME/TRIVY_PASSWORD or TRIVY_REGISTRY_TOKEN only. The token
-// is the one that fits Dockyard: trivy sends it as-is as a Bearer header on
-// /v2/* without going through /v2/token, where it would need a password.
 func (r trivyRun) command(ctx context.Context) *exec.Cmd {
-	args := buildTrivyArgs(r.server, r.cacheDir, r.imageRef, r.insecure, r.offline, r.timeout)
+	args := buildTrivyArgs(r.server, r.cacheDir, r.imageRef, r.insecure, r.timeout)
 	cmd := exec.CommandContext(ctx, r.bin, args...) //nolint:gosec // bin/server/imageRef are operator/config-controlled, not end-user input
 	var extra []string
-	if r.registryToken != "" {
-		extra = append(extra, "TRIVY_REGISTRY_TOKEN="+r.registryToken)
+	if r.dockerConfig != "" {
+		extra = append(extra, "DOCKER_CONFIG="+r.dockerConfig)
 	}
 	cmd.Env = trivyEnv(r.cacheDir, extra...)
 	return cmd
@@ -185,7 +189,7 @@ func (r trivyRun) command(ctx context.Context) *exec.Cmd {
 // runTrivy shells out to `trivy image` (standalone or --server, depending on
 // whether server is set) and returns the raw JSON report.
 func runTrivy(ctx context.Context, r trivyRun) ([]byte, error) {
-	return runTrivyWithCmd(r.command(ctx), r.maxBytes, r.registryToken)
+	return runTrivyWithCmd(r.command(ctx), r.maxBytes, r.secret)
 }
 
 // trivyPassEnv lists the only variables trivy inherits from Dockyard's
@@ -202,11 +206,12 @@ var trivyPassEnv = []string{
 }
 
 // trivyEnv builds the explicit environment of a trivy process: the
-// pass-through list above, TMPDIR and HOME pointed at cacheDir, then extra.
-// TMPDIR: the final image runs FROM scratch, which has no /tmp — trivy's
-// DB download and layer extraction need a writable temp dir, and cacheDir is
-// created by the server at startup. HOME likewise, so nothing trivy derives
-// from it lands outside the cache.
+// pass-through list above, TMPDIR on the cache's scratch dir, HOME on the
+// cache, then extra. TMPDIR: the final image runs FROM scratch, which has no
+// /tmp — trivy's DB downloads and layer extraction need a writable temp dir
+// (scratchDir). HOME, so nothing trivy derives from it lands outside the
+// cache — and there is no ~/.docker/config.json there to pick credentials
+// from.
 func trivyEnv(cacheDir string, extra ...string) []string {
 	var env []string
 	for _, kv := range os.Environ() {
@@ -218,7 +223,7 @@ func trivyEnv(cacheDir string, extra ...string) []string {
 			env = append(env, kv)
 		}
 	}
-	env = append(env, "TMPDIR="+cacheDir)
+	env = append(env, "TMPDIR="+scratchDir(cacheDir))
 	if cacheDir != "" {
 		env = append(env, "HOME="+cacheDir)
 	}
@@ -265,11 +270,18 @@ func runTrivyWithCmd(cmd *exec.Cmd, maxBytes int64, secret string) ([]byte, erro
 	return redact(stdout.buf.Bytes(), secret), nil
 }
 
-// downloadTrivyDB refreshes the vulnerability DB in the given cache dir. Used
-// for a best-effort background warm-up on startup so the DB shipped in the image
-// (which is as old as the build) is current before the first user scan.
-func downloadTrivyDB(ctx context.Context, bin, cacheDir string) error {
-	cmd := exec.CommandContext(ctx, bin, "--cache-dir", cacheDir, "image", "--download-db-only") //nolint:gosec // bin is operator/config-controlled
+// Database download flags for downloadTrivyDB.
+const (
+	vulnDB = "--download-db-only"
+	javaDB = "--download-java-db-only"
+)
+
+// downloadTrivyDB downloads or refreshes one trivy database (vulnDB or
+// javaDB) in the given cache dir. It runs with no registry credentials at
+// all: the databases come from public registries (ghcr.io by default), and
+// a token meant for Dockyard sent there is refused (DENIED).
+func downloadTrivyDB(ctx context.Context, bin, cacheDir, which string) error {
+	cmd := exec.CommandContext(ctx, bin, "--cache-dir", cacheDir, "image", which, "--quiet") //nolint:gosec // bin is operator/config-controlled
 	cmd.Env = trivyEnv(cacheDir)
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
@@ -278,7 +290,7 @@ func downloadTrivyDB(ctx context.Context, bin, cacheDir string) error {
 		if msg == "" {
 			msg = err.Error()
 		}
-		return fmt.Errorf("scan: trivy db refresh: %s", msg)
+		return fmt.Errorf("scan: trivy %s: %s", which, msg)
 	}
 	return nil
 }
@@ -289,6 +301,10 @@ func downloadTrivyDB(ctx context.Context, bin, cacheDir string) error {
 func trivyErrorHint(stderr string, withToken bool) string {
 	s := strings.ToLower(stderr)
 	switch {
+	case strings.Contains(s, "cannot be specified on the first run") && strings.Contains(s, "java"):
+		return " (hint: the Java DB is not in TRIVY_CACHE_DIR yet, and scans never download it — Dockyard fetches it at startup and every 12 hours unless TRIVY_OFFLINE=true; check the startup logs, or for an air-gapped install use an image built with --build-arg TRIVY_JAVA_DB=true)"
+	case strings.Contains(s, "cannot be specified on the first run"):
+		return " (hint: the vulnerability DB is not in TRIVY_CACHE_DIR yet, and scans never download it — Dockyard fetches it at startup and every 12 hours unless TRIVY_OFFLINE=true; check the startup logs)"
 	case strings.Contains(s, "vulnerability db") && (strings.Contains(s, "download") || strings.Contains(s, "update")):
 		return " (hint: no internet access to fetch the vulnerability DB — set TRIVY_OFFLINE=true to use only the DB shipped in the image, or point TRIVY_SERVER_URL at a shared trivy server)"
 	case strings.Contains(s, "deadline exceeded") || strings.Contains(s, "timeout"):

@@ -7,6 +7,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"sync"
 	"time"
 
@@ -25,15 +27,25 @@ type Config struct {
 	// trivy pulls from needs none from Dockyard (V2 auth off, proxy mode).
 	RegistryToken  func(repo string, ttl time.Duration) (string, error)
 	Insecure       bool          // pass --insecure to trivy (plain HTTP / self-signed local pulls)
-	Offline        bool          // TRIVY_OFFLINE — scan with only the seeded/cached DB, never hit the network
+	Offline        bool          // TRIVY_OFFLINE — never download the DBs, scan with the seeded/cached ones
 	Timeout        time.Duration // per-scan subprocess timeout
 	MaxReportBytes int64
 	DedupWindow    time.Duration // reuse a recent successful scan instead of re-running
 }
 
-// scanTokenGrace is how much longer than the scan timeout the scanner's
-// registry token lives.
-const scanTokenGrace = time.Minute
+const (
+	// scanTokenGrace is how much longer than the scan timeout the scanner's
+	// registry token lives.
+	scanTokenGrace = time.Minute
+
+	// dbRefreshInterval is how often the dispatcher refreshes trivy's
+	// databases, scans never doing it themselves. Trivy publishes its
+	// vulnerability DB every 6 hours and treats one as current for a day.
+	dbRefreshInterval = 12 * time.Hour
+
+	// dbRefreshTimeout bounds one refresh: the Java DB is ~1 GB compressed.
+	dbRefreshTimeout = 30 * time.Minute
+)
 
 // Dispatcher runs at most one trivy scan at a time (image pulls + extraction
 // are CPU/disk heavy; unbounded parallelism is a real risk on a small host).
@@ -63,23 +75,68 @@ func NewDispatcher(st *store.Store, cfg Config) *Dispatcher {
 		wake:     make(chan struct{}, 1),
 		interval: 15 * time.Second,
 	}
-	go d.loop()
-
-	// Best-effort: refresh the vulnerability DB shipped in the image so the
-	// first real scan isn't the one that discovers a stale/missing DB. Skipped
-	// in offline mode and when deferring to an external trivy server.
-	if !cfg.Offline && cfg.TrivyServerURL == "" && cfg.TrivyBin != "" {
-		go func() {
-			ctx, cancel := context.WithTimeout(context.Background(), 10*time.Minute)
-			defer cancel()
-			if err := downloadTrivyDB(ctx, cfg.TrivyBin, cfg.TrivyCacheDir); err != nil {
-				slog.Warn("scan: vulnerability DB warm-up failed (scans will retry the download)", "err", err)
-			} else {
-				slog.Info("scan: vulnerability DB is up to date")
-			}
-		}()
+	// No trivy process runs yet: clear what a previous run left in the
+	// scratch dir, including the registry auth of an interrupted scan.
+	if err := resetScratchDir(cfg.TrivyCacheDir); err != nil {
+		slog.Warn("scan: could not reset trivy's scratch dir", "dir", scratchDir(cfg.TrivyCacheDir), "err", err)
 	}
+
+	if cfg.Offline || cfg.TrivyBin == "" {
+		if cfg.TrivyCacheDir != "" && !fileExists(filepath.Join(cfg.TrivyCacheDir, "java-db", "metadata.json")) {
+			slog.Warn("scan: no Java DB in the trivy cache and TRIVY_OFFLINE=true: images with Java dependencies cannot be scanned until one is provided (image built with --build-arg TRIVY_JAVA_DB=true)", "cache", cfg.TrivyCacheDir)
+		}
+	} else {
+		// Scans run with --skip-db-update/--skip-java-db-update, so the
+		// databases must be there first: the first refresh holds the scan
+		// lock, and scans queued meanwhile wait for it.
+		d.mu.Lock()
+		go func() {
+			defer d.mu.Unlock()
+			d.refreshDBs()
+		}()
+		go d.refreshLoop()
+	}
+	go d.loop()
 	return d
+}
+
+// refreshDBs downloads or updates trivy's databases, best effort: on failure
+// scans go on with what the cache already has. The vulnerability DB is only
+// needed in standalone mode — a trivy server keeps its own — while the Java
+// DB is used client-side in both modes. Callers hold d.mu, so a refresh never
+// runs under a scan.
+func (d *Dispatcher) refreshDBs() {
+	dbs := []string{javaDB}
+	if d.cfg.TrivyServerURL == "" {
+		dbs = []string{vulnDB, javaDB}
+	}
+	for _, which := range dbs {
+		ctx, cancel := context.WithTimeout(context.Background(), dbRefreshTimeout)
+		start := time.Now()
+		err := downloadTrivyDB(ctx, d.cfg.TrivyBin, d.cfg.TrivyCacheDir, which)
+		cancel()
+		name := map[string]string{vulnDB: "vulnerability DB", javaDB: "Java DB"}[which]
+		if err != nil {
+			slog.Warn("scan: "+name+" refresh failed, scans use the cached one if any", "err", err)
+			continue
+		}
+		slog.Info("scan: "+name+" is up to date", "took", time.Since(start).Round(time.Second))
+	}
+}
+
+func (d *Dispatcher) refreshLoop() {
+	ticker := time.NewTicker(dbRefreshInterval)
+	defer ticker.Stop()
+	for range ticker.C {
+		d.mu.Lock()
+		d.refreshDBs()
+		d.mu.Unlock()
+	}
+}
+
+func fileExists(path string) bool {
+	_, err := os.Stat(path)
+	return err == nil
 }
 
 // SetHub wires the dispatcher to the in-process event hub so scan completion
@@ -179,26 +236,7 @@ func (d *Dispatcher) execute(sc *store.ScanResult) error {
 	ctx, cancel := context.WithTimeout(context.Background(), d.cfg.Timeout)
 	defer cancel()
 
-	run := trivyRun{
-		bin:      d.cfg.TrivyBin,
-		server:   d.cfg.TrivyServerURL,
-		cacheDir: d.cfg.TrivyCacheDir,
-		imageRef: fmt.Sprintf("%s/%s@%s", d.cfg.RegistryURL, sc.Name, sc.Digest),
-		insecure: d.cfg.Insecure,
-		offline:  d.cfg.Offline,
-		timeout:  d.cfg.Timeout,
-		maxBytes: d.cfg.MaxReportBytes,
-	}
-	if d.cfg.RegistryToken != nil {
-		// Trivy does not refresh it, so it must outlive the scan, whose
-		// subprocess is killed at Timeout.
-		token, err := d.cfg.RegistryToken(sc.Name, d.cfg.Timeout+scanTokenGrace)
-		if err != nil {
-			return fmt.Errorf("scan: issue the scanner's registry token: %w", err)
-		}
-		run.registryToken = token
-	}
-	report, err := runTrivy(ctx, run)
+	report, err := d.scanImage(ctx, sc)
 	if err != nil {
 		return err
 	}
@@ -224,6 +262,43 @@ func (d *Dispatcher) execute(sc *store.ScanResult) error {
 		return fmt.Errorf("scan: compress report: %w", err)
 	}
 	return d.store.MarkScanSucceeded(sc.ID, counts.Critical, counts.High, counts.Medium, counts.Low, counts.Unknown, reportGz, version)
+}
+
+// scanImage runs trivy on the scan's image and returns its report. With a
+// token source, the token exists on disk only while trivy runs: its
+// DOCKER_CONFIG directory is removed as soon as trivy exits, whatever the
+// outcome, before the scan is recorded.
+func (d *Dispatcher) scanImage(ctx context.Context, sc *store.ScanResult) ([]byte, error) {
+	run := trivyRun{
+		bin:      d.cfg.TrivyBin,
+		server:   d.cfg.TrivyServerURL,
+		cacheDir: d.cfg.TrivyCacheDir,
+		imageRef: fmt.Sprintf("%s/%s@%s", d.cfg.RegistryURL, sc.Name, sc.Digest),
+		insecure: d.cfg.Insecure,
+		timeout:  d.cfg.Timeout,
+		maxBytes: d.cfg.MaxReportBytes,
+	}
+	if d.cfg.RegistryToken != nil {
+		// Trivy does not refresh it, so it must outlive the scan, whose
+		// subprocess is killed at Timeout.
+		token, err := d.cfg.RegistryToken(sc.Name, d.cfg.Timeout+scanTokenGrace)
+		if err != nil {
+			return nil, fmt.Errorf("scan: issue the scanner's registry token: %w", err)
+		}
+		// Keyed by Dockyard's host:port alone, so trivy presents the token
+		// there and nowhere else (not to ghcr.io for a DB, for instance).
+		dir, err := writeRegistryAuth(scratchDir(d.cfg.TrivyCacheDir), d.cfg.RegistryURL, token)
+		if err != nil {
+			return nil, err
+		}
+		defer func() {
+			if err := os.RemoveAll(dir); err != nil {
+				slog.Warn("scan: could not remove the scan's registry auth", "dir", dir, "err", err)
+			}
+		}()
+		run.dockerConfig, run.secret = dir, token
+	}
+	return runTrivy(ctx, run)
 }
 
 func (d *Dispatcher) publish(name, reference, actor string) {

@@ -27,14 +27,32 @@ func TestSeedTrivyCache(t *testing.T) {
 		}
 	})
 
-	t.Run("leaves a non-empty cache dir untouched", func(t *testing.T) {
+	t.Run("adds what the cache lacks, keeps what it has", func(t *testing.T) {
+		withJava := t.TempDir()
+		for dir, content := range map[string]string{"db": "baked-db", "java-db": "baked-java-db"} {
+			if err := os.MkdirAll(filepath.Join(withJava, dir), 0o755); err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(withJava, dir, "data"), []byte(content), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+		// A volume from an earlier version: a newer vulnerability DB, no Java DB.
 		cache := t.TempDir()
-		if err := os.WriteFile(filepath.Join(cache, "existing"), []byte("keep"), 0o644); err != nil {
+		if err := os.MkdirAll(filepath.Join(cache, "db"), 0o755); err != nil {
 			t.Fatal(err)
 		}
-		seedTrivyCache(cache, seed)
-		if _, err := os.Stat(filepath.Join(cache, "db")); !os.IsNotExist(err) {
-			t.Fatalf("cache dir with existing content should not be seeded")
+		if err := os.WriteFile(filepath.Join(cache, "db", "data"), []byte("newer-db"), 0o644); err != nil {
+			t.Fatal(err)
+		}
+
+		seedTrivyCache(cache, withJava)
+
+		if got, _ := os.ReadFile(filepath.Join(cache, "db", "data")); string(got) != "newer-db" {
+			t.Fatalf("vulnerability DB overwritten: %q", got)
+		}
+		if got, _ := os.ReadFile(filepath.Join(cache, "java-db", "data")); string(got) != "baked-java-db" {
+			t.Fatalf("Java DB not seeded: %q", got)
 		}
 	})
 
