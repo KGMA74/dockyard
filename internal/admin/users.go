@@ -142,6 +142,10 @@ func usernameProblem(username string) string {
 	if strings.EqualFold(username, "anonymous") {
 		return "\"anonymous\" is a reserved username"
 	}
+	// The internal scanner's registry identity.
+	if strings.EqualFold(username, auth.ScannerUsername) {
+		return "\"" + auth.ScannerUsername + "\" is a reserved username"
+	}
 	return ""
 }
 

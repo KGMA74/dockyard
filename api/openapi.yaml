@@ -157,6 +157,87 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { description: Username already exists }
 
+  /api/admin/robots:
+    get:
+      tags: [users]
+      summary: List robot accounts (admin only)
+      responses:
+        "200":
+          description: Robot accounts (secrets are never listed)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  robots:
+                    type: array
+                    items: { $ref: "#/components/schemas/Robot" }
+                  count: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [users]
+      summary: Create a robot account (admin only)
+      description: >
+        Robot accounts authenticate to the registry protocol only (`docker login -u robot+<name>`),
+        never to the admin API, and cannot delete. The secret is returned once.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, role]
+              properties:
+                name: { type: string, pattern: "^[a-z0-9]+(?:[._-][a-z0-9]+)*$", maxLength: 64 }
+                description: { type: string, maxLength: 200 }
+                role: { type: string, enum: [pusher, reader] }
+                repo_patterns:
+                  type: array
+                  items: { type: string }
+                expires_in_days: { type: integer, minimum: 0, maximum: 3650, description: "0 = never expires" }
+      responses:
+        "201":
+          description: Created robot, with its secret
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RobotWithSecret" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: Name already taken }
+
+  /api/admin/robots/{id}/secret:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    post:
+      tags: [users]
+      summary: Issue a new secret (admin only)
+      description: The previous secret stops working immediately.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expires_in_days: { type: integer, minimum: 0, maximum: 3650 }
+      responses:
+        "200":
+          description: Robot with its new secret
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RobotWithSecret" }
+        "404": { description: Robot not found }
+
+  /api/admin/robots/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    delete:
+      tags: [users]
+      summary: Delete a robot account (admin only)
+      description: Registry tokens already issued to it are refused from the next request.
+      responses:
+        "200": { description: Deleted }
+        "404": { description: Robot not found }
+
   /api/admin/users/{username}:
     parameters:
       - { name: username, in: path, required: true, schema: { type: string } }
@@ -1181,6 +1262,29 @@ components:
           items: { type: string }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+
+    Robot:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        username: { type: string, description: "Registry login: robot+<name>" }
+        description: { type: string }
+        role: { type: string, enum: [pusher, reader] }
+        repo_patterns:
+          type: array
+          items: { type: string }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time, nullable: true }
+        last_used_at: { type: string, format: date-time, nullable: true }
+
+    RobotWithSecret:
+      allOf:
+        - $ref: "#/components/schemas/Robot"
+        - type: object
+          properties:
+            secret: { type: string, description: "Shown once. Use as the password of docker login." }
 
     Session:
       type: object

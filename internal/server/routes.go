@@ -253,6 +253,13 @@ func (s *Server) RegisterRoutes() http.Handler {
 	api.PUT("/users/:username", uh.Update, auth.RequireAdmin)
 	api.DELETE("/users/:username", uh.Delete, auth.RequireAdmin)
 
+	// Robot accounts — registry-only credentials for CI and clusters.
+	rbh := admin.NewRobots(s.store)
+	api.GET("/robots", rbh.List, auth.RequireAdmin)
+	api.POST("/robots", rbh.Create, auth.RequireAdmin)
+	api.POST("/robots/:id/secret", rbh.Rotate, auth.RequireAdmin)
+	api.DELETE("/robots/:id", rbh.Delete, auth.RequireAdmin)
+
 	// Session management — revoking kills the refresh token; outstanding
 	// access tokens die within 15 minutes.
 	api.GET("/sessions", s.auth.ListSessions, auth.RequireAdmin)
@@ -325,13 +332,17 @@ func (s *Server) RegisterRoutes() http.Handler {
 		} else {
 			resolver = s.backend
 		}
+		scannerUser, scannerPass := s.auth.ScannerCredentials()
 		sd := scan.NewDispatcher(s.store, scan.Config{
 			TrivyBin:       s.trivyBinPath,
 			TrivyServerURL: s.trivyServerURL,
 			TrivyCacheDir:  s.trivyCacheDir,
 			RegistryURL:    fmt.Sprintf("localhost:%d", s.port),
-			RegistryUser:   s.authUsername,
-			RegistryPass:   s.authPassword,
+			// Its own identity, not the bootstrap admin's: that password
+			// may have been changed in the UI since, and the scanner's
+			// pulls must bypass the vulnerability gate.
+			RegistryUser:   scannerUser,
+			RegistryPass:   scannerPass,
 			Insecure:       s.trivyInsecureRegistry,
 			Offline:        s.trivyOffline,
 			Timeout:        s.scanTimeout,

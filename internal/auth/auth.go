@@ -36,7 +36,14 @@ type Principal struct {
 	Role         string
 	RepoPatterns []string
 	SessionID    int64
+	// RobotID is set for robot accounts, Scanner for Dockyard's own scanner.
+	// Neither may use the admin API.
+	RobotID int64
+	Scanner bool
 }
+
+// Machine reports whether the principal is a robot or the internal scanner.
+func (p Principal) Machine() bool { return p.RobotID != 0 || p.Scanner }
 
 // Action is a permission checked by Authorize.
 type Action string
@@ -61,6 +68,8 @@ type Manager struct {
 	// verification (JWT_SECRET_PREVIOUS rotation grace window).
 	secrets [][]byte
 	audit   AuditSink
+	// scannerSecret authenticates the internal scanner (see ScannerCredentials).
+	scannerSecret string
 }
 
 // SetAuditSink enables audit records for logins, logouts and password
@@ -82,6 +91,8 @@ func New(username, initialPassword, jwtSecret, previousSecret, dataDir string, u
 		users:    users,
 		username: username,
 		secrets:  [][]byte{[]byte(jwtSecret)},
+
+		scannerSecret: newScannerSecret(),
 	}
 	if previousSecret != "" {
 		m.secrets = append(m.secrets, []byte(previousSecret))
@@ -211,6 +222,20 @@ func (m *Manager) validate(raw string) (Principal, error) {
 	if p.Username == anonymousUser {
 		p.Role = store.RoleReader
 		return p, nil
+	}
+	if scanner, _ := claims["scn"].(bool); scanner {
+		// Only this process can mint them: the scanner secret is per-process.
+		if p.Username != ScannerUsername {
+			return Principal{}, errors.New("invalid claims")
+		}
+		return Principal{Username: ScannerUsername, Role: store.RoleReader, Scanner: true}, nil
+	}
+	if rid, ok := claims["rid"].(float64); ok {
+		robot, ok := m.robotPrincipal(int64(rid))
+		if !ok {
+			return Principal{}, errors.New("robot account no longer exists or has expired")
+		}
+		return robot, nil
 	}
 
 	// The token proves *who* is calling; *what they may do* is read from the
@@ -590,6 +615,8 @@ func (m *Manager) ChangePassword(c echo.Context) error {
 
 func (m *Manager) Username() string { return m.username }
 
+const machineDenied = "robot accounts can only use the registry API (/v2)"
+
 // Middleware vérifie le JWT, rejette les tokens révoqués et installe le
 // Principal dans le contexte.
 func (m *Manager) Middleware() echo.MiddlewareFunc {
@@ -602,6 +629,9 @@ func (m *Manager) Middleware() echo.MiddlewareFunc {
 			p, err := m.validate(strings.TrimPrefix(header, "Bearer "))
 			if err != nil {
 				return c.JSON(http.StatusUnauthorized, map[string]string{"error": err.Error()})
+			}
+			if p.Machine() {
+				return c.JSON(http.StatusForbidden, map[string]string{"error": machineDenied})
 			}
 			c.Set(principalKey, p)
 			return next(c)
@@ -626,6 +656,9 @@ func (m *Manager) MiddlewareEventStream() echo.MiddlewareFunc {
 			p, err := m.validate(raw)
 			if err != nil {
 				return c.JSON(http.StatusUnauthorized, map[string]string{"error": err.Error()})
+			}
+			if p.Machine() {
+				return c.JSON(http.StatusForbidden, map[string]string{"error": machineDenied})
 			}
 			c.Set(principalKey, p)
 			return next(c)
