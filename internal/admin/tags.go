@@ -18,6 +18,16 @@ type TagSummary struct {
 	Platforms []string     `json:"platforms,omitempty"`
 	Signed    *bool        `json:"signed,omitempty"`
 	Scan      *TagScanInfo `json:"scan,omitempty"`
+	// PullBlocked: the vulnerability policy refuses docker pull of this tag.
+	PullBlocked bool `json:"pull_blocked,omitempty"`
+}
+
+// PullPolicy tells whether the vulnerability policy blocks pulling a digest
+// (scan.PolicyState). Nil when scanning is off.
+type PullPolicy interface{ Blocks(digest string) bool }
+
+func pullBlocked(policy PullPolicy, summary TagSummary) bool {
+	return policy != nil && summary.Scan != nil && policy.Blocks(summary.Digest)
 }
 
 // TagScanInfo is the latest scan of a tag's digest.

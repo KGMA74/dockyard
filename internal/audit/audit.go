@@ -32,6 +32,9 @@ func (r *Recorder) SetIPExtractor(fn func(*http.Request) string) {
 	}
 }
 
+// ClientIP is the trusted-proxy-aware client address of a registry request.
+func (r *Recorder) ClientIP(req *http.Request) string { return r.ipOf(req) }
+
 // Record satisfies auth.AuditSink. Failures are deliberately swallowed: audit
 // must never break the operation being audited.
 func (r *Recorder) Record(actor, action, repo, tag, ip, result, details string) {

@@ -171,6 +171,47 @@ func (s *Server) RegisterRoutes() http.Handler {
 	auditor := audit.New(s.store)
 	auditor.SetIPExtractor(ipExtractor)
 	s.auth.SetAuditSink(auditor)
+
+	// Vulnerability policy. Its state exists in every configuration (the
+	// Security page reads it); scan-on-push and the pull gate need the
+	// scanner. The gate sits inside the auth wrapper to know who pulls.
+	policyState, err := scan.NewPolicyState(s.store)
+	if err != nil {
+		panic("vulnerability policy: " + err.Error())
+	}
+	var scanResolver interface {
+		GetManifest(name, reference string) ([]byte, string, error)
+	}
+	if s.mode == modeProxy {
+		scanResolver = scan.RegistryResolver{Client: s.proxy}
+	} else {
+		scanResolver = s.backend
+	}
+	var scanDispatcher *scan.Dispatcher
+	if s.scanEnabled {
+		scannerUser, scannerPass := s.auth.ScannerCredentials()
+		scanDispatcher = scan.NewDispatcher(s.store, scan.Config{
+			TrivyBin:       s.trivyBinPath,
+			TrivyServerURL: s.trivyServerURL,
+			TrivyCacheDir:  s.trivyCacheDir,
+			RegistryURL:    fmt.Sprintf("localhost:%d", s.port),
+			// Its own identity, not the bootstrap admin's: that password
+			// may have been changed in the UI since, and the scanner's
+			// pulls must bypass the vulnerability gate.
+			RegistryUser:   scannerUser,
+			RegistryPass:   scannerPass,
+			Insecure:       s.trivyInsecureRegistry,
+			Offline:        s.trivyOffline,
+			Timeout:        s.scanTimeout,
+			MaxReportBytes: s.scanMaxReportBytes,
+			DedupWindow:    s.scanDedupWindow,
+		})
+		scanDispatcher.SetHub(s.events)
+		scan.ScanOnPush(s.events, policyState, scanResolver, scanDispatcher)
+		go scan.BackfillVulnerabilities(s.store)
+		v2h = scan.NewGate(policyState, scanResolver, auditor).Middleware(v2h)
+	}
+
 	v2h = auditor.V2Wrapper()(v2h)
 
 	// Docker token auth: unauthenticated /v2/* requests get a Bearer challenge
@@ -216,6 +257,9 @@ func (s *Server) RegisterRoutes() http.Handler {
 	repoScoped := auth.RequireRepoAccess("name")
 	if s.mode == modeProxy {
 		h := admin.NewRemote(s.proxy, s.signingPolicy, s.store)
+		if s.scanEnabled {
+			h.SetPullPolicy(policyState)
+		}
 		api.GET("/repositories", h.GetRepositories)
 		api.GET("/repositories/tags", h.GetTags, repoScoped)
 		api.GET("/repositories/manifest", h.GetManifestDetails, repoScoped)
@@ -229,6 +273,9 @@ func (s *Server) RegisterRoutes() http.Handler {
 		api.POST("/gc", admin.NotSupported, auth.RequireAdmin)
 	} else {
 		h := admin.New(s.backend, s.signingPolicy, s.store)
+		if s.scanEnabled {
+			h.SetPullPolicy(policyState)
+		}
 		h.SetHub(s.events)
 		h.SetGCGracePeriod(s.gcGracePeriod)
 		api.GET("/repositories", h.GetRepositories)
@@ -323,39 +370,20 @@ func (s *Server) RegisterRoutes() http.Handler {
 	// trivy manages its own vuln DB under the cache dir); set
 	// TRIVY_SERVER_URL to defer to a shared/external trivy server instead.
 	// Off unless SCAN_ENABLED is set.
-	if s.scanEnabled {
-		var resolver interface {
-			GetManifest(name, reference string) ([]byte, string, error)
-		}
-		if s.mode == modeProxy {
-			resolver = scan.RegistryResolver{Client: s.proxy}
-		} else {
-			resolver = s.backend
-		}
-		scannerUser, scannerPass := s.auth.ScannerCredentials()
-		sd := scan.NewDispatcher(s.store, scan.Config{
-			TrivyBin:       s.trivyBinPath,
-			TrivyServerURL: s.trivyServerURL,
-			TrivyCacheDir:  s.trivyCacheDir,
-			RegistryURL:    fmt.Sprintf("localhost:%d", s.port),
-			// Its own identity, not the bootstrap admin's: that password
-			// may have been changed in the UI since, and the scanner's
-			// pulls must bypass the vulnerability gate.
-			RegistryUser:   scannerUser,
-			RegistryPass:   scannerPass,
-			Insecure:       s.trivyInsecureRegistry,
-			Offline:        s.trivyOffline,
-			Timeout:        s.scanTimeout,
-			MaxReportBytes: s.scanMaxReportBytes,
-			DedupWindow:    s.scanDedupWindow,
-		})
-		sd.SetHub(s.events)
-		sh := scan.NewHandler(s.store, sd, resolver, auditor)
+	if scanDispatcher != nil {
+		sh := scan.NewHandler(s.store, scanDispatcher, scanResolver, auditor)
 		api.POST("/scans", sh.Trigger, auth.RequireAdmin)
 		api.GET("/scans", sh.List, auth.RequireAdmin)
 		api.GET("/scans/:id", sh.Get, auth.RequireAdmin)
 		api.GET("/scans/:id/report", sh.Report, auth.RequireAdmin)
 	}
+
+	// Vulnerability policy — scan on push, pull blocking, CVE allowlist.
+	ph := scan.NewPolicyHandler(s.store, policyState, s.scanEnabled)
+	api.GET("/vulnerability-policy", ph.Get, auth.RequireAdmin)
+	api.PUT("/vulnerability-policy", ph.Update, auth.RequireAdmin)
+	api.POST("/vulnerability-policy/allowlist", ph.Allow, auth.RequireAdmin)
+	api.DELETE("/vulnerability-policy/allowlist/:cve", ph.Disallow, auth.RequireAdmin)
 
 	// Signed-push policy — status + per-repo overrides (admin only).
 	cosignHandler := cosign.NewHandler(s.store, s.signingPolicy)

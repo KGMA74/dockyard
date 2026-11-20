@@ -17,6 +17,8 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+
+	"dockyard/internal/store"
 )
 
 // trivyReport is the minimal shape of `trivy image --format json` output
@@ -25,9 +27,41 @@ import (
 type trivyReport struct {
 	Results []struct {
 		Vulnerabilities []struct {
-			Severity string `json:"Severity"`
+			VulnerabilityID string `json:"VulnerabilityID"`
+			Severity        string `json:"Severity"`
 		} `json:"Vulnerabilities"`
 	} `json:"Results"`
+}
+
+var severityRank = map[string]int{"CRITICAL": 4, "HIGH": 3, "MEDIUM": 2, "LOW": 1}
+
+// distinctVulnerabilities lists each vulnerability once — a CVE found in three
+// packages is one thing to fix or to accept — at its highest severity.
+func distinctVulnerabilities(report []byte) ([]store.ScanVulnerability, error) {
+	var r trivyReport
+	if err := json.Unmarshal(report, &r); err != nil {
+		return nil, fmt.Errorf("scan: parse trivy report: %w", err)
+	}
+	worst := map[string]string{}
+	for _, res := range r.Results {
+		for _, v := range res.Vulnerabilities {
+			if v.VulnerabilityID == "" {
+				continue
+			}
+			sev := strings.ToUpper(v.Severity)
+			if _, known := severityRank[sev]; !known {
+				sev = "UNKNOWN"
+			}
+			if prev, seen := worst[v.VulnerabilityID]; !seen || severityRank[sev] > severityRank[prev] {
+				worst[v.VulnerabilityID] = sev
+			}
+		}
+	}
+	out := make([]store.ScanVulnerability, 0, len(worst))
+	for id, sev := range worst {
+		out = append(out, store.ScanVulnerability{ID: id, Severity: sev})
+	}
+	return out, nil
 }
 
 // severityCounts tallies a trivy JSON report by severity.

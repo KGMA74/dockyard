@@ -18,7 +18,12 @@ type RemoteHandler struct {
 	client  *registry.Client
 	signing *cosign.Policy
 	db      *store.Store // SQLite — scan results, used by Search
+	// pullPolicy flags tags the vulnerability policy blocks; nil = scanning off.
+	pullPolicy PullPolicy
 }
+
+// SetPullPolicy enables the pull_blocked flag in tag lists.
+func (h *RemoteHandler) SetPullPolicy(p PullPolicy) { h.pullPolicy = p }
 
 func NewRemote(client *registry.Client, signing *cosign.Policy, db *store.Store) *RemoteHandler {
 	return &RemoteHandler{client: client, signing: signing, db: db}
@@ -68,6 +73,7 @@ func (h *RemoteHandler) GetTags(c echo.Context) error {
 			summary.Digest = m.Digest
 		}
 		summary.Scan = tagScanInfo(h.db, summary.Digest)
+		summary.PullBlocked = pullBlocked(h.pullPolicy, summary)
 		return summary
 	})
 	return c.JSON(http.StatusOK, map[string]any{"name": name, "tags": result, "total": len(result)})

@@ -1811,6 +1811,172 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/vulnerability-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Vulnerability policy and CVE allowlist (admin only) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Policy */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            policy?: components["schemas"]["VulnerabilityPolicy"];
+                            allowlist?: components["schemas"]["AllowedCVE"][];
+                            /** @description False when SCAN_ENABLED is off: nothing is enforced. */
+                            scanning_enabled?: boolean;
+                        };
+                    };
+                };
+            };
+        };
+        /**
+         * Update the vulnerability policy (admin only)
+         * @description Blocked pulls answer 403 DENIED with the offending CVEs and are recorded in the audit log (action pull-blocked). Dockyard's own scanner is exempt so blocked images can be re-scanned.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        scan_on_push?: boolean;
+                        /** @enum {string} */
+                        block_severity?: "" | "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+                    };
+                };
+            };
+            responses: {
+                /** @description Updated policy */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["VulnerabilityPolicy"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/vulnerability-policy/allowlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept a vulnerability (admin only)
+         * @description An allowlisted vulnerability never blocks a pull, until the entry expires. Adding an existing ID updates it.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @example CVE-2024-3094 */
+                        cve_id: string;
+                        reason?: string;
+                        /** @description 0 = never expires */
+                        expires_in_days?: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Added */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["BadRequest"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/vulnerability-policy/allowlist/{cve}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cve: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove an exception (admin only) */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    cve: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Removed */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not on the allowlist */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/signing": {
         parameters: {
             query?: never;
@@ -2601,6 +2767,30 @@ export interface components {
                 low_count?: number;
                 unknown_count?: number;
             };
+            /** @description The vulnerability policy refuses docker pull of this tag. Absent when false. */
+            pull_blocked?: boolean;
+        };
+        VulnerabilityPolicy: {
+            /** @description Queue a scan for every pushed tag. */
+            scan_on_push?: boolean;
+            /**
+             * @description Refuse manifest GETs of images whose latest scan has a vulnerability at this severity or above that the allowlist does not cover. Empty = never block. Unscanned images are not blocked.
+             * @enum {string}
+             */
+            block_severity?: "" | "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+            updated_by?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        AllowedCVE: {
+            /** @example CVE-2024-3094 */
+            cve_id?: string;
+            reason?: string;
+            /** Format: date-time */
+            expires_at?: string | null;
+            created_by?: string;
+            /** Format: date-time */
+            created_at?: string;
         };
         SearchResult: {
             name?: string;

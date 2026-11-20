@@ -33,7 +33,12 @@ type Handler struct {
 	db        *store.Store  // SQLite — scan results, used by Search
 	hub       *events.Hub   // optional; manual GC publishes a "gc" event when set
 	gcGrace   time.Duration // blobs younger than this survive GC (see storage.GCOptions)
+	// pullPolicy flags tags the vulnerability policy blocks; nil = scanning off.
+	pullPolicy PullPolicy
 }
+
+// SetPullPolicy enables the pull_blocked flag in tag lists.
+func (h *Handler) SetPullPolicy(p PullPolicy) { h.pullPolicy = p }
 
 func New(backend storage.Backend, signing *cosign.Policy, db *store.Store) *Handler {
 	tree, _ := backend.(treeBackend)
@@ -103,6 +108,7 @@ func (h *Handler) GetTags(c echo.Context) error {
 			_, summary.Digest, _ = h.store.GetManifest(name, tag)
 		}
 		summary.Scan = tagScanInfo(h.db, summary.Digest)
+		summary.PullBlocked = pullBlocked(h.pullPolicy, summary)
 		return summary
 	})
 	return c.JSON(http.StatusOK, map[string]any{"name": name, "tags": result, "total": len(result)})

@@ -890,6 +890,76 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/admin/vulnerability-policy:
+    get:
+      tags: [scans]
+      summary: Vulnerability policy and CVE allowlist (admin only)
+      responses:
+        "200":
+          description: Policy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  policy: { $ref: "#/components/schemas/VulnerabilityPolicy" }
+                  allowlist:
+                    type: array
+                    items: { $ref: "#/components/schemas/AllowedCVE" }
+                  scanning_enabled: { type: boolean, description: "False when SCAN_ENABLED is off: nothing is enforced." }
+    put:
+      tags: [scans]
+      summary: Update the vulnerability policy (admin only)
+      description: >
+        Blocked pulls answer 403 DENIED with the offending CVEs and are recorded in the audit log
+        (action pull-blocked). Dockyard's own scanner is exempt so blocked images can be re-scanned.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scan_on_push: { type: boolean }
+                block_severity: { type: string, enum: ["", CRITICAL, HIGH, MEDIUM, LOW] }
+      responses:
+        "200":
+          description: Updated policy
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VulnerabilityPolicy" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/admin/vulnerability-policy/allowlist:
+    post:
+      tags: [scans]
+      summary: Accept a vulnerability (admin only)
+      description: An allowlisted vulnerability never blocks a pull, until the entry expires. Adding an existing ID updates it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cve_id]
+              properties:
+                cve_id: { type: string, example: CVE-2024-3094 }
+                reason: { type: string, maxLength: 500 }
+                expires_in_days: { type: integer, minimum: 0, maximum: 3650, description: "0 = never expires" }
+      responses:
+        "201": { description: Added }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/admin/vulnerability-policy/allowlist/{cve}:
+    parameters:
+      - { name: cve, in: path, required: true, schema: { type: string } }
+    delete:
+      tags: [scans]
+      summary: Remove an exception (admin only)
+      responses:
+        "200": { description: Removed }
+        "404": { description: Not on the allowlist }
+
   /api/admin/signing:
     get:
       tags: [signing]
@@ -1372,6 +1442,31 @@ components:
             medium_count: { type: integer }
             low_count: { type: integer }
             unknown_count: { type: integer }
+        pull_blocked:
+          type: boolean
+          description: The vulnerability policy refuses docker pull of this tag. Absent when false.
+
+    VulnerabilityPolicy:
+      type: object
+      properties:
+        scan_on_push: { type: boolean, description: Queue a scan for every pushed tag. }
+        block_severity:
+          type: string
+          enum: ["", CRITICAL, HIGH, MEDIUM, LOW]
+          description: >
+            Refuse manifest GETs of images whose latest scan has a vulnerability at this severity or above
+            that the allowlist does not cover. Empty = never block. Unscanned images are not blocked.
+        updated_by: { type: string }
+        updated_at: { type: string, format: date-time }
+
+    AllowedCVE:
+      type: object
+      properties:
+        cve_id: { type: string, example: CVE-2024-3094 }
+        reason: { type: string }
+        expires_at: { type: string, format: date-time, nullable: true }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
 
     SearchResult:
       type: object
