@@ -56,7 +56,8 @@ func newConfigSummary(cfg *config.Config, mode mode, cosignKeys int, tracingEnab
 	access := []ConfigItem{
 		{Key: "v2_auth", Value: cfg.V2AuthEnabled, Env: "V2_AUTH_ENABLED"},
 		{Key: "anonymous_pull", Value: cfg.V2AnonymousPull, Env: "V2_ANONYMOUS_PULL"},
-		{Key: "sso", Value: ssoSummary(cfg), Env: "OIDC_ISSUER_URL"},
+		// Filled per request: SSO can be changed from the console.
+		{Key: "sso", Value: "off", Env: "OIDC_ISSUER_URL"},
 		{Key: "tls", Value: tlsMode, Env: "TLS_MODE"},
 		{Key: "login_rate_limit", Value: cfg.RateLimitLoginPerMin, Env: "RATE_LIMIT_LOGIN_PER_MIN"},
 		{Key: "global_rate_limit", Value: cfg.RateLimitGlobalRPS, Env: "RATE_LIMIT_GLOBAL_RPS"},
@@ -99,15 +100,6 @@ func newConfigSummary(cfg *config.Config, mode mode, cosignKeys int, tracingEnab
 
 // redactURL drops user:password@ from a URL; unparsable input is hidden
 // entirely rather than echoed back.
-// ssoSummary is the identity provider's issuer, or "off". The client secret
-// is never part of it.
-func ssoSummary(cfg *config.Config) string {
-	if cfg.OIDCIssuerURL == "" {
-		return "off"
-	}
-	return redactURL(cfg.OIDCIssuerURL)
-}
-
 func redactURL(raw string) string {
 	if raw == "" {
 		return ""
@@ -129,5 +121,23 @@ func nonNil(list []string) []string {
 
 // GET /api/admin/config (admin only)
 func (s *Server) handleConfig(c echo.Context) error {
-	return c.JSON(http.StatusOK, map[string]any{"groups": s.configSummary})
+	// Copy before patching: s.configSummary is shared by every request.
+	groups := make([]ConfigGroup, len(s.configSummary))
+	for i, g := range s.configSummary {
+		g.Items = append([]ConfigItem(nil), g.Items...)
+		for j, item := range g.Items {
+			if item.Key == "sso" && s.auth != nil {
+				issuer, managedBy := s.auth.OIDCSummary()
+				if issuer != "off" {
+					issuer = redactURL(issuer)
+				}
+				g.Items[j].Value = issuer
+				if managedBy != "env" {
+					g.Items[j].Env = "" // set in Settings → Single sign-on
+				}
+			}
+		}
+		groups[i] = g
+	}
+	return c.JSON(http.StatusOK, map[string]any{"groups": groups})
 }

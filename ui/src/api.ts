@@ -864,6 +864,25 @@ export async function updateVulnerabilityPolicy(policy: { scan_on_push: boolean;
   return req('/vulnerability-policy', { method: 'PUT', body: JSON.stringify(policy) })
 }
 
+export type SSOSettings = GeneratedSchemas['SSOSettings']
+export type SSOSettingsInput = GeneratedSchemas['SSOSettingsInput']
+export type SSOTestResult = GeneratedSchemas['SSOTestResult']
+
+/** Single sign-on configuration (admin). The client secret never comes back. */
+export async function getSSOSettings(): Promise<SSOSettings> {
+  return req('/sso')
+}
+
+/** Saves and applies at once. Omit client_secret to keep the stored one. */
+export async function updateSSOSettings(settings: SSOSettingsInput): Promise<SSOSettings> {
+  return req('/sso', { method: 'PUT', body: JSON.stringify(settings) })
+}
+
+/** OpenID discovery against an issuer, to catch a typo before saving. */
+export async function testSSOIssuer(issuerUrl: string): Promise<SSOTestResult> {
+  return req('/sso/test', { method: 'POST', body: JSON.stringify({ issuer_url: issuerUrl }) })
+}
+
 export async function allowCVE(entry: { cve_id: string; reason: string; expires_in_days: number }): Promise<void> {
   return req('/vulnerability-policy/allowlist', { method: 'POST', body: JSON.stringify(entry) })
 }

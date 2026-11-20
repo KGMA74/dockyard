@@ -79,7 +79,7 @@ This does not delete the PVC created for local storage; remove it manually if yo
 | `auth.v2AnonymousPull`     | Allow unauthenticated pulls while pushes still require login (public-read registry). Only relevant when `v2Enabled` is true | `false` |
 | `auth.jwtSecret`           | JWT signing secret — auto-generated on first install if left empty          | `""`           |
 | `auth.existingSecret`      | Name of an existing Secret holding `jwt-secret`/`auth-password` (and optionally S3 keys, `OIDC_CLIENT_SECRET`) | `""`           |
-| `oidc.enabled`             | Single sign-on with an OpenID Connect provider (redirect URI: `https://<host>/api/admin/auth/oidc/callback`) | `false` |
+| `oidc.enabled`             | Single sign-on configured from these values, read-only in the console (redirect URI: `https://<host>/api/admin/auth/oidc/callback`). Leave `false` to set SSO up in the console instead (Settings → Single sign-on), optionally with `oidc.clientSecret` kept here | `false` |
 | `oidc.issuerURL` / `oidc.clientID` / `oidc.clientSecret` | Provider issuer and confidential client credentials | `""` |
 | `oidc.displayName`         | Label of the "Sign in with …" button                                         | `SSO`          |
 | `oidc.adminGroups` / `pusherGroups` / `readerGroups` | Groups mapped to roles; when set, roles are synced at every sign-in | `[]` |

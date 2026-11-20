@@ -944,6 +944,132 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/sso": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Single sign-on configuration (admin only)
+         * @description The client secret is never returned: client_secret_set tells whether one is stored. managed_by=env means the deployment sets OIDC_ISSUER_URL and the configuration is read-only here.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Configuration */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SSOSettings"];
+                    };
+                };
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        /**
+         * Save and apply the single sign-on configuration (admin only)
+         * @description Applied at once, without a restart. Refused (409) when the deployment manages SSO.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["SSOSettingsInput"];
+                };
+            };
+            responses: {
+                /** @description Saved configuration */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SSOSettings"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+                /** @description Single sign-on is configured by the deployment (OIDC_ISSUER_URL) */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["Error"];
+                    };
+                };
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/sso/test": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Run OpenID discovery against an issuer (admin only)
+         * @description Without issuer_url, tests the active configuration. A failed discovery still answers 200 with ok=false.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": {
+                        /** Format: uri */
+                        issuer_url?: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Discovery result */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["SSOTestResult"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/config": {
         parameters: {
             query?: never;
@@ -3047,6 +3173,70 @@ export interface components {
             };
             /** @description The vulnerability policy refuses docker pull of this tag. Absent when false. */
             pull_blocked?: boolean;
+        };
+        SSOSettingsInput: {
+            enabled?: boolean;
+            /**
+             * Format: uri
+             * @description Required to enable. Absolute http(s) URL without credentials.
+             */
+            issuer_url?: string;
+            /** @description Required to enable. */
+            client_id?: string;
+            /** @description Absent keeps the stored secret, empty removes it. Stored encrypted (AES-256-GCM, key derived from JWT_SECRET). Refused when OIDC_CLIENT_SECRET is set by the deployment. */
+            client_secret?: string;
+            /** @description Exact callback URL registered at the provider; empty = derived from the request. */
+            redirect_url?: string;
+            /** @description The button reads "Sign in with <display_name>". */
+            display_name?: string;
+            /** @description openid is always added. */
+            scopes?: string[];
+            username_claim?: string;
+            groups_claim?: string;
+            admin_groups?: string[];
+            pusher_groups?: string[];
+            reader_groups?: string[];
+            /** @enum {string} */
+            default_role?: "reader" | "pusher" | "admin" | "none";
+        };
+        SSOSettings: {
+            /**
+             * @description env = set by OIDC_* variables and read-only here.
+             * @enum {string}
+             */
+            managed_by: "env" | "console";
+            enabled: boolean;
+            issuer_url: string;
+            client_id: string;
+            client_secret_set: boolean;
+            /** @description The secret comes from OIDC_CLIENT_SECRET. */
+            client_secret_from_env: boolean;
+            redirect_url?: string;
+            /** @description The redirect URI to register at the provider. */
+            callback_url: string;
+            display_name: string;
+            scopes: string[];
+            username_claim: string;
+            groups_claim: string;
+            admin_groups: string[];
+            pusher_groups: string[];
+            reader_groups: string[];
+            /** @enum {string} */
+            default_role: "reader" | "pusher" | "admin" | "none";
+            updated_by?: string;
+            updated_at?: string;
+            /** @description Why an enabled configuration is not active. */
+            error?: string;
+        };
+        SSOTestResult: {
+            ok: boolean;
+            issuer: string;
+            error?: string;
+            authorization_endpoint?: string;
+            token_endpoint?: string;
+            userinfo_endpoint?: string;
+            scopes_supported?: string[];
+            claims_supported?: string[];
         };
         VulnerabilityPolicy: {
             /** @description Queue a scan for every pushed tag. */

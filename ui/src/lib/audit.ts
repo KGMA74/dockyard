@@ -38,6 +38,8 @@ const ADMIN_ROUTES: [RegExp, string][] = [
   [/^POST \/api\/admin\/robots$/, 'createRobot'],
   [/^POST \/api\/admin\/robots\/[^/]+\/secret$/, 'rotateRobot'],
   [/^DELETE \/api\/admin\/robots\/[^/]+$/, 'deleteRobot'],
+  [/^PUT \/api\/admin\/sso$/, 'updateSso'],
+  [/^POST \/api\/admin\/sso\/test$/, 'testSso'],
 ]
 
 /** Human label for an audit action, plus the raw action when they differ. */

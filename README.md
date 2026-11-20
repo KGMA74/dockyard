@@ -24,7 +24,7 @@ A lightweight, self-hosted Docker Registry V2 server written in Go. Ships as a *
 - **Garbage collection, retention policies, replication, byte quotas** — all with dry-run previews; GC runs on both the local and S3 backends
 - **Tag diff, layer browser, server-side search** — inspect and compare images from the UI
 - **In-app notifications, audit log, webhooks** — over the same event feed
-- **Single sign-on** — any OpenID Connect provider (Authentik, Keycloak, Authelia, Entra ID…), roles from groups, accounts created on first sign-in; CLI secrets for docker login
+- **Single sign-on** — any OpenID Connect provider (Authentik, Keycloak, Authelia, Entra ID…), set up from the console with a connection test (or from Helm values, then read-only), roles from groups, accounts created on first sign-in; CLI secrets for docker login
 - **JWT auth** on the admin API, Docker token auth on `/v2/*`, structured JSON logs, optional OpenTelemetry tracing
 
 ## Modes

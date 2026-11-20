@@ -27,6 +27,7 @@ import {
   listUsers,
   listWebhooks,
   getVulnerabilityPolicy,
+  getSSOSettings,
   type RegistryEvent,
 } from '@/api'
 
@@ -53,6 +54,7 @@ export const keys = {
   signingStatus: ['signing-status'] as const,
   signingPolicies: ['signing-policies'] as const,
   vulnerabilityPolicy: ['vulnerability-policy'] as const,
+  ssoSettings: ['sso-settings'] as const,
 }
 
 export const useRepositories = () =>
@@ -135,6 +137,8 @@ export const useSigningPolicies = () =>
   useQuery({ queryKey: keys.signingPolicies, queryFn: listSigningPolicies, select: data => data.policies })
 
 export const useVulnerabilityPolicy = () => useQuery({ queryKey: keys.vulnerabilityPolicy, queryFn: getVulnerabilityPolicy })
+
+export const useSSOSettings = () => useQuery({ queryKey: keys.ssoSettings, queryFn: getSSOSettings })
 
 /** Returns a function that marks the given query keys stale and refetches the
  *  ones currently on screen. */

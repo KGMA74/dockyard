@@ -83,12 +83,14 @@ func (c OIDCConfig) roleFor(groups []string) string {
 	}
 }
 
+// oidcState is one active SSO configuration. It is immutable once published:
+// a change from the console builds a new one and swaps it in (Manager.oidc),
+// so a sign-in in flight finishes with the configuration it started with.
 type oidcState struct {
 	cfg OIDCConfig
 
 	mu       sync.Mutex
 	provider *oidc.Provider // discovered on first use: the IdP may start after us
-	codes    map[string]pendingLogin
 }
 
 type pendingLogin struct {
@@ -96,8 +98,15 @@ type pendingLogin struct {
 	expires time.Time
 }
 
-// EnableOIDC turns single sign-on on.
-func (m *Manager) EnableOIDC(cfg OIDCConfig) {
+// loginCodes holds the one-time codes the callback hands the SPA. They
+// outlive a configuration change: the sign-in they finish is already done.
+type loginCodes struct {
+	mu    sync.Mutex
+	codes map[string]pendingLogin
+}
+
+// normalizeOIDC fills the defaults every configuration source shares.
+func normalizeOIDC(cfg OIDCConfig) OIDCConfig {
 	if len(cfg.Scopes) == 0 {
 		cfg.Scopes = []string{oidc.ScopeOpenID, "profile", "email"}
 	}
@@ -107,16 +116,30 @@ func (m *Manager) EnableOIDC(cfg OIDCConfig) {
 	if cfg.UsernameClaim == "" {
 		cfg.UsernameClaim = "preferred_username"
 	}
+	if cfg.GroupsClaim == "" {
+		cfg.GroupsClaim = "groups"
+	}
 	if cfg.DisplayName == "" {
 		cfg.DisplayName = "SSO"
 	}
+	return cfg
+}
+
+// EnableOIDC turns single sign-on on from the deployment (OIDC_* variables).
+// The environment then owns the configuration: the console shows it read-only.
+func (m *Manager) EnableOIDC(cfg OIDCConfig) {
+	cfg = normalizeOIDC(cfg)
 	if cfg.RedirectURL == "" {
 		// Then it is rebuilt per request from Host and X-Forwarded-Proto —
 		// headers a client chooses. The provider's redirect URI allow-list is
 		// what still holds; an exact value does not depend on it.
 		slog.Warn("oidc: OIDC_REDIRECT_URL is not set; the callback URL is derived from request headers. Set it to the exact URL registered at the provider.")
 	}
-	m.oidc = &oidcState{cfg: cfg, codes: map[string]pendingLogin{}}
+	m.oidcMu.Lock()
+	defer m.oidcMu.Unlock()
+	m.oidcEnvManaged = true
+	m.oidcEnvCfg = cfg
+	m.oidc.Store(&oidcState{cfg: cfg})
 }
 
 func (s *oidcState) discover(ctx context.Context) (*oidc.Provider, error) {
@@ -147,10 +170,13 @@ func (s *oidcState) oauth2Config(p *oidc.Provider, r *http.Request) *oauth2.Conf
 	}
 }
 
-func (s *oidcState) storeCode(body map[string]any) string {
+func (s *loginCodes) storeCode(body map[string]any) string {
 	code := randomHex(32)
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if s.codes == nil {
+		s.codes = map[string]pendingLogin{}
+	}
 	now := time.Now()
 	for k, v := range s.codes {
 		if now.After(v.expires) {
@@ -161,7 +187,7 @@ func (s *oidcState) storeCode(body map[string]any) string {
 	return code
 }
 
-func (s *oidcState) takeCode(code string) (map[string]any, bool) {
+func (s *loginCodes) takeCode(code string) (map[string]any, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	p, ok := s.codes[code]
@@ -189,20 +215,22 @@ func safeReturn(raw string) string {
 
 // OIDCInfo — GET /api/admin/auth/oidc (public): whether to show the SSO button.
 func (m *Manager) OIDCInfo(c echo.Context) error {
-	if m.oidc == nil {
+	s := m.oidc.Load()
+	if s == nil {
 		return c.JSON(http.StatusOK, map[string]any{"enabled": false})
 	}
-	return c.JSON(http.StatusOK, map[string]any{"enabled": true, "name": m.oidc.cfg.DisplayName})
+	return c.JSON(http.StatusOK, map[string]any{"enabled": true, "name": s.cfg.DisplayName})
 }
 
 // OIDCLogin — GET /api/admin/auth/oidc/login?return=/path
 func (m *Manager) OIDCLogin(c echo.Context) error {
-	if m.oidc == nil {
+	s := m.oidc.Load()
+	if s == nil {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "single sign-on is not configured"})
 	}
-	provider, err := m.oidc.discover(c.Request().Context())
+	provider, err := s.discover(c.Request().Context())
 	if err != nil {
-		slog.Error("oidc: provider discovery failed", "issuer", m.oidc.cfg.IssuerURL, "err", err)
+		slog.Error("oidc: provider discovery failed", "issuer", s.cfg.IssuerURL, "err", err)
 		return c.Redirect(http.StatusFound, "/login#oidc_error=provider_unreachable")
 	}
 	state, nonce, verifier := randomHex(16), randomHex(16), oauth2.GenerateVerifier()
@@ -229,7 +257,7 @@ func (m *Manager) OIDCLogin(c echo.Context) error {
 		// Lax: the callback is a top-level navigation back from the IdP.
 		SameSite: http.SameSiteLaxMode,
 	})
-	authURL := m.oidc.oauth2Config(provider, c.Request()).AuthCodeURL(state,
+	authURL := s.oauth2Config(provider, c.Request()).AuthCodeURL(state,
 		oidc.Nonce(nonce), oauth2.S256ChallengeOption(verifier))
 	return c.Redirect(http.StatusFound, authURL)
 }
@@ -243,9 +271,11 @@ func oidcFailure(c echo.Context, reason string, err error) error {
 
 // OIDCCallback — GET /api/admin/auth/oidc/callback?code=&state=
 func (m *Manager) OIDCCallback(c echo.Context) error {
-	if m.oidc == nil {
+	s := m.oidc.Load()
+	if s == nil {
 		return c.JSON(http.StatusNotFound, map[string]string{"error": "single sign-on is not configured"})
 	}
+	cfg := s.cfg
 	// The flow cookie is single use, whatever happens next.
 	c.SetCookie(&http.Cookie{Name: oidcCookie, Value: "", Path: oidcCookiePath, MaxAge: -1, HttpOnly: true})
 
@@ -274,17 +304,17 @@ func (m *Manager) OIDCCallback(c echo.Context) error {
 
 	ctx, cancel := context.WithTimeout(c.Request().Context(), 30*time.Second)
 	defer cancel()
-	provider, err := m.oidc.discover(ctx)
+	provider, err := s.discover(ctx)
 	if err != nil {
 		return oidcFailure(c, "provider_unreachable", err)
 	}
-	oauthCfg := m.oidc.oauth2Config(provider, c.Request())
+	oauthCfg := s.oauth2Config(provider, c.Request())
 	token, err := oauthCfg.Exchange(ctx, c.QueryParam("code"), oauth2.VerifierOption(verifier))
 	if err != nil {
 		return oidcFailure(c, "exchange_failed", err)
 	}
 	rawID, _ := token.Extra("id_token").(string)
-	idToken, err := provider.Verifier(&oidc.Config{ClientID: m.oidc.cfg.ClientID}).Verify(ctx, rawID)
+	idToken, err := provider.Verifier(&oidc.Config{ClientID: cfg.ClientID}).Verify(ctx, rawID)
 	if err != nil {
 		return oidcFailure(c, "invalid_token", err)
 	}
@@ -297,7 +327,7 @@ func (m *Manager) OIDCCallback(c echo.Context) error {
 		return oidcFailure(c, "invalid_token", err)
 	}
 	// Many providers only put groups (or the username) in UserInfo.
-	if claims[m.oidc.cfg.UsernameClaim] == nil || (m.oidc.cfg.RolesFromGroups() && claims[m.oidc.cfg.GroupsClaim] == nil) {
+	if claims[cfg.UsernameClaim] == nil || (cfg.RolesFromGroups() && claims[cfg.GroupsClaim] == nil) {
 		if info, err := provider.UserInfo(ctx, oauth2.StaticTokenSource(token)); err == nil {
 			extra := map[string]any{}
 			if info.Claims(&extra) == nil {
@@ -310,9 +340,9 @@ func (m *Manager) OIDCCallback(c echo.Context) error {
 		}
 	}
 
-	u, reason, err := m.provisionOIDCUser(idToken.Issuer+"|"+idToken.Subject, claims)
+	u, reason, err := m.provisionOIDCUser(cfg, idToken.Issuer+"|"+idToken.Subject, claims)
 	if err != nil {
-		m.auditRecord(stringClaim(claims, m.oidc.cfg.UsernameClaim), "login", c.RealIP(), "failure", "sso: "+reason)
+		m.auditRecord(stringClaim(claims, cfg.UsernameClaim), "login", c.RealIP(), "failure", "sso: "+reason)
 		return oidcFailure(c, reason, err)
 	}
 	body, err := m.issueSession(c, u)
@@ -320,14 +350,13 @@ func (m *Manager) OIDCCallback(c echo.Context) error {
 		return oidcFailure(c, "session_failed", err)
 	}
 	m.auditRecord(u.Username, "login", c.RealIP(), "success", "sso")
-	code := m.oidc.storeCode(body)
+	code := m.ssoCodes.storeCode(body)
 	return c.Redirect(http.StatusFound, "/login#oidc_code="+code+"&return="+url.QueryEscape(safeReturn(ret)))
 }
 
 // provisionOIDCUser finds or creates the account of an SSO identity and
 // syncs its role. reason is a stable key for the UI when it fails.
-func (m *Manager) provisionOIDCUser(subject string, claims map[string]any) (*store.User, string, error) {
-	cfg := m.oidc.cfg
+func (m *Manager) provisionOIDCUser(cfg OIDCConfig, subject string, claims map[string]any) (*store.User, string, error) {
 	groups := stringsClaim(claims, cfg.GroupsClaim)
 	role := cfg.roleFor(groups)
 	if role == "" {
@@ -411,16 +440,13 @@ func stringsClaim(claims map[string]any, name string) []string {
 // OIDCExchange — POST /api/admin/auth/oidc/exchange {code}: the SPA trades
 // the one-time code from the callback redirect for its session tokens.
 func (m *Manager) OIDCExchange(c echo.Context) error {
-	if m.oidc == nil {
-		return c.JSON(http.StatusNotFound, map[string]string{"error": "single sign-on is not configured"})
-	}
 	var body struct {
 		Code string `json:"code"`
 	}
 	if err := c.Bind(&body); err != nil || body.Code == "" {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "code required"})
 	}
-	resp, ok := m.oidc.takeCode(body.Code)
+	resp, ok := m.ssoCodes.takeCode(body.Code)
 	if !ok {
 		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "sign-in code expired or already used"})
 	}

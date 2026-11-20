@@ -81,6 +81,10 @@ describe('locales', () => {
       'settings.storageBackends': ['local', 's3'],
       'login.sso': ['provider_denied', 'expired', 'provider_unreachable', 'exchange_failed', 'invalid_token', 'not_allowed', 'username_invalid', 'username_taken', 'session_failed'],
       'vulnPolicy.threshold': ['off', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'],
+      sso: [
+        'admin_groups', 'pusher_groups', 'reader_groups',
+        'admin_groupsPlaceholder', 'pusher_groupsPlaceholder', 'reader_groupsPlaceholder',
+      ],
     }
     const missing = Object.entries(families).flatMap(([family, members]) =>
       members.map(member => `${family}.${member}`).filter(key => !known.has(key)),
