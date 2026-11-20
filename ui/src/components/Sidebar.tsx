@@ -10,6 +10,7 @@ import {
   type LucideIcon,
 } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
+import { DockyardMark } from '@/components/Logo'
 import { Link, type PageId } from '@/lib/router'
 import { useSession } from '@/lib/session'
 import { RoleBadge } from './kit'
@@ -92,7 +93,7 @@ export default function AppSidebar({ current, onLogout }: Props) {
           to="/"
           className="flex h-8 items-center gap-2.5 rounded-md px-1.5 outline-none focus-visible:ring-2 focus-visible:ring-sidebar-ring group-data-[collapsible=icon]:justify-center group-data-[collapsible=icon]:px-0"
         >
-          <Box className="size-5 shrink-0 text-primary" strokeWidth={1.75} />
+          <DockyardMark className="size-5 text-sidebar-foreground" />
           <span className="text-sm font-semibold tracking-tight group-data-[collapsible=icon]:hidden">Dockyard</span>
         </Link>
       </SidebarHeader>

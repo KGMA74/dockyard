@@ -1,3 +1,5 @@
+<img src="./assets/brand/dockyard-app-icon.svg" alt="" width="64" height="64">
+
 # Dockyard — Registry Docker auto-hébergée
 
 [![CI](https://github.com/KGMA74/dockyard/actions/workflows/ci.yml/badge.svg)](https://github.com/KGMA74/dockyard/actions/workflows/ci.yml)

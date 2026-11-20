@@ -1,6 +1,7 @@
 import { useEffect, useState, SubmitEvent } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { Box, Eye, EyeOff, KeyRound } from 'lucide-react'
+import { Eye, EyeOff, KeyRound } from 'lucide-react'
+import { DockyardMark } from '@/components/Logo'
 import { useTranslation } from 'react-i18next'
 import { ApiError, completeSSO, getSSOInfo, login, ssoLoginUrl } from '../api'
 import { ThemeSwitcher } from '../theme'
@@ -149,7 +150,7 @@ export default function LoginPage({ onLogin }: Props) {
     <main className="grid min-h-screen lg:grid-cols-[minmax(0,1fr)_minmax(0,1.05fr)] bg-muted/40 dark:bg-background">
       <aside className="hidden flex-col items-center justify-between gap-8 overflow-hidden border-r bg-sidebar p-12 lg:flex">
         <div className="flex items-center gap-3 animate-in fade-in slide-in-from-top-2 duration-500">
-          <Box className="size-6 text-primary" strokeWidth={1.5} />
+          <DockyardMark className="size-6 text-sidebar-foreground" />
           <span className="font-semibold text-sidebar-foreground tracking-tight">Dockyard</span>
         </div>
 
@@ -186,7 +187,7 @@ export default function LoginPage({ onLogin }: Props) {
         <div className="w-full max-w-sm animate-in fade-in slide-in-from-bottom-3 duration-500 delay-150 fill-mode-both">
           <div className="text-center mb-8 lg:hidden">
             <div className="inline-flex items-center justify-center w-12 h-12 rounded-2xl bg-card border mb-4">
-              <Box className="size-6 text-primary" strokeWidth={1.5} />
+              <DockyardMark className="size-6 text-foreground" />
             </div>
             <h1 className="text-xl font-semibold tracking-tight">Dockyard</h1>
             <p className="text-muted-foreground text-sm mt-1">{t('login.subtitle')}</p>

@@ -9,6 +9,7 @@ keywords:
   - registry
   - container
 home: https://github.com/kgma74/dockyard
+icon: https://raw.githubusercontent.com/KGMA74/dockyard/main/assets/brand/dockyard-app-icon.svg
 sources:
   - https://github.com/kgma74/dockyard
 maintainers:
