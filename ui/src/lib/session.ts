@@ -1,4 +1,4 @@
-import { getRepoPatterns, getRole, getUsername } from '@/api'
+import { getAuthSource, getRepoPatterns, getRole, getUsername } from '@/api'
 
 export interface Session {
   username: string | null
@@ -8,6 +8,8 @@ export interface Session {
   canPush: boolean
   /** Repository patterns the account is limited to; empty = every repository. */
   repoPatterns: string[]
+  /** Signed in through single sign-on: no password to change. */
+  sso: boolean
 }
 
 /** The signed-in account, read from the access token. Only used to decide
@@ -21,6 +23,7 @@ export function useSession(): Session {
     isAdmin: role === 'admin',
     canPush: role === 'admin' || role === 'pusher',
     repoPatterns: getRepoPatterns(),
+    sso: getAuthSource() === 'oidc',
   }
 }
 

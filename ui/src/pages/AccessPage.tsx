@@ -126,15 +126,21 @@ function EditUserDialog({ user, isSelf, onClose }: { user: UserInfo; isSelf: boo
     >
       <RoleField value={role} onChange={setRole} />
       <PatternsField value={patterns} onChange={setPatterns} />
-      <Field
-        label={t('access.newPassword')}
-        hint={isSelf ? t('access.newPasswordSelfHint') : t('access.newPasswordHint', { min: MIN_PASSWORD })}
-        optional
-      >
-        {ids => (
-          <Input {...ids} type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" aria-invalid={!passwordOk} />
-        )}
-      </Field>
+      {user.auth_source === 'oidc' ? (
+        // An SSO account signs in at its identity provider: a password here
+        // would be a second, unmanaged way in.
+        <p className="text-xs text-muted-foreground text-pretty">{t('access.ssoNoPassword')}</p>
+      ) : (
+        <Field
+          label={t('access.newPassword')}
+          hint={isSelf ? t('access.newPasswordSelfHint') : t('access.newPasswordHint', { min: MIN_PASSWORD })}
+          optional
+        >
+          {ids => (
+            <Input {...ids} type="password" value={password} onChange={e => setPassword(e.target.value)} autoComplete="new-password" aria-invalid={!passwordOk} />
+          )}
+        </Field>
+      )}
     </FormDialog>
   )
 }
@@ -187,6 +193,11 @@ export default function AccessPage() {
                         <TableCell className="px-4 font-medium">
                           {user.username}
                           {isSelf && <span className="ml-1.5 font-normal text-muted-foreground">{t('access.you')}</span>}
+                          {user.auth_source === 'oidc' && (
+                            <span className="ml-2 inline-flex align-middle" title={t('access.ssoHint')}>
+                              <StatusBadge>{t('access.sso')}</StatusBadge>
+                            </span>
+                          )}
                         </TableCell>
                         <TableCell>
                           <RoleBadge role={user.role} />

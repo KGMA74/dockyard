@@ -74,11 +74,12 @@ describe('locales', () => {
       'settings.configGroups': ['registry', 'access', 'security', 'maintenance', 'observability'],
       'settings.configKeys': [
         'mode', 'upstream', 'mirror_tag_ttl', 'storage_backend', 's3_bucket', 's3_endpoint', 'data_path',
-        'v2_auth', 'anonymous_pull', 'tls', 'login_rate_limit', 'global_rate_limit', 'trusted_proxies',
+        'v2_auth', 'anonymous_pull', 'sso', 'tls', 'login_rate_limit', 'global_rate_limit', 'trusted_proxies',
         'cors_origins', 'scanning', 'scanner', 'scan_offline', 'require_signed_push', 'cosign_keys',
         'maintenance_schedule', 'gc_grace_period', 'metrics', 'tracing',
       ],
       'settings.storageBackends': ['local', 's3'],
+      'login.sso': ['provider_denied', 'expired', 'provider_unreachable', 'exchange_failed', 'invalid_token', 'not_allowed', 'username_invalid', 'username_taken', 'session_failed'],
       'vulnPolicy.threshold': ['off', 'CRITICAL', 'HIGH', 'MEDIUM', 'LOW'],
     }
     const missing = Object.entries(families).flatMap(([family, members]) =>

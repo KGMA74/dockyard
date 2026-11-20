@@ -9,6 +9,7 @@ import {
   getHealth,
   getInsights,
   getManifestDetails,
+  getMe,
   getRepositories,
   getScanVulnerabilities,
   getServerConfig,
@@ -40,6 +41,7 @@ export const keys = {
   scans: (params: object) => ['scans', params] as const,
   scanReport: (id: number) => ['scan-report', id] as const,
   users: ['users'] as const,
+  me: ['me'] as const,
   robots: ['robots'] as const,
   sessions: ['sessions'] as const,
   mySessions: ['sessions', 'mine'] as const,
@@ -110,6 +112,7 @@ export const useScanReport = (id: number | null) =>
 
 export const useUsers = () => useQuery({ queryKey: keys.users, queryFn: listUsers, select: data => data.users })
 export const useRobots = () => useQuery({ queryKey: keys.robots, queryFn: listRobots, select: data => data.robots })
+export const useMe = () => useQuery({ queryKey: keys.me, queryFn: getMe })
 export const useSessions = () => useQuery({ queryKey: keys.sessions, queryFn: listSessions })
 export const useMySessions = () => useQuery({ queryKey: keys.mySessions, queryFn: listMySessions })
 export const useServerConfig = (enabled: boolean) =>

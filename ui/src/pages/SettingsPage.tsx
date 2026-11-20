@@ -1,17 +1,19 @@
 import { useState } from 'react'
-import { BookOpen, Bug, GitFork, KeyRound, LogOut, Monitor, MonitorSmartphone, Terminal } from 'lucide-react'
+import { BookOpen, Bug, GitFork, KeyRound, LogOut, Monitor, MonitorSmartphone, RefreshCw, Terminal, TriangleAlert } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
-import { registryHost, revokeMySession, type ConfigGroupId, type ConfigItem, type SessionInfo } from '@/api'
+import { createCLISecret, deleteCLISecret, registryHost, revokeMySession, type ConfigGroupId, type ConfigItem, type SessionInfo } from '@/api'
 import { LanguageSwitcher } from '@/i18nSwitcher'
 import { clientKind, describeClient } from '@/lib/client'
 import { relativeTime } from '@/lib/format'
-import { keys, useHealth, useInvalidate, useMySessions, useServerConfig } from '@/lib/queries'
+import { keys, useHealth, useInvalidate, useMe, useMySessions, useServerConfig } from '@/lib/queries'
 import { useSession } from '@/lib/session'
 import { ThemeSwitcher } from '@/theme'
 import ChangePasswordModal from '@/components/ChangePasswordModal'
 import {
   Command,
+  CopyButton,
+  errorMessage,
   ConfirmDialog,
   EmptyState,
   Fact,
@@ -75,13 +77,18 @@ function AccountCard({ onChangePassword }: { onChangePassword: () => void }) {
           <p className="flex items-center gap-2">
             <span className="truncate text-base font-semibold">{username}</span>
             <RoleBadge role={session.role} />
+            {session.sso && <StatusBadge>{t('settings.ssoAccount')}</StatusBadge>}
           </p>
-          <p className="text-xs text-muted-foreground text-pretty">{t(`access.roleHint_${session.role}`, '')}</p>
+          <p className="text-xs text-muted-foreground text-pretty">
+            {session.sso ? t('settings.ssoHint') : t(`access.roleHint_${session.role}`, '')}
+          </p>
         </div>
-        <Button variant="outline" size="sm" onClick={onChangePassword}>
-          <KeyRound />
-          {t('changePassword.title')}
-        </Button>
+        {!session.sso && (
+          <Button variant="outline" size="sm" onClick={onChangePassword}>
+            <KeyRound />
+            {t('changePassword.title')}
+          </Button>
+        )}
       </div>
       <Facts className="border-t">
         <Fact label={t('access.repositories')}>
@@ -99,6 +106,96 @@ function AccountCard({ onChangePassword }: { onChangePassword: () => void }) {
         </Fact>
       </Facts>
     </Panel>
+  )
+}
+
+// ── CLI secret ───────────────────────────────────────────────────────────────
+
+/** A generated docker login password: the only one an SSO account has, and a
+ *  revocable stand-in for a real password anywhere else. */
+function CLISecretSection() {
+  const { t } = useTranslation()
+  const session = useSession()
+  const me = useMe()
+  const invalidate = useInvalidate()
+  const [revealed, setRevealed] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState<'replace' | 'revoke' | null>(null)
+  const host = registryHost()
+  const username = session.username ?? '<username>'
+  const has = me.data?.has_cli_secret ?? false
+
+  async function issue() {
+    const { secret } = await createCLISecret()
+    setConfirming(null)
+    setRevealed(secret)
+    await invalidate(keys.me)
+  }
+
+  return (
+    <SettingsSection
+      title={t('settings.cliSecret')}
+      description={session.sso ? t('settings.cliSecretBodySso') : t('settings.cliSecretBody')}
+      actions={
+        has ? (
+          <>
+            <Button variant="outline" size="sm" onClick={() => setConfirming('replace')}>
+              <RefreshCw />
+              {t('settings.cliSecretReplace')}
+            </Button>
+            <Button variant="ghost" size="sm" onClick={() => setConfirming('revoke')}>
+              {t('settings.cliSecretRevoke')}
+            </Button>
+          </>
+        ) : (
+          <Button size="sm" onClick={() => void issue().catch(err => toast.error(errorMessage(err, t('kit.unknownError'))))}>
+            <KeyRound />
+            {t('settings.cliSecretCreate')}
+          </Button>
+        )
+      }
+    >
+      <Panel className="space-y-3 p-4">
+        {revealed ? (
+          <>
+            <p className="flex items-start gap-2 text-xs text-muted-foreground">
+              <TriangleAlert className="mt-px size-3.5 shrink-0 text-warning" />
+              {t('settings.cliSecretOnce')}
+            </p>
+            <div className="flex items-center gap-1 rounded-lg border bg-muted/50 py-1 pr-1 pl-3">
+              <code className="min-w-0 flex-1 truncate text-xs">{revealed}</code>
+              <CopyButton value={revealed} label={t('robots.copySecret')} />
+            </div>
+            <Command>{`docker login ${host} -u ${username}`}</Command>
+          </>
+        ) : (
+          <p className="flex items-center gap-2 text-sm">
+            <StatusBadge tone={has ? 'success' : 'neutral'}>
+              {has ? t('settings.cliSecretActive') : t('settings.cliSecretNone')}
+            </StatusBadge>
+            <span className="text-xs text-muted-foreground">
+              {has ? t('settings.cliSecretActiveHint') : t('settings.cliSecretNoneHint')}
+            </span>
+          </p>
+        )}
+      </Panel>
+
+      {confirming && (
+        <ConfirmDialog
+          title={confirming === 'replace' ? t('settings.cliSecretReplaceTitle') : t('settings.cliSecretRevokeTitle')}
+          description={t('settings.cliSecretInvalidates')}
+          confirmLabel={confirming === 'replace' ? t('settings.cliSecretReplace') : t('settings.cliSecretRevoke')}
+          destructive={confirming === 'revoke'}
+          onConfirm={async () => {
+            if (confirming === 'replace') return issue()
+            await deleteCLISecret()
+            setConfirming(null)
+            setRevealed(null)
+            await invalidate(keys.me)
+          }}
+          onCancel={() => setConfirming(null)}
+        />
+      )}
+    </SettingsSection>
   )
 }
 
@@ -249,7 +346,7 @@ function ConfigValue({ item }: { item: ConfigItem }) {
       <>{t('settings.keyCount', { count })}</>
     )
   }
-  if (key === 'tls' && value === 'off') return <StatusBadge>{t('settings.off')}</StatusBadge>
+  if ((key === 'tls' || key === 'sso') && value === 'off') return <StatusBadge>{t('settings.off')}</StatusBadge>
   // Go durations ("1h0m0s", "5m0s") without their zero tail: "1h", "5m".
   if (key === 'gc_grace_period' || key === 'mirror_tag_ttl') {
     return <code className="text-xs">{String(value).replace(/(\D)0s$/, '$1').replace(/(\D)0m$/, '$1')}</code>
@@ -327,6 +424,8 @@ export default function SettingsPage() {
           </div>
         </Panel>
       </SettingsSection>
+
+      <CLISecretSection />
 
       <SessionsSection />
 

@@ -198,6 +198,7 @@ interface TokenClaims {
   sub?: string
   role?: string
   repos?: string[] | null
+  src?: string
   exp?: number
 }
 
@@ -242,6 +243,49 @@ export async function login(username: string, password: string): Promise<void> {
   const data = (await res.json()) as { token: string; refresh_token?: string }
   localStorage.setItem(TOKEN_KEY, data.token)
   if (data.refresh_token) localStorage.setItem(REFRESH_KEY, data.refresh_token)
+}
+
+/** Whether single sign-on is configured, and the provider's label. */
+export async function getSSOInfo(): Promise<{ enabled: boolean; name?: string }> {
+  const res = await fetch(BASE + '/auth/oidc')
+  if (!res.ok) return { enabled: false }
+  return (await res.json()) as { enabled: boolean; name?: string }
+}
+
+/** Where the browser goes to start an SSO sign-in. */
+export function ssoLoginUrl(returnTo: string): string {
+  return `${BASE}/auth/oidc/login?return=${encodeURIComponent(returnTo)}`
+}
+
+/** Finishes an SSO sign-in: trades the one-time code from the callback for
+ *  the session tokens, stored like a password login's. */
+export async function completeSSO(code: string): Promise<void> {
+  const res = await fetch(BASE + '/auth/oidc/exchange', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ code }),
+  })
+  if (!res.ok) throw await parseError(res)
+  const data = (await res.json()) as { token: string; refresh_token?: string }
+  localStorage.setItem(TOKEN_KEY, data.token)
+  if (data.refresh_token) localStorage.setItem(REFRESH_KEY, data.refresh_token)
+}
+
+/** 'oidc' for single sign-on accounts, which have no password. */
+export function getAuthSource(): string {
+  return tokenClaims()?.src ?? 'local'
+}
+
+export async function getMe(): Promise<UserInfo> {
+  return req('/auth/me')
+}
+
+export async function createCLISecret(): Promise<{ username: string; secret: string }> {
+  return req('/auth/cli-secret', { method: 'POST' })
+}
+
+export async function deleteCLISecret(): Promise<void> {
+  return req('/auth/cli-secret', { method: 'DELETE' })
 }
 
 export async function logout(): Promise<void> {
@@ -467,6 +511,10 @@ export interface UserInfo {
   repo_patterns: string[]
   created_at: string
   updated_at: string
+  /** "oidc": signs in through SSO and has no password. */
+  auth_source: 'local' | 'oidc'
+  /** Has a CLI secret for docker login. */
+  has_cli_secret: boolean
 }
 
 export async function listUsers(): Promise<{ users: UserInfo[]; count: number }> {

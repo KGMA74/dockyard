@@ -1,7 +1,8 @@
-import { useState, SubmitEvent } from 'react'
-import { Box, Eye, EyeOff } from 'lucide-react'
+import { useEffect, useState, SubmitEvent } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { Box, Eye, EyeOff, KeyRound } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { ApiError, login } from '../api'
+import { ApiError, completeSSO, getSSOInfo, login, ssoLoginUrl } from '../api'
 import { ThemeSwitcher } from '../theme'
 import { LanguageSwitcher } from '../i18nSwitcher'
 import { Spinner } from '@/components/kit'
@@ -73,13 +74,55 @@ function RegistryGlyph({ className }: { className?: string }) {
   )
 }
 
+const SSO_ERRORS = [
+  'provider_denied',
+  'expired',
+  'provider_unreachable',
+  'exchange_failed',
+  'invalid_token',
+  'not_allowed',
+  'username_invalid',
+  'username_taken',
+  'session_failed',
+] as const
+
+/** What the SSO callback left in the URL fragment, read once and erased so a
+ *  reload or a shared link never replays it. */
+function takeSSOResult(): { code?: string; returnTo: string; error?: string } {
+  const params = new URLSearchParams(window.location.hash.slice(1))
+  const code = params.get('oidc_code') ?? undefined
+  const error = params.get('oidc_error') ?? undefined
+  // Signing in from a deep link comes back to it.
+  const ret = params.get('return') ?? window.location.pathname + window.location.search
+  const returnTo = ret.startsWith('/') && !ret.startsWith('//') ? ret : '/'
+  if (code || error) window.history.replaceState(null, '', code ? returnTo : '/')
+  return { code, returnTo, error }
+}
+
 export default function LoginPage({ onLogin }: Props) {
   const { t } = useTranslation()
   const [username, setUsername] = useState('')
   const [password, setPassword] = useState('')
   const [showPassword, setShowPassword] = useState(false)
-  const [error, setError] = useState('')
+  const [sso] = useState(takeSSOResult)
+  const [error, setError] = useState(() =>
+    sso.error ? t(`login.sso.${(SSO_ERRORS as readonly string[]).includes(sso.error) ? sso.error : 'session_failed'}`) : '',
+  )
   const [loading, setLoading] = useState(false)
+  const [completing, setCompleting] = useState(Boolean(sso.code))
+  const ssoInfo = useQuery({ queryKey: ['sso-info'], queryFn: getSSOInfo, staleTime: Infinity, retry: false })
+
+  // Back from the identity provider: finish signing in.
+  useEffect(() => {
+    if (!sso.code) return
+    completeSSO(sso.code)
+      .then(onLogin)
+      .catch(() => {
+        window.history.replaceState(null, '', '/')
+        setError(t('login.sso.expired'))
+        setCompleting(false)
+      })
+  }, [sso.code, onLogin, t])
 
   async function handleSubmit(e: SubmitEvent) {
     e.preventDefault()
@@ -156,6 +199,28 @@ export default function LoginPage({ onLogin }: Props) {
 
           <Card className="[--card-spacing:--spacing(7)] border-t-2 border-t-primary">
             <CardContent>
+              {completing ? (
+                <p className="flex items-center justify-center gap-2 py-8 text-sm text-muted-foreground" role="status">
+                  <Spinner />
+                  {t('login.sso.completing')}
+                </p>
+              ) : (
+              <>
+              {ssoInfo.data?.enabled && (
+                <div className="mb-5 space-y-5">
+                  <Button asChild variant="outline" size="lg" className="w-full">
+                    <a href={ssoLoginUrl(sso.returnTo)}>
+                      <KeyRound />
+                      {t('login.sso.signInWith', { name: ssoInfo.data.name ?? 'SSO' })}
+                    </a>
+                  </Button>
+                  <div className="flex items-center gap-3 text-xs text-muted-foreground" aria-hidden="true">
+                    <span className="h-px flex-1 bg-border" />
+                    {t('login.sso.or')}
+                    <span className="h-px flex-1 bg-border" />
+                  </div>
+                </div>
+              )}
               <form onSubmit={handleSubmit} className="space-y-5">
                 <div className="space-y-1.5">
                   <Label htmlFor="username">{t('login.username')}</Label>
@@ -205,6 +270,8 @@ export default function LoginPage({ onLogin }: Props) {
                   {loading ? t('login.signingIn') : t('login.signIn')}
                 </Button>
               </form>
+              </>
+              )}
             </CardContent>
           </Card>
         </div>
