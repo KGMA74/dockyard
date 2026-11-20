@@ -22,7 +22,6 @@ import {
   QueryPanel,
   RoleBadge,
   RowAction,
-  Section,
   StatusBadge,
   type Tone,
 } from '@/components/kit'
@@ -32,6 +31,32 @@ const REPO_URL = 'https://github.com/KGMA74/dockyard'
 
 /** SQLite timestamps come back without a zone; they are UTC. */
 const asUtc = (value: string) => (/[zZ]|[+-]\d\d:?\d\d$/.test(value) ? value : value + 'Z')
+
+/** Settings use the full page width like every other page, with the heading
+ *  beside the content on wide screens rather than one narrow centred column:
+ *  forms stay readable without the page looking shrunk. */
+function SettingsSection({
+  title,
+  description,
+  actions,
+  children,
+}: {
+  title: React.ReactNode
+  description?: React.ReactNode
+  actions?: React.ReactNode
+  children: React.ReactNode
+}) {
+  return (
+    <section className="grid gap-x-10 gap-y-3 border-t pt-6 first-of-type:border-t-0 first-of-type:pt-0 lg:grid-cols-[minmax(0,16rem)_minmax(0,1fr)]">
+      <div className="space-y-1">
+        <h2 className="text-sm font-semibold">{title}</h2>
+        {description && <p className="text-sm text-muted-foreground text-pretty">{description}</p>}
+        {actions && <div className="flex flex-wrap gap-2 pt-2">{actions}</div>}
+      </div>
+      <div className="min-w-0">{children}</div>
+    </section>
+  )
+}
 
 // ── Account ──────────────────────────────────────────────────────────────────
 
@@ -129,7 +154,7 @@ function SessionsSection() {
   const others = ordered.filter(item => item.id !== data?.current_id)
 
   return (
-    <Section
+    <SettingsSection
       title={t('settings.sessions')}
       description={t('settings.sessionsBody')}
       actions={
@@ -187,7 +212,7 @@ function SessionsSection() {
           onCancel={() => setSigningOutOthers(false)}
         />
       )}
-    </Section>
+    </SettingsSection>
   )
 }
 
@@ -237,7 +262,7 @@ function ServerConfigSection() {
   const config = useServerConfig(true)
 
   return (
-    <Section title={t('settings.serverConfig')} description={t('settings.serverConfigBody')}>
+    <SettingsSection title={t('settings.serverConfig')} description={t('settings.serverConfigBody')}>
       <QueryPanel query={config} skeletonRows={6}>
         {groups => (
           <div className="space-y-4">
@@ -268,7 +293,7 @@ function ServerConfigSection() {
           </div>
         )}
       </QueryPanel>
-    </Section>
+    </SettingsSection>
   )
 }
 
@@ -283,14 +308,14 @@ export default function SettingsPage() {
   const username = session.username ?? '<username>'
 
   return (
-    <Page className="max-w-3xl">
+    <Page>
       <PageHeader title={t('settings.title')} description={t('settings.description')} />
 
-      <Section title={t('settings.account')}>
+      <SettingsSection title={t('settings.account')}>
         <AccountCard onChangePassword={() => setChangingPassword(true)} />
-      </Section>
+      </SettingsSection>
 
-      <Section title={t('settings.preferences')}>
+      <SettingsSection title={t('settings.preferences')}>
         <Panel className="grid gap-4 p-4 sm:grid-cols-2">
           <div className="space-y-1.5">
             <p className="text-xs font-medium">{t('settings.appearance')}</p>
@@ -301,20 +326,20 @@ export default function SettingsPage() {
             <LanguageSwitcher />
           </div>
         </Panel>
-      </Section>
+      </SettingsSection>
 
       <SessionsSection />
 
-      <Section title={t('settings.cli')} description={t('settings.cliBody')}>
+      <SettingsSection title={t('settings.cli')} description={t('settings.cliBody')}>
         <Panel className="space-y-1.5 p-4">
           <Command>{`docker login ${host} -u ${username}`}</Command>
           <Command>{`dockyard-cli login ${window.location.origin} -u ${username}`}</Command>
         </Panel>
-      </Section>
+      </SettingsSection>
 
       {session.isAdmin && <ServerConfigSection />}
 
-      <Section title={t('settings.registry')}>
+      <SettingsSection title={t('settings.registry')}>
         <Panel>
           <Facts>
             <Fact label={t('settings.address')}>
@@ -346,7 +371,7 @@ export default function SettingsPage() {
             </Button>
           </div>
         </Panel>
-      </Section>
+      </SettingsSection>
 
       {changingPassword && <ChangePasswordModal onClose={() => setChangingPassword(false)} />}
     </Page>
