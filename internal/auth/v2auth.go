@@ -4,10 +4,10 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"regexp"
 	"strings"
 	"time"
 
+	"dockyard/internal/reference"
 	"dockyard/internal/store"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -44,24 +44,11 @@ func PrincipalFromRequest(r *http.Request) (Principal, bool) {
 	return p, ok
 }
 
-var (
-	reV2Manifests = regexp.MustCompile(`^/v2/(.+)/manifests/[^/]+$`)
-	reV2Blobs     = regexp.MustCompile(`^/v2/(.+)/blobs/(?:uploads/.*|sha256:[a-f0-9]+)$`)
-	reV2Tags      = regexp.MustCompile(`^/v2/(.+)/tags/list$`)
-)
-
-// v2Scope resolves the action and repository a V2 request needs.
+// v2Scope resolves the action and repository a V2 request needs. The path is
+// split by reference.ParseV2Path — the same function the handlers route with —
+// so the repository authorized here is exactly the one that gets served.
 func v2Scope(r *http.Request) (Action, string) {
-	path := r.URL.Path
-	var repo string
-	switch {
-	case reV2Manifests.MatchString(path):
-		repo = reV2Manifests.FindStringSubmatch(path)[1]
-	case reV2Blobs.MatchString(path):
-		repo = reV2Blobs.FindStringSubmatch(path)[1]
-	case reV2Tags.MatchString(path):
-		repo = reV2Tags.FindStringSubmatch(path)[1]
-	}
+	repo := reference.ParseV2Path(r.URL.Path).Name
 	switch r.Method {
 	case http.MethodGet, http.MethodHead:
 		return ActionPull, repo
@@ -73,14 +60,21 @@ func v2Scope(r *http.Request) (Action, string) {
 }
 
 // IssueRegistryToken signs a short-lived token for the V2 protocol carrying
-// the same role/repos claims the admin API uses.
-func (m *Manager) IssueRegistryToken(username, role string, repoPatterns []string) (string, error) {
+// the same role/repos claims the admin API uses. Robot and scanner tokens are
+// marked so validate resolves them against the right identity.
+func (m *Manager) IssueRegistryToken(p Principal) (string, error) {
 	claims := jwt.MapClaims{
-		"sub":   username,
-		"role":  role,
-		"repos": repoPatterns,
+		"sub":   p.Username,
+		"role":  p.Role,
+		"repos": p.RepoPatterns,
 		"exp":   time.Now().Add(registryTokenTTL).Unix(),
 		"iat":   time.Now().Unix(),
+	}
+	if p.RobotID != 0 {
+		claims["rid"] = p.RobotID
+	}
+	if p.Scanner {
+		claims["scn"] = true
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(m.secrets[0])
 }
@@ -92,24 +86,23 @@ func (m *Manager) V2Token(anonymousPull bool) echo.HandlerFunc {
 	return func(c echo.Context) error {
 		username, password, hasBasic := c.Request().BasicAuth()
 
-		var subject, role string
-		var patterns []string
+		var p Principal
 		switch {
 		case hasBasic:
-			u, ok := m.verify(username, password)
+			var ok bool
+			p, ok = m.authenticate(username, password)
 			if !ok {
 				return c.JSON(http.StatusUnauthorized, map[string]string{"error": "invalid credentials"})
 			}
-			subject, role, patterns = u.Username, u.Role, u.RepoPatterns
 		case anonymousPull:
 			// Anonymous tokens can only ever pull: role reader.
-			subject, role = anonymousUser, store.RoleReader
+			p = Principal{Username: anonymousUser, Role: store.RoleReader}
 		default:
 			c.Response().Header().Set("WWW-Authenticate", `Basic realm="Dockyard Registry"`)
 			return c.JSON(http.StatusUnauthorized, map[string]string{"error": "authentication required"})
 		}
 
-		tok, err := m.IssueRegistryToken(subject, role, patterns)
+		tok, err := m.IssueRegistryToken(p)
 		if err != nil {
 			return c.JSON(http.StatusInternalServerError, map[string]string{"error": "token generation failed"})
 		}
@@ -128,6 +121,14 @@ func (m *Manager) V2Token(anonymousPull bool) echo.HandlerFunc {
 func (m *Manager) V2Middleware(anonymousPull bool) func(http.Handler) http.Handler {
 	return func(next http.Handler) http.Handler {
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			route := reference.ParseV2Path(r.URL.Path)
+			// A malformed repository name must never reach pattern matching:
+			// "team-a/../team-b/app" satisfies the pattern "team-a/*" yet
+			// resolves to someone else's repository.
+			if err := route.Validate(); err != nil {
+				writeV2Error(w, http.StatusBadRequest, reference.V2ErrorCode(err), err.Error())
+				return
+			}
 			action, repo := v2Scope(r)
 
 			var p Principal
@@ -144,12 +145,12 @@ func (m *Manager) V2Middleware(anonymousPull bool) func(http.Handler) http.Handl
 				authenticated = true
 			case strings.HasPrefix(header, "Basic "):
 				username, password, _ := r.BasicAuth()
-				u, ok := m.verify(username, password)
+				var ok bool
+				p, ok = m.authenticate(username, password)
 				if !ok {
 					m.challenge(w, r, repo, action, "invalid credentials")
 					return
 				}
-				p = Principal{Username: u.Username, Role: u.Role, RepoPatterns: u.RepoPatterns}
 				authenticated = true
 			}
 
@@ -159,6 +160,13 @@ func (m *Manager) V2Middleware(anonymousPull bool) func(http.Handler) http.Handl
 					return
 				}
 				m.challenge(w, r, repo, action, "authentication required")
+				return
+			}
+			// Endpoints this server does not recognise carry no repository
+			// to check a restricted account against — and in proxy mode they
+			// would be forwarded upstream as-is. Deny rather than guess.
+			if route.Route == reference.RouteUnknown && len(p.RepoPatterns) > 0 {
+				writeV2Error(w, http.StatusForbidden, "DENIED", "endpoint not available to accounts restricted to specific repositories")
 				return
 			}
 			if !Authorize(p, action, repo) {

@@ -10,6 +10,8 @@ import (
 	"strings"
 	"time"
 
+	"dockyard/internal/reference"
+
 	"github.com/minio/minio-go/v7"
 	"github.com/minio/minio-go/v7/pkg/credentials"
 )
@@ -43,10 +45,23 @@ func NewS3(endpoint, accessKey, secretKey, bucket, region string, secure bool) (
 	return &S3Backend{client: client, bucket: bucket}, nil
 }
 
+// PutBlob stores a blob under its digest. A blob that is already present is
+// never rewritten: the incoming stream is only hashed. The previous
+// implementation always wrote to the final key and deleted it on a digest
+// mismatch, so one bad upload destroyed a valid blob other images relied on.
 func (s *S3Backend) PutBlob(digest string, content io.Reader, size int64) error {
+	if err := reference.CheckDigest(digest); err != nil {
+		return err
+	}
 	ctx := context.Background()
-	key := fmt.Sprintf("blobs/%s", digest)
+	key := blobKey(digest)
 	h := sha256.New()
+	if exists, _ := s.BlobExists(digest); exists {
+		if _, err := io.Copy(h, content); err != nil {
+			return err
+		}
+		return checkDigestMatch(digest, h)
+	}
 	_, err := s.client.PutObject(
 		ctx,
 		s.bucket, key, io.TeeReader(content, h), size,
@@ -55,14 +70,27 @@ func (s *S3Backend) PutBlob(digest string, content io.Reader, size int64) error 
 	if err != nil {
 		return err
 	}
-	if got := fmt.Sprintf("sha256:%x", h.Sum(nil)); got != digest {
+	if err := checkDigestMatch(digest, h); err != nil {
+		// Safe to remove: this object did not exist before this call.
 		_ = s.client.RemoveObject(ctx, s.bucket, key, minio.RemoveObjectOptions{})
-		return fmt.Errorf("digest mismatch: expected %s got %s", digest, got)
+		return err
+	}
+	return nil
+}
+
+func blobKey(digest string) string { return "blobs/" + digest }
+
+func checkDigestMatch(want string, h interface{ Sum([]byte) []byte }) error {
+	if got := fmt.Sprintf("sha256:%x", h.Sum(nil)); got != want {
+		return fmt.Errorf("digest mismatch: expected %s got %s", want, got)
 	}
 	return nil
 }
 
 func (s *S3Backend) GetBlob(digest string) (io.ReadCloser, int64, error) {
+	if err := reference.CheckDigest(digest); err != nil {
+		return nil, 0, err
+	}
 	key := fmt.Sprintf("blobs/%s", digest)
 	obj, err := s.client.GetObject(context.Background(), s.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
@@ -77,6 +105,9 @@ func (s *S3Backend) GetBlob(digest string) (io.ReadCloser, int64, error) {
 }
 
 func (s *S3Backend) BlobExists(digest string) (bool, error) {
+	if !reference.ValidDigest(digest) {
+		return false, nil
+	}
 	key := fmt.Sprintf("blobs/%s", digest)
 	_, err := s.client.StatObject(context.Background(), s.bucket, key, minio.StatObjectOptions{})
 	if err != nil {
@@ -89,6 +120,9 @@ func (s *S3Backend) BlobExists(digest string) (bool, error) {
 }
 
 func (s *S3Backend) DeleteBlob(digest string) error {
+	if err := reference.CheckDigest(digest); err != nil {
+		return err
+	}
 	key := fmt.Sprintf("blobs/%s", digest)
 	return s.client.RemoveObject(context.Background(), s.bucket, key, minio.RemoveObjectOptions{})
 }
@@ -109,6 +143,9 @@ func (s *S3Backend) uploadPartsPrefix(uuid string) string {
 }
 
 func (s *S3Backend) InitUpload(uuid string) error {
+	if err := reference.CheckUploadID(uuid); err != nil {
+		return err
+	}
 	_, err := s.client.PutObject(
 		context.Background(),
 		s.bucket, s.uploadMarkerKey(uuid),
@@ -145,6 +182,9 @@ func (s *S3Backend) statUpload(uuid string) ([]minio.ObjectInfo, error) {
 // AppendUpload streams the chunk into its own part object — no read-back of
 // previously uploaded data.
 func (s *S3Backend) AppendUpload(uuid string, content io.Reader) error {
+	if err := reference.CheckUploadID(uuid); err != nil {
+		return err
+	}
 	parts, err := s.statUpload(uuid)
 	if err != nil {
 		return err
@@ -162,6 +202,12 @@ func (s *S3Backend) AppendUpload(uuid string, content io.Reader) error {
 // CommitUpload streams the concatenated parts into the final blob while
 // hashing them, verifies the digest, then drops the upload session.
 func (s *S3Backend) CommitUpload(uuid, digest string) error {
+	if err := reference.CheckUploadID(uuid); err != nil {
+		return err
+	}
+	if err := reference.CheckDigest(digest); err != nil {
+		return err
+	}
 	ctx := context.Background()
 	parts, err := s.statUpload(uuid)
 	if err != nil {
@@ -186,26 +232,43 @@ func (s *S3Backend) CommitUpload(uuid, digest string) error {
 		total += p.Size
 	}
 
-	dstKey := fmt.Sprintf("blobs/%s", digest)
+	dstKey := blobKey(digest)
 	h := sha256.New()
+	stream := io.MultiReader(readers...)
+	// Same rule as PutBlob: an existing blob is verified against, never
+	// overwritten or deleted.
+	if exists, _ := s.BlobExists(digest); exists {
+		if _, err := io.Copy(h, stream); err != nil {
+			return err
+		}
+		if err := checkDigestMatch(digest, h); err != nil {
+			_ = s.DeleteUpload(uuid)
+			return err
+		}
+		return s.DeleteUpload(uuid)
+	}
 	_, err = s.client.PutObject(
 		ctx,
 		s.bucket, dstKey,
-		io.TeeReader(io.MultiReader(readers...), h), total,
+		io.TeeReader(stream, h), total,
 		minio.PutObjectOptions{PartSize: uploadPartSize},
 	)
 	if err != nil {
 		return err
 	}
-	if got := fmt.Sprintf("sha256:%x", h.Sum(nil)); got != digest {
+	if err := checkDigestMatch(digest, h); err != nil {
 		_ = s.client.RemoveObject(ctx, s.bucket, dstKey, minio.RemoveObjectOptions{})
-		return fmt.Errorf("digest mismatch: expected %s got %s", digest, got)
+		_ = s.DeleteUpload(uuid)
+		return err
 	}
 	return s.DeleteUpload(uuid)
 }
 
 // DeleteUpload removes the marker and every part of the session.
 func (s *S3Backend) DeleteUpload(uuid string) error {
+	if err := reference.CheckUploadID(uuid); err != nil {
+		return err
+	}
 	ctx := context.Background()
 	for obj := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
 		Prefix:    fmt.Sprintf("uploads/%s/", uuid),
@@ -220,6 +283,9 @@ func (s *S3Backend) DeleteUpload(uuid string) error {
 }
 
 func (s *S3Backend) GetUploadSize(uuid string) (int64, error) {
+	if err := reference.CheckUploadID(uuid); err != nil {
+		return 0, err
+	}
 	parts, err := s.statUpload(uuid)
 	if err != nil {
 		return 0, err
@@ -231,9 +297,15 @@ func (s *S3Backend) GetUploadSize(uuid string) (int64, error) {
 	return total, nil
 }
 
-func (s *S3Backend) PutManifest(name, reference, digest string, content []byte) error {
+func (s *S3Backend) PutManifest(name, ref, digest string, content []byte) error {
+	if err := checkManifestTarget(name, ref); err != nil {
+		return err
+	}
+	if err := reference.CheckDigest(digest); err != nil {
+		return err
+	}
 	keys := []string{
-		fmt.Sprintf("manifests/%s/%s", name, reference),
+		fmt.Sprintf("manifests/%s/%s", name, ref),
 		fmt.Sprintf("manifests/%s/%s", name, digest),
 	}
 	for _, key := range keys {
@@ -261,8 +333,11 @@ func (s *S3Backend) getObjectBytes(ctx context.Context, key string) ([]byte, err
 	return io.ReadAll(obj)
 }
 
-func (s *S3Backend) GetManifest(name, reference string) ([]byte, string, error) {
-	key := fmt.Sprintf("manifests/%s/%s", name, reference)
+func (s *S3Backend) GetManifest(name, ref string) ([]byte, string, error) {
+	if err := checkManifestTarget(name, ref); err != nil {
+		return nil, "", err
+	}
+	key := fmt.Sprintf("manifests/%s/%s", name, ref)
 	obj, err := s.client.GetObject(context.Background(), s.bucket, key, minio.GetObjectOptions{})
 	if err != nil {
 		return nil, "", err
@@ -279,14 +354,17 @@ func (s *S3Backend) GetManifest(name, reference string) ([]byte, string, error) 
 	return data, digest, nil
 }
 
-func (s *S3Backend) DeleteManifest(name, reference string) error {
+func (s *S3Backend) DeleteManifest(name, ref string) error {
+	if err := checkManifestTarget(name, ref); err != nil {
+		return err
+	}
 	ctx := context.Background()
 
 	// Resolve a tag reference to its digest first — otherwise the content-hash
 	// comparison below never matches and the delete is a silent no-op.
-	digest := reference
-	if !strings.HasPrefix(reference, "sha256:") {
-		_, d, err := s.GetManifest(name, reference)
+	digest := ref
+	if !reference.IsDigest(ref) {
+		_, d, err := s.GetManifest(name, ref)
 		if err != nil {
 			return err
 		}
@@ -305,8 +383,7 @@ func (s *S3Backend) DeleteManifest(name, reference string) error {
 		if obj.Err != nil {
 			return obj.Err
 		}
-		ref := strings.TrimPrefix(obj.Key, prefix)
-		data, _, err := s.GetManifest(name, ref)
+		data, err := s.getObjectBytes(ctx, obj.Key)
 		if err != nil {
 			continue
 		}
@@ -351,12 +428,18 @@ func (s *S3Backend) pruneOrphanChildManifests(ctx context.Context, name string, 
 		if _, ok := stillReferenced[child]; ok {
 			continue
 		}
+		if !reference.ValidDigest(child) {
+			continue // child digests come from client-pushed JSON
+		}
 		_ = s.client.RemoveObject(ctx, s.bucket, fmt.Sprintf("manifests/%s/%s", name, child), minio.RemoveObjectOptions{})
 	}
 }
 
-func (s *S3Backend) ManifestExists(name, reference string) (bool, error) {
-	key := fmt.Sprintf("manifests/%s/%s", name, reference)
+func (s *S3Backend) ManifestExists(name, ref string) (bool, error) {
+	if checkManifestTarget(name, ref) != nil {
+		return false, nil
+	}
+	key := fmt.Sprintf("manifests/%s/%s", name, ref)
 	_, err := s.client.StatObject(context.Background(), s.bucket, key, minio.StatObjectOptions{})
 	if err != nil {
 		if minio.ToErrorResponse(err).Code == "NoSuchKey" {
@@ -397,6 +480,9 @@ func (s *S3Backend) ListRepositories() ([]string, error) {
 }
 
 func (s *S3Backend) ListTags(name string) ([]string, error) {
+	if err := reference.CheckName(name); err != nil {
+		return nil, err
+	}
 	ctx := context.Background()
 	prefix := fmt.Sprintf("manifests/%s/", name)
 	var tags []string
@@ -417,6 +503,12 @@ func (s *S3Backend) ListTags(name string) ([]string, error) {
 }
 
 func (s *S3Backend) TagPushedAt(name, tag string) (time.Time, error) {
+	if err := reference.CheckName(name); err != nil {
+		return time.Time{}, err
+	}
+	if err := reference.CheckTag(tag); err != nil {
+		return time.Time{}, err
+	}
 	key := fmt.Sprintf("manifests/%s/%s", name, tag)
 	info, err := s.client.StatObject(context.Background(), s.bucket, key, minio.StatObjectOptions{})
 	if err != nil {
@@ -428,6 +520,9 @@ func (s *S3Backend) TagPushedAt(name, tag string) (time.Time, error) {
 // DeleteRepository removes every manifest and tag object under the repository.
 // Blobs stay in the bucket until the next GC run, like manifest deletion.
 func (s *S3Backend) DeleteRepository(name string) error {
+	if err := reference.CheckName(name); err != nil {
+		return err
+	}
 	ctx := context.Background()
 	prefix := fmt.Sprintf("manifests/%s/", name)
 	found := false
@@ -462,7 +557,7 @@ func (s *S3Backend) AllBlobs() ([]string, error) {
 			return nil, obj.Err
 		}
 		digest := strings.TrimPrefix(obj.Key, "blobs/")
-		if digest != "" {
+		if reference.ValidDigest(digest) {
 			blobs = append(blobs, digest)
 		}
 	}
@@ -470,6 +565,9 @@ func (s *S3Backend) AllBlobs() ([]string, error) {
 }
 
 func (s *S3Backend) BlobSize(digest string) (int64, error) {
+	if err := reference.CheckDigest(digest); err != nil {
+		return 0, err
+	}
 	key := fmt.Sprintf("blobs/%s", digest)
 	info, err := s.client.StatObject(context.Background(), s.bucket, key, minio.StatObjectOptions{})
 	if err != nil {
@@ -478,6 +576,10 @@ func (s *S3Backend) BlobSize(digest string) (int64, error) {
 	return info.Size, nil
 }
 
+// ReferencedBlobs returns every blob digest some manifest still needs. It
+// fails rather than under-report: GC deletes whatever is missing from this
+// set, so skipping a manifest that could not be read (the previous behaviour
+// on any transient S3 error) meant deleting the layers of a live image.
 func (s *S3Backend) ReferencedBlobs() (map[string]struct{}, error) {
 	ctx := context.Background()
 	referenced := make(map[string]struct{})
@@ -498,17 +600,80 @@ func (s *S3Backend) ReferencedBlobs() (map[string]struct{}, error) {
 		name := strings.TrimSuffix(strings.TrimPrefix(obj.Key, "manifests/"), "/"+last)
 		data, err := s.getObjectBytes(ctx, obj.Key)
 		if err != nil {
-			continue
+			return nil, fmt.Errorf("read manifest %s: %w", obj.Key, err)
 		}
+		var childErr error
 		fetchChild := func(digest string) ([]byte, error) {
-			return s.getObjectBytes(ctx, fmt.Sprintf("manifests/%s/%s", name, digest))
+			if err := reference.CheckDigest(digest); err != nil {
+				return nil, err
+			}
+			child, err := s.getObjectBytes(ctx, fmt.Sprintf("manifests/%s/%s", name, digest))
+			if err != nil && minio.ToErrorResponse(err).Code != "NoSuchKey" {
+				// A child that is simply absent (partial mirror, pruned
+				// platform) references nothing; any other failure is unknown
+				// state and must stop the collection.
+				childErr = fmt.Errorf("read child manifest %s of %s: %w", digest, name, err)
+			}
+			return child, err
 		}
 		collectBlobRefs(data, referenced, fetchChild)
+		if childErr != nil {
+			return nil, childErr
+		}
 	}
 	return referenced, nil
 }
 
+// BlobModTime reports when a blob object was last written (see
+// LocalBackend.BlobModTime — used for the GC grace period).
+func (s *S3Backend) BlobModTime(digest string) (time.Time, error) {
+	if err := reference.CheckDigest(digest); err != nil {
+		return time.Time{}, err
+	}
+	info, err := s.client.StatObject(context.Background(), s.bucket, blobKey(digest), minio.StatObjectOptions{})
+	if err != nil {
+		return time.Time{}, err
+	}
+	return info.LastModified, nil
+}
+
+// PurgeStaleUploads removes upload sessions whose newest object is older
+// than olderThan — the leftovers of pushes that never sent their final PUT.
+func (s *S3Backend) PurgeStaleUploads(olderThan time.Duration) (int, error) {
+	ctx := context.Background()
+	cutoff := time.Now().Add(-olderThan)
+	newest := make(map[string]time.Time) // upload id → most recent write
+	for obj := range s.client.ListObjects(ctx, s.bucket, minio.ListObjectsOptions{
+		Prefix:    "uploads/",
+		Recursive: true,
+	}) {
+		if obj.Err != nil {
+			return 0, obj.Err
+		}
+		id, _, ok := strings.Cut(strings.TrimPrefix(obj.Key, "uploads/"), "/")
+		if !ok || !reference.ValidUploadID(id) {
+			continue
+		}
+		if obj.LastModified.After(newest[id]) {
+			newest[id] = obj.LastModified
+		}
+	}
+	removed := 0
+	for id, last := range newest {
+		if last.After(cutoff) {
+			continue
+		}
+		if err := s.DeleteUpload(id); err == nil {
+			removed++
+		}
+	}
+	return removed, nil
+}
+
 func (s *S3Backend) RemoveBlob(digest string) error {
+	if err := reference.CheckDigest(digest); err != nil {
+		return err
+	}
 	key := fmt.Sprintf("blobs/%s", digest)
 	return s.client.RemoveObject(context.Background(), s.bucket, key, minio.RemoveObjectOptions{})
 }

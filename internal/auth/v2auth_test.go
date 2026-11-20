@@ -133,8 +133,8 @@ func TestV2MiddlewareRBAC(t *testing.T) {
 		{"reader push denied", tokenFor("reader1", "reader-pass"), http.MethodPut, "/v2/team-a/app/manifests/v1", http.StatusForbidden},
 		{"pusher pushes own repo", tokenFor("pusher1", "pusher-pass"), http.MethodPut, "/v2/team-a/app/manifests/v1", http.StatusOK},
 		{"pusher push other repo denied", tokenFor("pusher1", "pusher-pass"), http.MethodPut, "/v2/team-b/app/manifests/v1", http.StatusForbidden},
-		{"pusher delete denied", tokenFor("pusher1", "pusher-pass"), http.MethodDelete, "/v2/team-a/app/manifests/sha256:abc", http.StatusForbidden},
-		{"admin deletes", tokenFor(testUser, testPassword), http.MethodDelete, "/v2/team-a/app/manifests/sha256:abc", http.StatusOK},
+		{"pusher delete denied", tokenFor("pusher1", "pusher-pass"), http.MethodDelete, "/v2/team-a/app/manifests/sha256:" + strings.Repeat("a", 64), http.StatusForbidden},
+		{"admin deletes", tokenFor(testUser, testPassword), http.MethodDelete, "/v2/team-a/app/manifests/sha256:" + strings.Repeat("a", 64), http.StatusOK},
 		{"ping with token", tokenFor("reader1", "reader-pass"), http.MethodGet, "/v2/", http.StatusOK},
 	}
 	for _, tc := range cases {

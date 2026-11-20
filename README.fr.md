@@ -1,3 +1,5 @@
+<img src="./assets/brand/dockyard-app-icon.svg" alt="" width="64" height="64">
+
 # Dockyard — Registry Docker auto-hébergée
 
 [![CI](https://github.com/KGMA74/dockyard/actions/workflows/ci.yml/badge.svg)](https://github.com/KGMA74/dockyard/actions/workflows/ci.yml)
@@ -16,11 +18,13 @@ Un serveur Docker Registry V2 léger, écrit en Go. Livré sous forme d'un **bin
 - **Deux backends de stockage** — filesystem local ou tout stockage objet compatible S3 (RustFS, MinIO, AWS S3, …)
 - **Deux modes** — registry embarquée, ou proxy/mirror devant une registry existante
 - **Support multi-arch** — les manifest lists (index OCI) sont résolues par plateforme, vraie taille totale au lieu de 0
-- **Scan de vulnérabilités** — scans Trivy à la demande via l'API admin, résultats avec comptes par sévérité. La base de vulnérabilités est incluse dans l'image : les scans fonctionnent hors ligne / en environnement air-gapped
+- **Scan et politique de vulnérabilités** — scans Trivy à la demande ou à chaque push ; refus optionnel de `docker pull` des images au-dessus d'un seuil de sévérité, avec une liste d'exceptions CVE qui expirent. La base de vulnérabilités est incluse dans l'image : les scans fonctionnent hors ligne / en environnement air-gapped
+- **Comptes robots** — identifiants réservés au registre pour la CI et les clusters (`docker login -u robot+<nom>`), pusher ou reader, limités à des dépôts, avec expiration, révocables immédiatement
 - **Application des push signés** — rejette les push sans signature cosign valide, vérifiée côté serveur
 - **Garbage collection, politiques de rétention, réplication, quotas** — tous avec prévisualisation dry-run ; le GC fonctionne sur les backends local et S3
 - **Diff de tags, explorateur de layers, recherche serveur** — inspecter et comparer les images depuis l'UI
 - **Notifications in-app, journal d'audit, webhooks** — sur le même flux d'événements
+- **SSO** — tout fournisseur OpenID Connect (Authentik, Keycloak, Authelia, Entra ID…), rôles depuis les groupes, comptes créés à la première connexion ; secrets CLI pour docker login
 - **Auth JWT** sur l'API admin, token auth Docker sur `/v2/*`, logs JSON structurés, tracing OpenTelemetry optionnel
 
 ## Modes

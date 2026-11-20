@@ -11,6 +11,7 @@ import (
 
 	"dockyard/internal/cosign"
 	"dockyard/internal/events"
+	"dockyard/internal/reference"
 	"dockyard/internal/registry"
 	"dockyard/internal/storage"
 	"dockyard/internal/store"
@@ -69,17 +70,18 @@ func (m *Mirror) countHit(hit bool) {
 }
 
 func (m *Mirror) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	if r.Method == http.MethodGet || r.Method == http.MethodHead {
-		switch {
-		case reManifests.MatchString(r.URL.Path):
-			sub := reManifests.FindStringSubmatch(r.URL.Path)
-			if err := m.ensureManifest(sub[1], sub[2]); err != nil {
+	// Only well-formed references are forwarded upstream; malformed ones fall
+	// through to the embedded handler, which answers 400.
+	route := reference.ParseV2Path(r.URL.Path)
+	if route.Validate() == nil && (r.Method == http.MethodGet || r.Method == http.MethodHead) {
+		switch route.Route {
+		case reference.RouteManifest:
+			if err := m.ensureManifest(route.Name, route.Ref); err != nil {
 				registryError(w, http.StatusNotFound, "MANIFEST_UNKNOWN", err.Error())
 				return
 			}
-		case reBlobGet.MatchString(r.URL.Path):
-			sub := reBlobGet.FindStringSubmatch(r.URL.Path)
-			if err := m.ensureBlob(sub[1], sub[2]); err != nil {
+		case reference.RouteBlob:
+			if err := m.ensureBlob(route.Name, route.Ref); err != nil {
 				registryError(w, http.StatusNotFound, "BLOB_UNKNOWN", err.Error())
 				return
 			}

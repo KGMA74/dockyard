@@ -34,6 +34,14 @@ import (
 func (s *Server) RegisterRoutes() http.Handler {
 	e := echo.New()
 	e.HideBanner = true
+
+	// Client IP resolution for rate limiting and the audit log — see
+	// clientIPExtractor for why X-Forwarded-For is not believed blindly.
+	ipExtractor, err := clientIPExtractor(s.trustedProxies)
+	if err != nil {
+		panic(err.Error())
+	}
+	e.IPExtractor = ipExtractor
 	e.Use(middleware.RequestLoggerWithConfig(middleware.RequestLoggerConfig{
 		LogMethod:  true,
 		LogURI:     true,
@@ -43,7 +51,7 @@ func (s *Server) RegisterRoutes() http.Handler {
 		LogValuesFunc: func(c echo.Context, v middleware.RequestLoggerValues) error {
 			attrs := []any{
 				"method", v.Method,
-				"uri", v.URI,
+				"uri", redactURI(v.URI),
 				"status", v.Status,
 				"duration_ms", v.Latency / time.Millisecond,
 			}
@@ -161,7 +169,49 @@ func (s *Server) RegisterRoutes() http.Handler {
 	// Audit sits inside the auth wrapper so it sees the authenticated actor;
 	// with auth disabled every V2 actor is recorded as "anonymous".
 	auditor := audit.New(s.store)
+	auditor.SetIPExtractor(ipExtractor)
 	s.auth.SetAuditSink(auditor)
+
+	// Vulnerability policy. Its state exists in every configuration (the
+	// Security page reads it); scan-on-push and the pull gate need the
+	// scanner. The gate sits inside the auth wrapper to know who pulls.
+	policyState, err := scan.NewPolicyState(s.store)
+	if err != nil {
+		panic("vulnerability policy: " + err.Error())
+	}
+	var scanResolver interface {
+		GetManifest(name, reference string) ([]byte, string, error)
+	}
+	if s.mode == modeProxy {
+		scanResolver = scan.RegistryResolver{Client: s.proxy}
+	} else {
+		scanResolver = s.backend
+	}
+	var scanDispatcher *scan.Dispatcher
+	if s.scanEnabled {
+		scannerUser, scannerPass := s.auth.ScannerCredentials()
+		scanDispatcher = scan.NewDispatcher(s.store, scan.Config{
+			TrivyBin:       s.trivyBinPath,
+			TrivyServerURL: s.trivyServerURL,
+			TrivyCacheDir:  s.trivyCacheDir,
+			RegistryURL:    fmt.Sprintf("localhost:%d", s.port),
+			// Its own identity, not the bootstrap admin's: that password
+			// may have been changed in the UI since, and the scanner's
+			// pulls must bypass the vulnerability gate.
+			RegistryUser:   scannerUser,
+			RegistryPass:   scannerPass,
+			Insecure:       s.trivyInsecureRegistry,
+			Offline:        s.trivyOffline,
+			Timeout:        s.scanTimeout,
+			MaxReportBytes: s.scanMaxReportBytes,
+			DedupWindow:    s.scanDedupWindow,
+		})
+		scanDispatcher.SetHub(s.events)
+		scan.ScanOnPush(s.events, policyState, scanResolver, scanDispatcher)
+		go scan.BackfillVulnerabilities(s.store)
+		v2h = scan.NewGate(policyState, scanResolver, auditor).Middleware(v2h)
+	}
+
 	v2h = auditor.V2Wrapper()(v2h)
 
 	// Docker token auth: unauthenticated /v2/* requests get a Bearer challenge
@@ -188,44 +238,69 @@ func (s *Server) RegisterRoutes() http.Handler {
 		}
 	})
 
+	// Registered after the V2 interceptor on purpose: it only wraps what is
+	// left — the UI, the admin API and /health.
+	e.Use(securityHeaders)
+
 	// ── Auth ──────────────────────────────────────────────────────────────────
 	e.POST("/api/admin/auth/login", s.auth.Login, strictLimiter)
 	e.POST("/api/admin/auth/logout", s.auth.Logout)
 	// Refresh authenticates with the refresh token itself, not a JWT — it must
 	// stay outside the middleware group (the access token may already be dead).
 	e.POST("/api/admin/auth/refresh", s.auth.Refresh)
+	// Single sign-on: public by nature (that is how one signs in). The
+	// exchange trades a one-time code for tokens: brute-force limited.
+	e.GET("/api/admin/auth/oidc", s.auth.OIDCInfo)
+	e.GET("/api/admin/auth/oidc/login", s.auth.OIDCLogin)
+	e.GET("/api/admin/auth/oidc/callback", s.auth.OIDCCallback)
+	e.POST("/api/admin/auth/oidc/exchange", s.auth.OIDCExchange, strictLimiter)
 
 	// ── Admin API ─────────────────────────────────────────────────────────────
 	api := e.Group("/api/admin", s.auth.Middleware(), auditor.AdminMiddleware())
+	// Routes that address one repository (?name=) validate the name and apply
+	// the caller's repository patterns — the same RBAC /v2 enforces. Listing
+	// routes filter their results inside the handlers.
+	repoScoped := auth.RequireRepoAccess("name")
 	if s.mode == modeProxy {
 		h := admin.NewRemote(s.proxy, s.signingPolicy, s.store)
+		if s.scanEnabled {
+			h.SetPullPolicy(policyState)
+		}
 		api.GET("/repositories", h.GetRepositories)
-		api.GET("/repositories/tags", h.GetTags)
-		api.GET("/repositories/manifest", h.GetManifestDetails)
-		api.GET("/repositories/diff", h.GetTagDiff)
+		api.GET("/repositories/tags", h.GetTags, repoScoped)
+		api.GET("/repositories/manifest", h.GetManifestDetails, repoScoped)
+		api.GET("/repositories/diff", h.GetTagDiff, repoScoped)
 		api.GET("/repositories/search", h.Search)
-		api.GET("/repositories/layer", h.GetLayerEntries)
-		api.DELETE("/repositories/manifests", h.DeleteManifest, auth.RequireAdmin)
-		api.DELETE("/repositories", h.DeleteRepository, auth.RequireAdmin)
+		api.GET("/repositories/layer", h.GetLayerEntries, repoScoped)
+		api.DELETE("/repositories/manifests", h.DeleteManifest, auth.RequireAdmin, repoScoped)
+		api.DELETE("/repositories", h.DeleteRepository, auth.RequireAdmin, repoScoped)
 		api.GET("/storage/stats", admin.NotSupported)
-		api.GET("/storage/tree", admin.NotSupported)
-		api.POST("/gc", admin.NotSupported)
+		api.GET("/storage/tree", admin.NotSupported, auth.RequireAdmin)
+		api.POST("/gc", admin.NotSupported, auth.RequireAdmin)
 	} else {
 		h := admin.New(s.backend, s.signingPolicy, s.store)
+		if s.scanEnabled {
+			h.SetPullPolicy(policyState)
+		}
 		h.SetHub(s.events)
+		h.SetGCGracePeriod(s.gcGracePeriod)
 		api.GET("/repositories", h.GetRepositories)
-		api.GET("/repositories/tags", h.GetTags)
-		api.GET("/repositories/manifest", h.GetManifestDetails)
-		api.GET("/repositories/diff", h.GetTagDiff)
+		api.GET("/repositories/tags", h.GetTags, repoScoped)
+		api.GET("/repositories/manifest", h.GetManifestDetails, repoScoped)
+		api.GET("/repositories/diff", h.GetTagDiff, repoScoped)
 		api.GET("/repositories/search", h.Search)
-		api.GET("/repositories/layer", h.GetLayerEntries)
-		api.DELETE("/repositories/manifests", h.DeleteManifest, auth.RequireAdmin)
-		api.DELETE("/repositories", h.DeleteRepository, auth.RequireAdmin)
+		api.GET("/repositories/layer", h.GetLayerEntries, repoScoped)
+		api.DELETE("/repositories/manifests", h.DeleteManifest, auth.RequireAdmin, repoScoped)
+		api.DELETE("/repositories", h.DeleteRepository, auth.RequireAdmin, repoScoped)
 		api.GET("/storage/stats", h.StorageStats)
-		api.GET("/storage/tree", h.StorageTree)
+		// Lists every file of every repository: admin only.
+		api.GET("/storage/tree", h.StorageTree, auth.RequireAdmin)
 		api.POST("/gc", h.GarbageCollect, auth.RequireAdmin)
 	}
 	api.POST("/auth/password", s.auth.ChangePassword)
+	api.GET("/auth/me", s.auth.Me)
+	api.POST("/auth/cli-secret", s.auth.CreateCLISecret)
+	api.DELETE("/auth/cli-secret", s.auth.DeleteCLISecret)
 
 	// User management — SQLite-backed, available in both modes, admin only.
 	uh := admin.NewUsers(s.store)
@@ -234,10 +309,23 @@ func (s *Server) RegisterRoutes() http.Handler {
 	api.PUT("/users/:username", uh.Update, auth.RequireAdmin)
 	api.DELETE("/users/:username", uh.Delete, auth.RequireAdmin)
 
+	// Robot accounts — registry-only credentials for CI and clusters.
+	rbh := admin.NewRobots(s.store)
+	api.GET("/robots", rbh.List, auth.RequireAdmin)
+	api.POST("/robots", rbh.Create, auth.RequireAdmin)
+	api.POST("/robots/:id/secret", rbh.Rotate, auth.RequireAdmin)
+	api.DELETE("/robots/:id", rbh.Delete, auth.RequireAdmin)
+
 	// Session management — revoking kills the refresh token; outstanding
 	// access tokens die within 15 minutes.
 	api.GET("/sessions", s.auth.ListSessions, auth.RequireAdmin)
 	api.DELETE("/sessions/:id", s.auth.RevokeSession, auth.RequireAdmin)
+	// Everyone can see and end their own sessions (Settings page).
+	api.GET("/sessions/mine", s.auth.ListMySessions)
+	api.DELETE("/sessions/mine/:id", s.auth.RevokeMySession)
+
+	// Effective server configuration, secrets left out.
+	api.GET("/config", s.handleConfig, auth.RequireAdmin)
 
 	// Audit trail of sensitive actions (logins, pushes, deletions, GC).
 	api.GET("/audit", auditor.List, auth.RequireAdmin)
@@ -291,35 +379,20 @@ func (s *Server) RegisterRoutes() http.Handler {
 	// trivy manages its own vuln DB under the cache dir); set
 	// TRIVY_SERVER_URL to defer to a shared/external trivy server instead.
 	// Off unless SCAN_ENABLED is set.
-	if s.scanEnabled {
-		var resolver interface {
-			GetManifest(name, reference string) ([]byte, string, error)
-		}
-		if s.mode == modeProxy {
-			resolver = scan.RegistryResolver{Client: s.proxy}
-		} else {
-			resolver = s.backend
-		}
-		sd := scan.NewDispatcher(s.store, scan.Config{
-			TrivyBin:       s.trivyBinPath,
-			TrivyServerURL: s.trivyServerURL,
-			TrivyCacheDir:  s.trivyCacheDir,
-			RegistryURL:    fmt.Sprintf("localhost:%d", s.port),
-			RegistryUser:   s.authUsername,
-			RegistryPass:   s.authPassword,
-			Insecure:       s.trivyInsecureRegistry,
-			Offline:        s.trivyOffline,
-			Timeout:        s.scanTimeout,
-			MaxReportBytes: s.scanMaxReportBytes,
-			DedupWindow:    s.scanDedupWindow,
-		})
-		sd.SetHub(s.events)
-		sh := scan.NewHandler(s.store, sd, resolver, auditor)
+	if scanDispatcher != nil {
+		sh := scan.NewHandler(s.store, scanDispatcher, scanResolver, auditor)
 		api.POST("/scans", sh.Trigger, auth.RequireAdmin)
 		api.GET("/scans", sh.List, auth.RequireAdmin)
 		api.GET("/scans/:id", sh.Get, auth.RequireAdmin)
 		api.GET("/scans/:id/report", sh.Report, auth.RequireAdmin)
 	}
+
+	// Vulnerability policy — scan on push, pull blocking, CVE allowlist.
+	ph := scan.NewPolicyHandler(s.store, policyState, s.scanEnabled)
+	api.GET("/vulnerability-policy", ph.Get, auth.RequireAdmin)
+	api.PUT("/vulnerability-policy", ph.Update, auth.RequireAdmin)
+	api.POST("/vulnerability-policy/allowlist", ph.Allow, auth.RequireAdmin)
+	api.DELETE("/vulnerability-policy/allowlist/:cve", ph.Disallow, auth.RequireAdmin)
 
 	// Signed-push policy — status + per-repo overrides (admin only).
 	cosignHandler := cosign.NewHandler(s.store, s.signingPolicy)
@@ -400,7 +473,9 @@ func (s *Server) RegisterRoutes() http.Handler {
 		if err != nil {
 			return c.String(http.StatusServiceUnavailable, "UI not built — run: make ui\n")
 		}
-		c.Response().Header().Set("Content-Type", "text/html; charset=utf-8")
+		// index.html names the hashed bundles: it must be revalidated on
+		// every load or a deploy keeps serving the previous UI.
+		c.Response().Header().Set("Cache-Control", "no-cache")
 		return c.HTMLBlob(http.StatusOK, content)
 	}
 
@@ -409,18 +484,28 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	e.GET("/*", func(c echo.Context) error {
 		path := c.Param("*")
-		if f, err := staticFS.Open(path); err == nil {
-			_ = f.Close()
-			fileServer.ServeHTTP(c.Response(), c.Request())
-			return nil
+		// An unknown API path is a client error, not a page: answering it
+		// with the SPA shell (200 + HTML) hid typos and broke JSON clients.
+		if path == "api" || strings.HasPrefix(path, "api/") {
+			return c.JSON(http.StatusNotFound, map[string]string{"error": "unknown API endpoint"})
 		}
+		if f, err := staticFS.Open(path); err == nil {
+			info, statErr := f.Stat()
+			_ = f.Close()
+			if statErr == nil && !info.IsDir() {
+				if strings.HasPrefix(path, "assets/") {
+					// Vite content-hashes everything under assets/.
+					c.Response().Header().Set("Cache-Control", "public, max-age=31536000, immutable")
+				} else {
+					c.Response().Header().Set("Cache-Control", "no-cache")
+				}
+				fileServer.ServeHTTP(c.Response(), c.Request())
+				return nil
+			}
+		}
+		// Anything else is a client-side route (/images/team/app, /storage…).
 		return serveIndex(c)
 	})
 
 	return e
-}
-
-// HelloWorldHandler kept for the existing test.
-func (s *Server) HelloWorldHandler(c echo.Context) error {
-	return c.JSON(http.StatusOK, map[string]string{"message": "Hello World"})
 }

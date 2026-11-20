@@ -48,6 +48,36 @@ auth:
   # (and optionally s3-access-key, s3-secret-key, registry-password).
   # When set, no Secret is created by this chart.
 
+# Single sign-on with an OpenID Connect provider (Authentik, Keycloak,
+# Authelia, Zitadel, Entra ID, Google, Dex…). Register Dockyard as a
+# confidential client with the redirect URI
+#   https://<your-host>/api/admin/auth/oidc/callback
+# Accounts are created on first sign-in; password sign-in keeps working for
+# local accounts (the bootstrap admin included).
+oidc:
+  enabled: false
+  issuerURL: ""          # e.g. https://auth.example.com/application/o/dockyard/
+  clientID: ""
+  # Stored in the chart's Secret as OIDC_CLIENT_SECRET. With
+  # auth.existingSecret, put it there under that key instead.
+  clientSecret: ""
+  # Defaults to the callback on the host the browser used; set it when a
+  # proxy rewrites the Host header.
+  redirectURL: ""
+  displayName: "SSO"     # the button reads "Sign in with <displayName>"
+  scopes: [openid, profile, email, groups]
+  usernameClaim: preferred_username
+  groupsClaim: groups
+  # Group → role. When any list is set, the role is re-synced from the
+  # groups at every sign-in; when all are empty, new accounts get
+  # defaultRole and admins manage roles in the UI.
+  adminGroups: []
+  pusherGroups: []
+  readerGroups: []
+  # Role of users in none of the groups: reader, pusher, admin, or "none" to
+  # refuse them.
+  defaultRole: reader
+
 serviceAccount:
   # Create a dedicated ServiceAccount (no extra permissions granted).
   create: true
@@ -156,19 +186,12 @@ ingress:
   #     hosts: [registry.example.com]
   tls: []
 
-# Horizontal Pod Autoscaler. Requires the metrics-server (or another
-# custom-metrics provider) in the cluster. Gated on S3 storage: local
-# storage uses a ReadWriteOnce PVC that only one pod can mount, so scaling
-# beyond 1 replica would either fail to schedule or split traffic across
-# pods with inconsistent local state — this chart refuses to render the HPA
-# otherwise (see templates/hpa.yaml).
+# Not supported. Dockyard keeps users, sessions and policies in SQLite on the
+# pod's volume, so a second replica would serve a different, divergent copy
+# of them. The chart refuses to render with autoscaling.enabled or
+# replicaCount > 1, whatever the storage backend.
 autoscaling:
   enabled: false
-  minReplicas: 2
-  maxReplicas: 10
-  targetCPUUtilizationPercentage: 75
-  # Empty = no memory-based scaling target.
-  targetMemoryUtilizationPercentage: ""
 
 # PodDisruptionBudget — protects against voluntary disruptions (node drains,
 # cluster upgrades) evicting too many replicas at once. Only one of
@@ -193,8 +216,13 @@ probes:
     timeoutSeconds: 5
     failureThreshold: 3
 
-# Persistent volume for local storage backend.
-# Ignored when registry.storage.backend=s3.
+# Persistent volume mounted at registry.storage.path, for both backends.
+# - local: holds the images AND Dockyard's state.
+# - s3: images go to the bucket; the volume holds Dockyard's state only —
+#   users, sessions, policies, audit log (SQLite), the Trivy cache and ACME
+#   certificates. 1–2Gi is plenty there.
+# Disabling it makes all of that ephemeral: users created in the UI vanish
+# on every pod restart.
 persistence:
   enabled: true
   storageClass: ""

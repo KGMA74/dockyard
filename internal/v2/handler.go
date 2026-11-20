@@ -5,17 +5,18 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log/slog"
 	"net/http"
-	"regexp"
 	"strings"
 	"time"
 
 	"dockyard/internal/auth"
 	"dockyard/internal/cosign"
 	"dockyard/internal/events"
+	"dockyard/internal/reference"
 	"dockyard/internal/storage"
 	"dockyard/internal/store"
 	"dockyard/internal/tracing"
@@ -42,14 +43,10 @@ func New(backend storage.Backend, hub *events.Hub, signing *cosign.Policy, db *s
 // tracker batches asynchronously).
 func (h *Handler) OnPull(fn func(name, reference string)) { h.onPull = fn }
 
-var (
-	reCatalog       = regexp.MustCompile(`^/v2/_catalog$`)
-	reTags          = regexp.MustCompile(`^/v2/(.+)/tags/list$`)
-	reManifests     = regexp.MustCompile(`^/v2/(.+)/manifests/([^/]+)$`)
-	reBlobGet       = regexp.MustCompile(`^/v2/(.+)/blobs/(sha256:[a-f0-9]+)$`)
-	reBlobUploadNew = regexp.MustCompile(`^/v2/(.+)/blobs/uploads/$`)
-	reBlobUpload    = regexp.MustCompile(`^/v2/(.+)/blobs/uploads/([^/]+)$`)
-)
+// maxManifestBytes caps a pushed manifest. Manifests are buffered in memory
+// and hashed, so an unbounded body is a trivial memory-exhaustion vector;
+// 4 MiB is the limit the reference registry uses as well.
+const maxManifestBytes = 4 << 20
 
 // statusRecorder wraps http.ResponseWriter to capture the written status code.
 type statusRecorder struct {
@@ -68,51 +65,76 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	w.Header().Set("Docker-Distribution-Api-Version", "registry/2.0")
 	path := r.URL.Path
+	route := reference.ParseV2Path(path)
+
+	// Repository names, tags, digests and upload ids all end up in storage
+	// paths: refuse malformed ones before any handler sees them.
+	if err := route.Validate(); err != nil {
+		registryError(rec, http.StatusBadRequest, reference.V2ErrorCode(err), err.Error())
+		logV2(r, rec.status, start)
+		return
+	}
+
+	get := r.Method == http.MethodGet
+	getOrHead := get || r.Method == http.MethodHead
 
 	switch {
-	case path == "/v2/" || path == "/v2":
+	case route.Route == reference.RouteBase:
 		rec.WriteHeader(http.StatusOK)
 
-	case reCatalog.MatchString(path) && r.Method == http.MethodGet:
+	case route.Route == reference.RouteCatalog && get:
 		h.catalog(rec, r)
 
-	case reTags.MatchString(path) && r.Method == http.MethodGet:
-		m := reTags.FindStringSubmatch(path)
-		h.tags(rec, r, m[1])
+	case route.Route == reference.RouteTags && get:
+		h.tags(rec, r, route.Name)
 
-	case reManifests.MatchString(path):
-		m := reManifests.FindStringSubmatch(path)
-		h.manifests(rec, r, m[1], m[2])
+	case route.Route == reference.RouteManifest:
+		h.manifests(rec, r, route.Name, route.Ref)
 
-	case reBlobGet.MatchString(path) && (r.Method == http.MethodGet || r.Method == http.MethodHead):
-		m := reBlobGet.FindStringSubmatch(path)
-		h.getBlob(rec, r, m[1], m[2])
+	case route.Route == reference.RouteBlob && getOrHead:
+		h.getBlob(rec, r, route.Name, route.Ref)
 
-	case reBlobUploadNew.MatchString(path) && r.Method == http.MethodPost:
-		m := reBlobUploadNew.FindStringSubmatch(path)
-		h.initUpload(rec, r, m[1])
+	case route.Route == reference.RouteUploadInit && r.Method == http.MethodPost:
+		h.initUpload(rec, r, route.Name)
 
-	case reBlobUpload.MatchString(path):
-		m := reBlobUpload.FindStringSubmatch(path)
-		h.patchOrCommitUpload(rec, r, m[1], m[2])
+	case route.Route == reference.RouteUpload:
+		h.patchOrCommitUpload(rec, r, route.Name, route.Ref)
 
 	default:
 		registryError(rec, http.StatusNotFound, "UNSUPPORTED", "unsupported endpoint")
 	}
 
+	logV2(r, rec.status, start)
+}
+
+func logV2(r *http.Request, status int, start time.Time) {
 	slog.Info("v2",
 		"method", r.Method,
-		"path", path,
-		"status", rec.status,
+		"path", r.URL.Path,
+		"status", status,
 		"duration_ms", time.Since(start).Milliseconds(),
 	)
 }
 
-func (h *Handler) catalog(w http.ResponseWriter, _ *http.Request) {
+// catalog lists repositories. A principal restricted to repository patterns
+// only sees the repositories those patterns cover.
+func (h *Handler) catalog(w http.ResponseWriter, r *http.Request) {
 	repos, err := h.store.ListRepositories()
 	if err != nil {
 		registryError(w, http.StatusInternalServerError, "UNKNOWN", err.Error())
 		return
+	}
+	if p, ok := auth.PrincipalFromRequest(r); ok && len(p.RepoPatterns) > 0 {
+		visible := make([]string, 0, len(repos))
+		for _, repo := range repos {
+			if auth.MatchesRepo(p.RepoPatterns, repo) {
+				visible = append(visible, repo)
+			}
+		}
+		repos = visible
+	}
+	if repos == nil {
+		repos = []string{}
 	}
 	jsonOK(w, map[string]any{"repositories": repos})
 }
@@ -139,7 +161,8 @@ func (h *Handler) manifests(w http.ResponseWriter, r *http.Request, name, ref st
 		w.Header().Set("Docker-Content-Digest", digest)
 		w.Header().Set("Content-Type", mediaType(content))
 		w.Header().Set("Content-Length", fmt.Sprintf("%d", len(content)))
-		if h.onPull != nil && r.Method == http.MethodGet {
+		// The scanner pulling an image to scan it is not someone using it.
+		if p, ok := auth.PrincipalFromRequest(r); h.onPull != nil && r.Method == http.MethodGet && (!ok || !p.Scanner) {
 			h.onPull(name, ref)
 		}
 		if r.Method == http.MethodHead {
@@ -150,14 +173,34 @@ func (h *Handler) manifests(w http.ResponseWriter, r *http.Request, name, ref st
 		_, _ = w.Write(content)
 
 	case http.MethodPut:
-		body, err := io.ReadAll(r.Body)
+		body, err := io.ReadAll(http.MaxBytesReader(w, r.Body, maxManifestBytes))
 		if err != nil {
+			var tooLarge *http.MaxBytesError
+			if errors.As(err, &tooLarge) {
+				registryError(w, http.StatusRequestEntityTooLarge, "MANIFEST_INVALID",
+					fmt.Sprintf("manifest exceeds the %d byte limit", maxManifestBytes))
+				return
+			}
 			registryError(w, http.StatusBadRequest, "MANIFEST_INVALID", err.Error())
+			return
+		}
+		if !json.Valid(body) {
+			registryError(w, http.StatusBadRequest, "MANIFEST_INVALID", "manifest is not valid JSON")
 			return
 		}
 		hasher := sha256.New()
 		hasher.Write(body)
 		dgst := "sha256:" + hex.EncodeToString(hasher.Sum(nil))
+		// A push by digest must carry exactly the content that digest names.
+		// Unchecked, the S3 backend stored the body under the *claimed*
+		// digest key: any pusher could overwrite an existing manifest with
+		// different content, breaking pulls by digest and un-referencing the
+		// original image's layers for the next GC.
+		if reference.IsDigest(ref) && ref != dgst {
+			registryError(w, http.StatusBadRequest, "DIGEST_INVALID",
+				fmt.Sprintf("manifest content hashes to %s, not %s", dgst, ref))
+			return
+		}
 		// Signed-push policy applies only to "real" tag pushes — pushes by
 		// digest and cosign's own signature/attestation/sbom tags are
 		// exempt, since cosign must be able to attach a signature to an
@@ -231,6 +274,10 @@ func (h *Handler) getBlob(w http.ResponseWriter, r *http.Request, name, digest s
 func (h *Handler) initUpload(w http.ResponseWriter, r *http.Request, name string) {
 	// Monolithic push: digest provided in the POST query string
 	if digest := r.URL.Query().Get("digest"); digest != "" {
+		if !reference.ValidDigest(digest) {
+			registryError(w, http.StatusBadRequest, "DIGEST_INVALID", "digest must be sha256:<64 hex chars>")
+			return
+		}
 		// Content-Length is unset for chunked-transfer requests — quota is
 		// only enforced when the size is known up front. Chunked uploads are
 		// covered at commit time in patchOrCommitUpload instead.
@@ -259,7 +306,7 @@ func (h *Handler) initUpload(w http.ResponseWriter, r *http.Request, name string
 	}
 	// Chunked upload: generate UUID and initialize session
 	b := make([]byte, 16)
-	rand.Read(b)
+	_, _ = rand.Read(b) // crypto/rand never fails on supported platforms
 	uuid := hex.EncodeToString(b)
 	if err := h.store.InitUpload(uuid); err != nil {
 		registryError(w, http.StatusInternalServerError, "UNKNOWN", err.Error())
@@ -288,8 +335,8 @@ func (h *Handler) patchOrCommitUpload(w http.ResponseWriter, r *http.Request, na
 
 	case http.MethodPut:
 		digest := r.URL.Query().Get("digest")
-		if digest == "" {
-			registryError(w, http.StatusBadRequest, "DIGEST_INVALID", "digest query param required")
+		if !reference.ValidDigest(digest) {
+			registryError(w, http.StatusBadRequest, "DIGEST_INVALID", "digest query param must be sha256:<64 hex chars>")
 			return
 		}
 		if r.ContentLength > 0 {

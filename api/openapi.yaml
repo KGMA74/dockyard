@@ -93,6 +93,105 @@ paths:
         "200": { $ref: "#/components/responses/Message" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
+  /api/admin/auth/oidc:
+    get:
+      tags: [auth]
+      summary: Whether single sign-on is configured (public)
+      security: []
+      responses:
+        "200":
+          description: SSO availability, for the login page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled: { type: boolean }
+                  name: { type: string, description: Provider label for the sign-in button }
+
+  /api/admin/auth/oidc/login:
+    get:
+      tags: [auth]
+      summary: Start an SSO sign-in (browser navigation)
+      description: >
+        Redirects to the provider (authorization code flow with PKCE, state and nonce).
+        `return` is the path to land on afterwards; anything but a local path is ignored.
+      security: []
+      parameters:
+        - { name: return, in: query, schema: { type: string, example: /images } }
+      responses:
+        "302": { description: Redirect to the identity provider }
+        "404": { description: SSO is not configured }
+
+  /api/admin/auth/oidc/callback:
+    get:
+      tags: [auth]
+      summary: Provider callback (browser navigation)
+      description: >
+        Redirects to `/login#oidc_code=<one-time code>&return=<path>` on success, or
+        `/login#oidc_error=<reason>` (provider_denied, expired, provider_unreachable, exchange_failed,
+        invalid_token, not_allowed, username_invalid, username_taken, session_failed).
+      security: []
+      responses:
+        "302": { description: Back to the console }
+
+  /api/admin/auth/oidc/exchange:
+    post:
+      tags: [auth]
+      summary: Trade the one-time sign-in code for session tokens
+      description: The code is valid for one minute and a single use.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+      responses:
+        "200":
+          description: Session tokens, as for a password login
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthTokens" }
+        "401": { description: Code expired or already used }
+
+  /api/admin/auth/me:
+    get:
+      tags: [auth]
+      summary: The signed-in account
+      responses:
+        "200":
+          description: Account
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+
+  /api/admin/auth/cli-secret:
+    post:
+      tags: [auth]
+      summary: Issue a CLI secret for docker login
+      description: >
+        A generated secret the account can use as its docker login password (the only way for an
+        SSO account, which has no password). Replaces any previous one; shown once.
+      responses:
+        "201":
+          description: The secret
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  username: { type: string }
+                  secret: { type: string, example: dkc_… }
+    delete:
+      tags: [auth]
+      summary: Revoke the CLI secret
+      responses:
+        "200": { description: Revoked }
+
   /api/admin/auth/password:
     post:
       tags: [auth]
@@ -157,6 +256,87 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "409": { description: Username already exists }
 
+  /api/admin/robots:
+    get:
+      tags: [users]
+      summary: List robot accounts (admin only)
+      responses:
+        "200":
+          description: Robot accounts (secrets are never listed)
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  robots:
+                    type: array
+                    items: { $ref: "#/components/schemas/Robot" }
+                  count: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+    post:
+      tags: [users]
+      summary: Create a robot account (admin only)
+      description: >
+        Robot accounts authenticate to the registry protocol only (`docker login -u robot+<name>`),
+        never to the admin API, and cannot delete. The secret is returned once.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [name, role]
+              properties:
+                name: { type: string, pattern: "^[a-z0-9]+(?:[._-][a-z0-9]+)*$", maxLength: 64 }
+                description: { type: string, maxLength: 200 }
+                role: { type: string, enum: [pusher, reader] }
+                repo_patterns:
+                  type: array
+                  items: { type: string }
+                expires_in_days: { type: integer, minimum: 0, maximum: 3650, description: "0 = never expires" }
+      responses:
+        "201":
+          description: Created robot, with its secret
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RobotWithSecret" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "409": { description: Name already taken }
+
+  /api/admin/robots/{id}/secret:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    post:
+      tags: [users]
+      summary: Issue a new secret (admin only)
+      description: The previous secret stops working immediately.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                expires_in_days: { type: integer, minimum: 0, maximum: 3650 }
+      responses:
+        "200":
+          description: Robot with its new secret
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/RobotWithSecret" }
+        "404": { description: Robot not found }
+
+  /api/admin/robots/{id}:
+    parameters:
+      - { name: id, in: path, required: true, schema: { type: integer, format: int64 } }
+    delete:
+      tags: [users]
+      summary: Delete a robot account (admin only)
+      description: Registry tokens already issued to it are refused from the next request.
+      responses:
+        "200": { description: Deleted }
+        "404": { description: Robot not found }
+
   /api/admin/users/{username}:
     parameters:
       - { name: username, in: path, required: true, schema: { type: string } }
@@ -219,13 +399,74 @@ paths:
     delete:
       tags: [sessions]
       summary: Revoke a session (admin only)
-      description: Kills the refresh token; outstanding access tokens die within 15 minutes.
+      description: Kills the refresh token; access tokens of that session are rejected on their next request.
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
       responses:
         "200": { $ref: "#/components/responses/Message" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/admin/sessions/mine:
+    get:
+      tags: [sessions]
+      summary: List the caller's own sessions (any signed-in user)
+      responses:
+        "200":
+          description: Sessions of the caller
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  sessions:
+                    type: array
+                    items: { $ref: "#/components/schemas/Session" }
+                  count: { type: integer }
+                  current_id: { type: integer, description: Session id of this request. }
+
+  /api/admin/sessions/mine/{id}:
+    delete:
+      tags: [sessions]
+      summary: Sign out one of the caller's own sessions
+      description: Another user's session id answers 404, like a missing one.
+      parameters:
+        - { name: id, in: path, required: true, schema: { type: integer } }
+      responses:
+        "200": { $ref: "#/components/responses/Message" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/admin/config:
+    get:
+      tags: [system]
+      summary: Effective server configuration (admin only)
+      description: >
+        Grouped settings with the environment variable controlling each one.
+        Never includes passwords, keys, JWT secrets or S3 credentials;
+        credentials embedded in URLs are removed.
+      responses:
+        "200":
+          description: Configuration
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  groups:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string, enum: [registry, access, security, maintenance, observability] }
+                        items:
+                          type: array
+                          items:
+                            type: object
+                            properties:
+                              key: { type: string }
+                              value: { description: "boolean, number, string or string array" }
+                              env: { type: string }
+        "403": { $ref: "#/components/responses/Forbidden" }
 
   /api/admin/repositories:
     get:
@@ -262,7 +503,12 @@ paths:
   /api/admin/repositories/tags:
     get:
       tags: [repositories]
-      summary: List tags of a repository with digests
+      summary: List tags of a repository with size, platforms, signature and latest scan
+      description: >
+        Each tag is resolved on the server (up to 8 at a time), so the list
+        can be compared at a glance without one request per tag. Optional
+        fields are absent when unknown — e.g. `signed` without cosign keys,
+        `scan` for a digest never scanned — never filled with a guess.
       parameters:
         - { name: name, in: query, required: true, schema: { type: string } }
       responses:
@@ -276,12 +522,7 @@ paths:
                   name: { type: string }
                   tags:
                     type: array
-                    items:
-                      type: object
-                      properties:
-                        tag: { type: string }
-                        digest: { type: string }
-                        pushed_at: { type: string, format: date-time }
+                    items: { $ref: "#/components/schemas/TagSummary" }
                   total: { type: integer }
 
   /api/admin/repositories/manifest:
@@ -748,6 +989,76 @@ paths:
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
+  /api/admin/vulnerability-policy:
+    get:
+      tags: [scans]
+      summary: Vulnerability policy and CVE allowlist (admin only)
+      responses:
+        "200":
+          description: Policy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  policy: { $ref: "#/components/schemas/VulnerabilityPolicy" }
+                  allowlist:
+                    type: array
+                    items: { $ref: "#/components/schemas/AllowedCVE" }
+                  scanning_enabled: { type: boolean, description: "False when SCAN_ENABLED is off: nothing is enforced." }
+    put:
+      tags: [scans]
+      summary: Update the vulnerability policy (admin only)
+      description: >
+        Blocked pulls answer 403 DENIED with the offending CVEs and are recorded in the audit log
+        (action pull-blocked). Dockyard's own scanner is exempt so blocked images can be re-scanned.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                scan_on_push: { type: boolean }
+                block_severity: { type: string, enum: ["", CRITICAL, HIGH, MEDIUM, LOW] }
+      responses:
+        "200":
+          description: Updated policy
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/VulnerabilityPolicy" }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/admin/vulnerability-policy/allowlist:
+    post:
+      tags: [scans]
+      summary: Accept a vulnerability (admin only)
+      description: An allowlisted vulnerability never blocks a pull, until the entry expires. Adding an existing ID updates it.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [cve_id]
+              properties:
+                cve_id: { type: string, example: CVE-2024-3094 }
+                reason: { type: string, maxLength: 500 }
+                expires_in_days: { type: integer, minimum: 0, maximum: 3650, description: "0 = never expires" }
+      responses:
+        "201": { description: Added }
+        "400": { $ref: "#/components/responses/BadRequest" }
+
+  /api/admin/vulnerability-policy/allowlist/{cve}:
+    parameters:
+      - { name: cve, in: path, required: true, schema: { type: string } }
+    delete:
+      tags: [scans]
+      summary: Remove an exception (admin only)
+      responses:
+        "200": { description: Removed }
+        "404": { description: Not on the allowlist }
+
   /api/admin/signing:
     get:
       tags: [signing]
@@ -1120,6 +1431,31 @@ components:
           items: { type: string }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+        auth_source: { type: string, enum: [local, oidc], description: "oidc accounts sign in through SSO and have no password" }
+        has_cli_secret: { type: boolean }
+
+    Robot:
+      type: object
+      properties:
+        id: { type: integer, format: int64 }
+        name: { type: string }
+        username: { type: string, description: "Registry login: robot+<name>" }
+        description: { type: string }
+        role: { type: string, enum: [pusher, reader] }
+        repo_patterns:
+          type: array
+          items: { type: string }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
+        expires_at: { type: string, format: date-time, nullable: true }
+        last_used_at: { type: string, format: date-time, nullable: true }
+
+    RobotWithSecret:
+      allOf:
+        - $ref: "#/components/schemas/Robot"
+        - type: object
+          properties:
+            secret: { type: string, description: "Shown once. Use as the password of docker login." }
 
     Session:
       type: object
@@ -1143,6 +1479,7 @@ components:
         created: { type: string, format: date-time }
         architecture: { type: string }
         os: { type: string }
+        variant: { type: string, description: "CPU variant, e.g. v7 for linux/arm/v7" }
         signed:
           type: boolean
           description: >
@@ -1156,6 +1493,21 @@ components:
               digest: { type: string }
               size_bytes: { type: integer }
               size_human: { type: string }
+        history:
+          type: array
+          description: >
+            Build steps from the image config, base first. Steps that
+            produced a layer carry its digest and size — only when the number
+            of layer-producing steps matches the number of layers, so a
+            squashed image is never mislabelled.
+          items:
+            type: object
+            properties:
+              created_by: { type: string, example: "RUN /bin/sh -c apk add curl # buildkit" }
+              created: { type: string, format: date-time }
+              empty_layer: { type: boolean }
+              layer_digest: { type: string }
+              size_bytes: { type: integer }
         platforms:
           type: array
           items:
@@ -1163,9 +1515,59 @@ components:
             properties:
               architecture: { type: string }
               os: { type: string }
+              variant: { type: string }
               digest: { type: string }
               size_bytes: { type: integer }
               size_human: { type: string }
+
+    TagSummary:
+      type: object
+      required: [tag, digest]
+      properties:
+        tag: { type: string }
+        digest: { type: string }
+        pushed_at: { type: string, format: date-time, description: Embedded mode only }
+        size_bytes: { type: integer, description: Compressed size; the sum of all platforms for a multi-arch image }
+        platforms:
+          type: array
+          items: { type: string, example: linux/arm64 }
+          description: Runnable platforms; attestation entries (unknown/unknown) are left out.
+        signed: { type: boolean, description: Present only when cosign public keys are configured. }
+        scan:
+          type: object
+          description: Latest scan of this digest; absent if never scanned.
+          properties:
+            status: { type: string, enum: [queued, running, succeeded, failed] }
+            critical_count: { type: integer }
+            high_count: { type: integer }
+            medium_count: { type: integer }
+            low_count: { type: integer }
+            unknown_count: { type: integer }
+        pull_blocked:
+          type: boolean
+          description: The vulnerability policy refuses docker pull of this tag. Absent when false.
+
+    VulnerabilityPolicy:
+      type: object
+      properties:
+        scan_on_push: { type: boolean, description: Queue a scan for every pushed tag. }
+        block_severity:
+          type: string
+          enum: ["", CRITICAL, HIGH, MEDIUM, LOW]
+          description: >
+            Refuse manifest GETs of images whose latest scan has a vulnerability at this severity or above
+            that the allowlist does not cover. Empty = never block. Unscanned images are not blocked.
+        updated_by: { type: string }
+        updated_at: { type: string, format: date-time }
+
+    AllowedCVE:
+      type: object
+      properties:
+        cve_id: { type: string, example: CVE-2024-3094 }
+        reason: { type: string }
+        expires_at: { type: string, format: date-time, nullable: true }
+        created_by: { type: string }
+        created_at: { type: string, format: date-time }
 
     SearchResult:
       type: object

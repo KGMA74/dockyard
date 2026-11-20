@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"net/http/httptest"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"dockyard/internal/events"
@@ -199,8 +200,8 @@ func TestReplicateNowMultiArchManifestList(t *testing.T) {
 
 func TestReplicateNowRejectsManifestListCycle(t *testing.T) {
 	source := newSourceBackend(t)
-	const digestA = "sha256:" + "a000000000000000000000000000000000000000000000000000000000000"
-	const digestB = "sha256:" + "b000000000000000000000000000000000000000000000000000000000000"
+	digestA := "sha256:a" + strings.Repeat("0", 63)
+	digestB := "sha256:b" + strings.Repeat("0", 63)
 	listReferencing := func(child string) []byte {
 		return []byte(`{"mediaType":"application/vnd.docker.distribution.manifest.list.v2+json","manifests":[{"digest":"` + child + `"}]}`)
 	}

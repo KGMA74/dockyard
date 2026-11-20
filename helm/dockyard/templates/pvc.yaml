@@ -1,4 +1,7 @@
-{{- if and (eq .Values.registry.storage.backend "local") .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
+{{- /* Created for both backends: even with S3 holding the images, Dockyard's
+       own state (users, sessions, policies, audit log — SQLite at
+       <registry.storage.path>/dockyard.db) must survive a pod restart. */}}
+{{- if and .Values.persistence.enabled (not .Values.persistence.existingClaim) }}
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:

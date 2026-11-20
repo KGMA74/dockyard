@@ -7,9 +7,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
+	"dockyard/internal/auth"
 	"dockyard/internal/cosign"
 	"dockyard/internal/storage"
 	"dockyard/internal/storage/storagetest"
+	"dockyard/internal/store"
 
 	"github.com/labstack/echo/v4"
 )
@@ -36,7 +38,9 @@ func callSearch(t *testing.T, h *Handler, query string) map[string]any {
 	e := echo.New()
 	req := httptest.NewRequest(http.MethodGet, "/api/admin/repositories/search"+query, nil)
 	rec := httptest.NewRecorder()
-	if err := h.Search(e.NewContext(req, rec)); err != nil {
+	c := e.NewContext(req, rec)
+	auth.SetPrincipal(c, auth.Principal{Username: "admin", Role: store.RoleAdmin})
+	if err := h.Search(c); err != nil {
 		t.Fatal(err)
 	}
 	if rec.Code != http.StatusOK {

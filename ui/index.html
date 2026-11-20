@@ -3,15 +3,12 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="robots" content="noindex" />
     <title>Dockyard · Registry</title>
-    <script>
-      // Apply the theme before first paint to avoid a flash of the wrong mode.
-      (function () {
-        var t = localStorage.getItem('dockyard_theme')
-        var dark = t === 'dark' || (t !== 'light' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-        if (dark) document.documentElement.classList.add('dark')
-      })()
-    </script>
+    <link rel="icon" href="/favicon.svg" type="image/svg+xml" />
+    <!-- Blocking on purpose: sets the theme class before first paint. -->
+    <script src="/theme-init.js"></script>
   </head>
   <body>
     <div id="root"></div>

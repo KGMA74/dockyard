@@ -133,6 +133,278 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/auth/oidc": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Whether single sign-on is configured (public) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description SSO availability, for the login page */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            enabled?: boolean;
+                            /** @description Provider label for the sign-in button */
+                            name?: string;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/auth/oidc/login": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Start an SSO sign-in (browser navigation)
+         * @description Redirects to the provider (authorization code flow with PKCE, state and nonce). `return` is the path to land on afterwards; anything but a local path is ignored.
+         */
+        get: {
+            parameters: {
+                query?: {
+                    return?: string;
+                };
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Redirect to the identity provider */
+                302: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description SSO is not configured */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/auth/oidc/callback": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Provider callback (browser navigation)
+         * @description Redirects to `/login#oidc_code=<one-time code>&return=<path>` on success, or `/login#oidc_error=<reason>` (provider_denied, expired, provider_unreachable, exchange_failed, invalid_token, not_allowed, username_invalid, username_taken, session_failed).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Back to the console */
+                302: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/auth/oidc/exchange": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Trade the one-time sign-in code for session tokens
+         * @description The code is valid for one minute and a single use.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        code: string;
+                    };
+                };
+            };
+            responses: {
+                /** @description Session tokens, as for a password login */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["AuthTokens"];
+                    };
+                };
+                /** @description Code expired or already used */
+                401: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/auth/me": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** The signed-in account */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Account */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["User"];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/auth/cli-secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue a CLI secret for docker login
+         * @description A generated secret the account can use as its docker login password (the only way for an SSO account, which has no password). Replaces any previous one; shown once.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The secret */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            username?: string;
+                            /** @example dkc_… */
+                            secret?: string;
+                        };
+                    };
+                };
+            };
+        };
+        /** Revoke the CLI secret */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Revoked */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/auth/password": {
         parameters: {
             query?: never;
@@ -244,6 +516,194 @@ export interface paths {
             };
         };
         delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/robots": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List robot accounts (admin only) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Robot accounts (secrets are never listed) */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            robots?: components["schemas"]["Robot"][];
+                            count?: number;
+                        };
+                    };
+                };
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        /**
+         * Create a robot account (admin only)
+         * @description Robot accounts authenticate to the registry protocol only (`docker login -u robot+<name>`), never to the admin API, and cannot delete. The secret is returned once.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        name: string;
+                        description?: string;
+                        /** @enum {string} */
+                        role: "pusher" | "reader";
+                        repo_patterns?: string[];
+                        /** @description 0 = never expires */
+                        expires_in_days?: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Created robot, with its secret */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RobotWithSecret"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+                403: components["responses"]["Forbidden"];
+                /** @description Name already taken */
+                409: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/robots/{id}/secret": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Issue a new secret (admin only)
+         * @description The previous secret stops working immediately.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: {
+                content: {
+                    "application/json": {
+                        expires_in_days?: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Robot with its new secret */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["RobotWithSecret"];
+                    };
+                };
+                /** @description Robot not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/robots/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                id: number;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Delete a robot account (admin only)
+         * @description Registry tokens already issued to it are refused from the next request.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Deleted */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Robot not found */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
         options?: never;
         head?: never;
         patch?: never;
@@ -386,7 +846,7 @@ export interface paths {
         post?: never;
         /**
          * Revoke a session (admin only)
-         * @description Kills the refresh token; outstanding access tokens die within 15 minutes.
+         * @description Kills the refresh token; access tokens of that session are rejected on their next request.
          */
         delete: {
             parameters: {
@@ -404,6 +864,132 @@ export interface paths {
                 404: components["responses"]["NotFound"];
             };
         };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/sessions/mine": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** List the caller's own sessions (any signed-in user) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Sessions of the caller */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            sessions?: components["schemas"]["Session"][];
+                            count?: number;
+                            /** @description Session id of this request. */
+                            current_id?: number;
+                        };
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/sessions/mine/{id}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /**
+         * Sign out one of the caller's own sessions
+         * @description Another user's session id answers 404, like a missing one.
+         */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    id: number;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                200: components["responses"]["Message"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/config": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Effective server configuration (admin only)
+         * @description Grouped settings with the environment variable controlling each one. Never includes passwords, keys, JWT secrets or S3 credentials; credentials embedded in URLs are removed.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Configuration */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            groups?: {
+                                /** @enum {string} */
+                                id?: "registry" | "access" | "security" | "maintenance" | "observability";
+                                items?: {
+                                    key?: string;
+                                    /** @description boolean, number, string or string array */
+                                    value?: unknown;
+                                    env?: string;
+                                }[];
+                            }[];
+                        };
+                    };
+                };
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
         options?: never;
         head?: never;
         patch?: never;
@@ -477,7 +1063,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List tags of a repository with digests */
+        /**
+         * List tags of a repository with size, platforms, signature and latest scan
+         * @description Each tag is resolved on the server (up to 8 at a time), so the list can be compared at a glance without one request per tag. Optional fields are absent when unknown — e.g. `signed` without cosign keys, `scan` for a digest never scanned — never filled with a guess.
+         */
         get: {
             parameters: {
                 query: {
@@ -497,12 +1086,7 @@ export interface paths {
                     content: {
                         "application/json": {
                             name?: string;
-                            tags?: {
-                                tag?: string;
-                                digest?: string;
-                                /** Format: date-time */
-                                pushed_at?: string;
-                            }[];
+                            tags?: components["schemas"]["TagSummary"][];
                             total?: number;
                         };
                     };
@@ -1499,6 +2083,172 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/vulnerability-policy": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /** Vulnerability policy and CVE allowlist (admin only) */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Policy */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            policy?: components["schemas"]["VulnerabilityPolicy"];
+                            allowlist?: components["schemas"]["AllowedCVE"][];
+                            /** @description False when SCAN_ENABLED is off: nothing is enforced. */
+                            scanning_enabled?: boolean;
+                        };
+                    };
+                };
+            };
+        };
+        /**
+         * Update the vulnerability policy (admin only)
+         * @description Blocked pulls answer 403 DENIED with the offending CVEs and are recorded in the audit log (action pull-blocked). Dockyard's own scanner is exempt so blocked images can be re-scanned.
+         */
+        put: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        scan_on_push?: boolean;
+                        /** @enum {string} */
+                        block_severity?: "" | "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+                    };
+                };
+            };
+            responses: {
+                /** @description Updated policy */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": components["schemas"]["VulnerabilityPolicy"];
+                    };
+                };
+                400: components["responses"]["BadRequest"];
+            };
+        };
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/vulnerability-policy/allowlist": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        /**
+         * Accept a vulnerability (admin only)
+         * @description An allowlisted vulnerability never blocks a pull, until the entry expires. Adding an existing ID updates it.
+         */
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": {
+                        /** @example CVE-2024-3094 */
+                        cve_id: string;
+                        reason?: string;
+                        /** @description 0 = never expires */
+                        expires_in_days?: number;
+                    };
+                };
+            };
+            responses: {
+                /** @description Added */
+                201: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                400: components["responses"]["BadRequest"];
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
+    "/api/admin/vulnerability-policy/allowlist/{cve}": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path: {
+                cve: string;
+            };
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post?: never;
+        /** Remove an exception (admin only) */
+        delete: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    cve: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description Removed */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+                /** @description Not on the allowlist */
+                404: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/signing": {
         parameters: {
             query?: never;
@@ -2192,6 +2942,34 @@ export interface components {
             created_at?: string;
             /** Format: date-time */
             updated_at?: string;
+            /**
+             * @description oidc accounts sign in through SSO and have no password
+             * @enum {string}
+             */
+            auth_source?: "local" | "oidc";
+            has_cli_secret?: boolean;
+        };
+        Robot: {
+            /** Format: int64 */
+            id?: number;
+            name?: string;
+            /** @description Registry login: robot+<name> */
+            username?: string;
+            description?: string;
+            /** @enum {string} */
+            role?: "pusher" | "reader";
+            repo_patterns?: string[];
+            created_by?: string;
+            /** Format: date-time */
+            created_at?: string;
+            /** Format: date-time */
+            expires_at?: string | null;
+            /** Format: date-time */
+            last_used_at?: string | null;
+        };
+        RobotWithSecret: components["schemas"]["Robot"] & {
+            /** @description Shown once. Use as the password of docker login. */
+            secret?: string;
         };
         Session: {
             id?: number;
@@ -2215,6 +2993,8 @@ export interface components {
             created?: string;
             architecture?: string;
             os?: string;
+            /** @description CPU variant, e.g. v7 for linux/arm/v7 */
+            variant?: string;
             /** @description Present only when cosign public keys are configured. True if a valid cosign signature was found for this digest. */
             signed?: boolean;
             layers?: {
@@ -2222,13 +3002,73 @@ export interface components {
                 size_bytes?: number;
                 size_human?: string;
             }[];
+            /** @description Build steps from the image config, base first. Steps that produced a layer carry its digest and size — only when the number of layer-producing steps matches the number of layers, so a squashed image is never mislabelled. */
+            history?: {
+                /** @example RUN /bin/sh -c apk add curl # buildkit */
+                created_by?: string;
+                /** Format: date-time */
+                created?: string;
+                empty_layer?: boolean;
+                layer_digest?: string;
+                size_bytes?: number;
+            }[];
             platforms?: {
                 architecture?: string;
                 os?: string;
+                variant?: string;
                 digest?: string;
                 size_bytes?: number;
                 size_human?: string;
             }[];
+        };
+        TagSummary: {
+            tag: string;
+            digest: string;
+            /**
+             * Format: date-time
+             * @description Embedded mode only
+             */
+            pushed_at?: string;
+            /** @description Compressed size; the sum of all platforms for a multi-arch image */
+            size_bytes?: number;
+            /** @description Runnable platforms; attestation entries (unknown/unknown) are left out. */
+            platforms?: string[];
+            /** @description Present only when cosign public keys are configured. */
+            signed?: boolean;
+            /** @description Latest scan of this digest; absent if never scanned. */
+            scan?: {
+                /** @enum {string} */
+                status?: "queued" | "running" | "succeeded" | "failed";
+                critical_count?: number;
+                high_count?: number;
+                medium_count?: number;
+                low_count?: number;
+                unknown_count?: number;
+            };
+            /** @description The vulnerability policy refuses docker pull of this tag. Absent when false. */
+            pull_blocked?: boolean;
+        };
+        VulnerabilityPolicy: {
+            /** @description Queue a scan for every pushed tag. */
+            scan_on_push?: boolean;
+            /**
+             * @description Refuse manifest GETs of images whose latest scan has a vulnerability at this severity or above that the allowlist does not cover. Empty = never block. Unscanned images are not blocked.
+             * @enum {string}
+             */
+            block_severity?: "" | "CRITICAL" | "HIGH" | "MEDIUM" | "LOW";
+            updated_by?: string;
+            /** Format: date-time */
+            updated_at?: string;
+        };
+        AllowedCVE: {
+            /** @example CVE-2024-3094 */
+            cve_id?: string;
+            reason?: string;
+            /** Format: date-time */
+            expires_at?: string | null;
+            created_by?: string;
+            /** Format: date-time */
+            created_at?: string;
         };
         SearchResult: {
             name?: string;

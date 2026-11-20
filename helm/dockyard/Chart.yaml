@@ -2,13 +2,14 @@ apiVersion: v2
 name: dockyard
 description: A self-hosted Docker Registry V2 server
 type: application
-version: 0.5.0
-appVersion: "0.5.0"
+version: 0.6.0
+appVersion: "0.6.0"
 keywords:
   - docker
   - registry
   - container
 home: https://github.com/kgma74/dockyard
+icon: https://raw.githubusercontent.com/KGMA74/dockyard/main/assets/brand/dockyard-app-icon.svg
 sources:
   - https://github.com/kgma74/dockyard
 maintainers:
@@ -31,20 +32,28 @@ annotations:
   # tag being released (a hand-written changelog). Otherwise the workflow
   # overwrites it from the GitHub release notes of that tag.
   artifacthub.io/changes: |
-    - kind: fixed
-      description: Garbage collection on the S3 backend freed nothing (LIST errors were swallowed, multi-arch child manifests were never pruned)
-    - kind: fixed
-      description: GC now follows manifest lists / OCI indexes into their child manifests
     - kind: added
-      description: Trivy vulnerability DB shipped in the image — the first scan no longer needs internet access
+      description: Robot accounts — registry-only credentials for CI and clusters (robot+<name>), scoped, expiring, revocable at once
     - kind: added
-      description: scan.offline value (TRIVY_OFFLINE) for air-gapped clusters
-    - kind: changed
-      description: Redesigned UI — collapsible sidebar, branded login page, preferences popover, storage-growth chart and sparkline
+      description: Vulnerability policy — scan on push, block pulls of images above a severity, CVE allowlist with expiry
+    - kind: added
+      description: Single sign-on with any OpenID Connect provider (oidc values), roles from groups, CLI secrets for docker login
+    - kind: added
+      description: Tag list shows size, platforms, vulnerabilities and signature; image details show the Dockerfile build steps
+    - kind: added
+      description: Settings page — your sessions, read-only server configuration, CLI secret
+    - kind: security
+      description: Path traversal in repository names could bypass repository patterns; fixed and validated in both storage backends
+    - kind: security
+      description: Role, repository and session changes apply on the next request; X-Forwarded-For only trusted from TRUSTED_PROXIES
     - kind: fixed
-      description: UI crashed on load (Tooltip used without TooltipProvider)
+      description: With the S3 backend, users, sessions and policies were lost on every restart — the PVC is now mounted for both backends (users created before must be recreated once)
+    - kind: fixed
+      description: A failed upload could delete a valid blob shared with other images; GC could race a push
     - kind: changed
-      description: Dependency updates (grpc, hono, undici, postcss, nanoid and others)
+      description: The chart refuses replicaCount > 1 and autoscaling (SQLite state is per pod) and uses the Recreate strategy with a ReadWriteOnce volume
+    - kind: changed
+      description: Rebuilt console — shareable URLs, command palette, EN/FR, new logo
   artifacthub.io/images: |
     - name: dockyard
-      image: ghcr.io/kgma74/dockyard:0.5.0
+      image: ghcr.io/kgma74/dockyard:0.6.0

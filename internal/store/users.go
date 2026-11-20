@@ -21,6 +21,12 @@ func ValidRole(role string) bool {
 	return role == RoleAdmin || role == RolePusher || role == RoleReader
 }
 
+// Where an account's identity comes from.
+const (
+	AuthSourceLocal = "local"
+	AuthSourceOIDC  = "oidc"
+)
+
 type User struct {
 	ID           int64    `json:"id"`
 	Username     string   `json:"username"`
@@ -29,6 +35,59 @@ type User struct {
 	RepoPatterns []string `json:"repo_patterns"`
 	CreatedAt    string   `json:"created_at"`
 	UpdatedAt    string   `json:"updated_at"`
+	// AuthSource is "local" (password) or "oidc" (single sign-on, no password).
+	AuthSource    string `json:"auth_source"`
+	OIDCSubject   string `json:"-"`
+	CLISecretHash string `json:"-"`
+	HasCLISecret  bool   `json:"has_cli_secret"`
+}
+
+const userColumns = `id, username, password_hash, role, repo_patterns, created_at, updated_at,
+	auth_source, COALESCE(oidc_subject, ''), COALESCE(cli_secret_hash, '')`
+
+// UserByOIDCSubject finds the account a single sign-on identity created.
+func (s *Store) UserByOIDCSubject(subject string) (*User, error) {
+	return s.scanUser(s.db.QueryRow(`SELECT `+userColumns+` FROM users WHERE oidc_subject = ?`, subject))
+}
+
+// CreateOIDCUser creates an account on its first single sign-on. It has no
+// password: the empty hash never matches a bcrypt comparison.
+func (s *Store) CreateOIDCUser(username, role, subject string) (*User, error) {
+	if !ValidRole(role) {
+		return nil, fmt.Errorf("invalid role %q", role)
+	}
+	res, err := s.db.Exec(
+		`INSERT INTO users (username, password_hash, role, repo_patterns, auth_source, oidc_subject)
+		 VALUES (?, '', ?, '[]', ?, ?)`,
+		username, role, AuthSourceOIDC, subject,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create user %q: %w", username, err)
+	}
+	id, _ := res.LastInsertId()
+	return s.userByID(id)
+}
+
+// SetUserRole changes the role only (repository patterns are kept). Demoting
+// the last admin is refused.
+func (s *Store) SetUserRole(username, role string) error {
+	u, err := s.GetUser(username)
+	if err != nil {
+		return err
+	}
+	return s.UpdateUserAccess(username, role, u.RepoPatterns)
+}
+
+// SetCLISecret stores (or, with an empty hash, removes) an account's CLI secret.
+func (s *Store) SetCLISecret(username, hash string) error {
+	var value any
+	if hash != "" {
+		value = hash
+	}
+	return s.execOnUser(
+		`UPDATE users SET cli_secret_hash = ?, updated_at = strftime('%Y-%m-%dT%H:%M:%fZ', 'now') WHERE username = ?`,
+		value, username,
+	)
 }
 
 func (s *Store) CreateUser(username, passwordHash, role string, repoPatterns []string) (*User, error) {
@@ -52,14 +111,14 @@ func (s *Store) CreateUser(username, passwordHash, role string, repoPatterns []s
 
 func (s *Store) GetUser(username string) (*User, error) {
 	return s.scanUser(s.db.QueryRow(
-		`SELECT id, username, password_hash, role, repo_patterns, created_at, updated_at
+		`SELECT `+userColumns+`
 		 FROM users WHERE username = ?`, username,
 	))
 }
 
 func (s *Store) ListUsers() ([]*User, error) {
 	rows, err := s.db.Query(
-		`SELECT id, username, password_hash, role, repo_patterns, created_at, updated_at
+		`SELECT ` + userColumns + `
 		 FROM users ORDER BY username`,
 	)
 	if err != nil {
@@ -159,7 +218,7 @@ func (s *Store) execOnUser(query string, args ...any) error {
 
 func (s *Store) userByID(id int64) (*User, error) {
 	return s.scanUser(s.db.QueryRow(
-		`SELECT id, username, password_hash, role, repo_patterns, created_at, updated_at
+		`SELECT `+userColumns+`
 		 FROM users WHERE id = ?`, id,
 	))
 }
@@ -169,7 +228,9 @@ type rowScanner interface{ Scan(dest ...any) error }
 func (s *Store) scanUser(row rowScanner) (*User, error) {
 	var u User
 	var patterns string
-	err := row.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Role, &patterns, &u.CreatedAt, &u.UpdatedAt)
+	err := row.Scan(&u.ID, &u.Username, &u.PasswordHash, &u.Role, &patterns, &u.CreatedAt, &u.UpdatedAt,
+		&u.AuthSource, &u.OIDCSubject, &u.CLISecretHash)
+	u.HasCLISecret = u.CLISecretHash != ""
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, ErrUserNotFound
 	}

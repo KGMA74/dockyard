@@ -1,68 +1,95 @@
-import { useCallback, useEffect, useState } from 'react'
-import { ShieldAlert } from 'lucide-react'
+import { useState } from 'react'
+import { FileSearch, ShieldAlert } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { listScans, ScanResult } from '../api'
-import { ScanStatusBadge, SeverityBadge } from './ScanBadges'
-import { Card } from '@/components/ui/card'
+import type { ScanResult } from '@/api'
+import { useScans } from '@/lib/queries'
+import { Link, repoHref } from '@/lib/router'
+import { Digest, EmptyState, Panel, QueryPanel, RowAction, Section, Timestamp } from './kit'
+import { ScanStatusBadge, SeverityCounts } from './ScanBadges'
+import VulnerabilityReport from './VulnerabilityReport'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
-// ScansSection lives in the Storage tab, alongside Retention/GC. Hidden when
-// the feature is off (SCAN_ENABLED=false) or the caller isn't admin — the
-// list call 403s/404s in that case.
+/** History of vulnerability scans across the registry. Scans are started
+ *  from an image's detail panel; this is where their results are compared. */
 export default function ScansSection() {
   const { t } = useTranslation()
-  const [scans, setScans] = useState<ScanResult[] | null>(null)
-
-  const load = useCallback(() => {
-    listScans({ limit: 20 })
-      .then(r => setScans(r.scans))
-      .catch(() => setScans(null))
-  }, [])
-
-  useEffect(load, [load])
-
-  if (scans === null) return null
+  const scans = useScans({ limit: 50 }, { pollWhileRunning: true })
+  const [report, setReport] = useState<ScanResult | null>(null)
 
   return (
-    <div>
-      <h3 className="text-xs font-medium text-muted-foreground uppercase tracking-widest mb-3">
-        {t('scansSection.title')}
-      </h3>
-      <Card className="p-4 rounded-xl gap-3">
-        <div className="flex items-center gap-3">
-          <div className="size-9 rounded-full bg-muted flex items-center justify-center shrink-0">
-            <ShieldAlert className="size-4 text-muted-foreground" strokeWidth={1.5} />
-          </div>
-          <p className="text-xs text-muted-foreground">
-            {t('scansSection.description')}
-          </p>
-        </div>
-
-        {scans.length === 0 ? (
-          <p className="text-xs text-muted-foreground">{t('scansSection.noScan')}</p>
-        ) : (
-          <div className="space-y-2">
-            {scans.map(s => (
-              <div key={s.id} className="flex items-center gap-3 bg-muted/50 border rounded-lg px-3 py-2">
-                <span className="font-mono text-xs truncate flex-1" title={`${s.name}@${s.digest}`}>
-                  {s.name}
-                </span>
-                <ScanStatusBadge status={s.status} />
-                {s.status === 'succeeded' && (
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <SeverityBadge count={s.critical_count} tone="critical" />
-                    <SeverityBadge count={s.high_count} tone="high" />
-                    <SeverityBadge count={s.medium_count} tone="medium" />
-                    <SeverityBadge count={s.low_count} tone="low" />
-                  </div>
-                )}
-                <span className="text-xs text-muted-foreground shrink-0 tabular-nums">
-                  {new Date(s.created_at).toLocaleString()}
-                </span>
-              </div>
-            ))}
-          </div>
+    <Section id="scans" title={t('scans.title')} description={t('scans.description')}>
+      <QueryPanel
+        query={scans}
+        unavailable={{
+          title: t('scans.disabledTitle'),
+          body: (
+            <>
+              {t('scans.disabledPrefix')} <code className="font-medium text-foreground">SCAN_ENABLED=true</code> {t('scans.disabledSuffix')}
+            </>
+          ),
+        }}
+        isEmpty={data => data.scans.length === 0}
+        empty={<EmptyState icon={ShieldAlert} title={t('scans.emptyTitle')} description={t('scans.emptyBody')} />}
+        skeletonRows={4}
+      >
+        {data => (
+          <Panel>
+            <Table>
+              <TableHeader>
+                <TableRow className="hover:bg-transparent">
+                  <TableHead className="px-4">{t('columns.image')}</TableHead>
+                  <TableHead className="hidden lg:table-cell">{t('columns.digest')}</TableHead>
+                  <TableHead>{t('scans.findings')}</TableHead>
+                  <TableHead className="hidden md:table-cell">{t('scans.requestedBy')}</TableHead>
+                  <TableHead className="hidden text-right sm:table-cell">{t('scans.scanned')}</TableHead>
+                  <TableHead className="w-12 px-4" />
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {data.scans.map(scan => {
+                  // `reference` is whatever the scan was requested with; only a tag makes a useful link.
+                  const tag = scan.reference.startsWith('sha256:') ? undefined : scan.reference
+                  return (
+                    <TableRow key={scan.id}>
+                      <TableCell className="max-w-64 px-4">
+                        <Link to={repoHref(scan.name, tag)} className="block truncate font-mono text-[13px] hover:underline">
+                          {scan.name}
+                          {tag && <span className="text-muted-foreground">:{tag}</span>}
+                        </Link>
+                      </TableCell>
+                      <TableCell className="hidden lg:table-cell">
+                        <Digest value={scan.digest} />
+                      </TableCell>
+                      <TableCell>
+                        {scan.status === 'succeeded' ? (
+                          <SeverityCounts scan={scan} />
+                        ) : (
+                          <span title={scan.error || undefined}>
+                            <ScanStatusBadge status={scan.status} />
+                          </span>
+                        )}
+                      </TableCell>
+                      <TableCell className="hidden text-muted-foreground md:table-cell">{scan.requested_by === 'on-push' ? t('scans.onPush') : scan.requested_by || '—'}</TableCell>
+                      <TableCell className="hidden text-right text-xs text-muted-foreground sm:table-cell">
+                        <Timestamp value={scan.finished_at ?? scan.created_at} />
+                      </TableCell>
+                      <TableCell className="px-4 text-right">
+                        {scan.status === 'succeeded' && (
+                          <RowAction label={t('imageDetails.viewReport')} onClick={() => setReport(scan)}>
+                            <FileSearch />
+                          </RowAction>
+                        )}
+                      </TableCell>
+                    </TableRow>
+                  )
+                })}
+              </TableBody>
+            </Table>
+          </Panel>
         )}
-      </Card>
-    </div>
+      </QueryPanel>
+
+      {report && <VulnerabilityReport scan={report} image={`${report.name}@${report.digest}`} onClose={() => setReport(null)} />}
+    </Section>
   )
 }

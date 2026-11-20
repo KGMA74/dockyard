@@ -45,6 +45,8 @@ type Server struct {
 	corsAllowedOrigins   []string
 	rateLimitLoginPerMin int
 	rateLimitGlobalRPS   int
+	trustedProxies       []string
+	gcGracePeriod        time.Duration
 	mirrorTagTTL         time.Duration
 	metricsEnabled       bool
 	stats                *statsCache
@@ -63,6 +65,10 @@ type Server struct {
 	signingPolicy *cosign.Policy
 
 	tracingEnabled bool
+
+	// configSummary is what GET /api/admin/config shows: built once from
+	// the loaded config, secrets left out (see newConfigSummary).
+	configSummary []ConfigGroup
 }
 
 // NewServer builds the HTTP server. The second return value flushes and
@@ -91,6 +97,8 @@ func NewServer() (*http.Server, func(context.Context) error) {
 		corsAllowedOrigins:   cfg.CORSAllowedOrigins,
 		rateLimitLoginPerMin: cfg.RateLimitLoginPerMin,
 		rateLimitGlobalRPS:   cfg.RateLimitGlobalRPS,
+		trustedProxies:       cfg.TrustedProxies,
+		gcGracePeriod:        cfg.GCGracePeriod,
 		metricsEnabled:       cfg.MetricsEnabled,
 
 		scanEnabled:           cfg.ScanEnabled,
@@ -169,6 +177,7 @@ func NewServer() (*http.Server, func(context.Context) error) {
 		os.Exit(1)
 	}
 	srv.signingPolicy = cosign.NewPolicy(cfg.RequireSignedPush, cosignKeys, st)
+	srv.configSummary = newConfigSummary(cfg, m, len(cosignKeys), tracingEnabled, cfg.GCGracePeriod.String())
 	if cfg.RequireSignedPush && len(cosignKeys) == 0 {
 		slog.Warn("REQUIRE_SIGNED_PUSH is on but no cosign public keys are configured — all gated pushes will be rejected until COSIGN_PUBLIC_KEYS_DIR is set")
 	}
@@ -176,10 +185,14 @@ func NewServer() (*http.Server, func(context.Context) error) {
 	// Daily maintenance (retention then GC) needs both the backend and the
 	// policy store, hence scheduled after both exist.
 	if srv.backend != nil {
-		scheduleMaintenance(srv.backend, retention.New(st, srv.backend), srv.events)
+		scheduleMaintenance(srv.backend, retention.New(st, srv.backend), srv.events, srv.gcGracePeriod)
 		go srv.sampleStatsLoop()
 	}
 
+	if _, err := clientIPExtractor(cfg.TrustedProxies); err != nil {
+		slog.Error("invalid configuration", "err", err)
+		os.Exit(1)
+	}
 	if cfg.AuthUsername == "" || cfg.AuthPassword == "" || cfg.JWTSecret == "" {
 		slog.Error("AUTH_USERNAME, AUTH_PASSWORD and JWT_SECRET must be set")
 		os.Exit(1)
@@ -190,6 +203,27 @@ func NewServer() (*http.Server, func(context.Context) error) {
 		os.Exit(1)
 	}
 	srv.auth = authMgr
+	if cfg.OIDCIssuerURL != "" {
+		if cfg.OIDCClientID == "" {
+			slog.Error("OIDC_ISSUER_URL is set but OIDC_CLIENT_ID is not")
+			os.Exit(1)
+		}
+		authMgr.EnableOIDC(auth.OIDCConfig{
+			IssuerURL:     cfg.OIDCIssuerURL,
+			ClientID:      cfg.OIDCClientID,
+			ClientSecret:  cfg.OIDCClientSecret,
+			RedirectURL:   cfg.OIDCRedirectURL,
+			Scopes:        cfg.OIDCScopes,
+			UsernameClaim: cfg.OIDCUsernameClaim,
+			GroupsClaim:   cfg.OIDCGroupsClaim,
+			AdminGroups:   cfg.OIDCAdminGroups,
+			PusherGroups:  cfg.OIDCPusherGroups,
+			ReaderGroups:  cfg.OIDCReaderGroups,
+			DefaultRole:   cfg.OIDCDefaultRole,
+			DisplayName:   cfg.OIDCDisplayName,
+		})
+		slog.Info("single sign-on enabled", "issuer", cfg.OIDCIssuerURL)
+	}
 
 	tlsConfig, err := tlsutil.Config(tlsutil.Options{
 		Mode:      cfg.TLSMode,

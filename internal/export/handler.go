@@ -6,6 +6,7 @@ import (
 
 	"dockyard/internal/auth"
 	"dockyard/internal/events"
+	"dockyard/internal/reference"
 	"dockyard/internal/storage"
 
 	"github.com/labstack/echo/v4"
@@ -26,8 +27,8 @@ func (h *Handler) SetHub(hub *events.Hub) { h.hub = hub }
 // Streams an OCI image-layout tarball.
 func (h *Handler) Export(c echo.Context) error {
 	name := c.QueryParam("name")
-	if name == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "param 'name' required"})
+	if !reference.ValidName(name) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "param 'name' must be a valid repository name"})
 	}
 	// Verify everything is exportable before committing to a 200 stream.
 	if err := Preflight(h.backend, name); err != nil {
@@ -48,8 +49,8 @@ func (h *Handler) Export(c echo.Context) error {
 // Body: an OCI image-layout tarball.
 func (h *Handler) Import(c echo.Context) error {
 	name := c.QueryParam("name")
-	if name == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "param 'name' required"})
+	if !reference.ValidName(name) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "param 'name' must be a valid repository name"})
 	}
 	tags, err := Import(c.Request().Body, h.backend, name)
 	if err != nil {

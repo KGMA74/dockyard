@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"dockyard/internal/reference"
 	"dockyard/internal/store"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -35,7 +36,14 @@ type Principal struct {
 	Role         string
 	RepoPatterns []string
 	SessionID    int64
+	// RobotID is set for robot accounts, Scanner for Dockyard's own scanner.
+	// Neither may use the admin API.
+	RobotID int64
+	Scanner bool
 }
+
+// Machine reports whether the principal is a robot or the internal scanner.
+func (p Principal) Machine() bool { return p.RobotID != 0 || p.Scanner }
 
 // Action is a permission checked by Authorize.
 type Action string
@@ -60,6 +68,10 @@ type Manager struct {
 	// verification (JWT_SECRET_PREVIOUS rotation grace window).
 	secrets [][]byte
 	audit   AuditSink
+	// scannerSecret authenticates the internal scanner (see ScannerCredentials).
+	scannerSecret string
+	// oidc is nil unless single sign-on is configured (EnableOIDC).
+	oidc *oidcState
 }
 
 // SetAuditSink enables audit records for logins, logouts and password
@@ -81,6 +93,8 @@ func New(username, initialPassword, jwtSecret, previousSecret, dataDir string, u
 		users:    users,
 		username: username,
 		secrets:  [][]byte{[]byte(jwtSecret)},
+
+		scannerSecret: newScannerSecret(),
 	}
 	if previousSecret != "" {
 		m.secrets = append(m.secrets, []byte(previousSecret))
@@ -122,9 +136,15 @@ func (m *Manager) cleanupLoop() {
 	}
 }
 
+// dummyHash is compared against when the username does not exist, so a
+// failed login costs one bcrypt either way. Without it, unknown usernames
+// answered ~1000x faster than known ones — a free account-enumeration oracle.
+var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("dockyard-timing-equalizer"), bcrypt.DefaultCost)
+
 func (m *Manager) verify(username, password string) (*store.User, bool) {
 	u, err := m.users.GetUser(username)
 	if err != nil {
+		_ = bcrypt.CompareHashAndPassword(dummyHash, []byte(password))
 		return nil, false
 	}
 	if bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password)) != nil {
@@ -139,8 +159,10 @@ func (m *Manager) token(u *store.User, sessionID int64) (string, error) {
 		"role":  u.Role,
 		"repos": u.RepoPatterns,
 		"sid":   strconv.FormatInt(sessionID, 10),
-		"exp":   time.Now().Add(accessTTL).Unix(),
-		"iat":   time.Now().Unix(),
+		// "oidc" accounts have no password: the UI hides password changes.
+		"src": u.AuthSource,
+		"exp": time.Now().Add(accessTTL).Unix(),
+		"iat": time.Now().Unix(),
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(m.secrets[0])
 }
@@ -195,20 +217,47 @@ func (m *Manager) validate(raw string) (Principal, error) {
 	}
 	p := Principal{}
 	p.Username, _ = claims["sub"].(string)
-	p.Role, _ = claims["role"].(string)
-	if p.Role == "" {
-		// Token issued before the RBAC migration — the only account then was
-		// the admin, keep it working until it expires.
-		p.Role = store.RoleAdmin
-	}
 	if sid, ok := claims["sid"].(string); ok {
 		p.SessionID, _ = strconv.ParseInt(sid, 10, 64)
 	}
-	if rawRepos, ok := claims["repos"].([]any); ok {
-		for _, r := range rawRepos {
-			if s, ok := r.(string); ok {
-				p.RepoPatterns = append(p.RepoPatterns, s)
-			}
+
+	// Anonymous-pull registry tokens are not backed by an account: they are
+	// always a plain reader, whatever a same-named account might be.
+	if p.Username == anonymousUser {
+		p.Role = store.RoleReader
+		return p, nil
+	}
+	if scanner, _ := claims["scn"].(bool); scanner {
+		// Only this process can mint them: the scanner secret is per-process.
+		if p.Username != ScannerUsername {
+			return Principal{}, errors.New("invalid claims")
+		}
+		return Principal{Username: ScannerUsername, Role: store.RoleReader, Scanner: true}, nil
+	}
+	if rid, ok := claims["rid"].(float64); ok {
+		robot, ok := m.robotPrincipal(int64(rid))
+		if !ok {
+			return Principal{}, errors.New("robot account no longer exists or has expired")
+		}
+		return robot, nil
+	}
+
+	// The token proves *who* is calling; *what they may do* is read from the
+	// database on every request. Trusting the role/repos claims instead meant
+	// a demoted or deleted account kept its old rights until the token
+	// expired (up to 15 minutes on the admin API).
+	u, err := m.users.GetUser(p.Username)
+	if err != nil {
+		return Principal{}, errors.New("account no longer exists")
+	}
+	p.Role = u.Role
+	p.RepoPatterns = u.RepoPatterns
+
+	// Same reasoning for sessions: revoking one must cut access now, not when
+	// the access token happens to expire. Registry tokens carry no session.
+	if p.SessionID != 0 {
+		if alive, err := m.users.SessionExists(p.SessionID); err == nil && !alive {
+			return Principal{}, errors.New("session has been revoked")
 		}
 	}
 	return p, nil
@@ -269,6 +318,41 @@ func wildcardMatch(pattern, s string) bool {
 	}
 	return strings.HasSuffix(s, parts[len(parts)-1])
 }
+
+// CanAccessRepo reports whether the request's principal may read repo. Admin
+// API handlers use it to apply the same repository patterns the V2 protocol
+// enforces — the UI must not show a restricted account what docker pull
+// would refuse it.
+func CanAccessRepo(c echo.Context, repo string) bool {
+	p, ok := CurrentPrincipal(c)
+	return ok && Authorize(p, ActionPull, repo)
+}
+
+// RequireRepoAccess guards admin routes that address one repository through a
+// query parameter: the name must be well-formed and within the principal's
+// repository patterns.
+func RequireRepoAccess(param string) echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		return func(c echo.Context) error {
+			name := c.QueryParam(param)
+			if name == "" {
+				return c.JSON(http.StatusBadRequest, map[string]string{"error": "query param '" + param + "' required"})
+			}
+			if !reference.ValidName(name) {
+				return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid repository name"})
+			}
+			if !CanAccessRepo(c, name) {
+				return c.JSON(http.StatusForbidden, map[string]string{"error": "access to this repository is not allowed for your account"})
+			}
+			return next(c)
+		}
+	}
+}
+
+// SetPrincipal installs p as the request's authenticated identity. The auth
+// middlewares call it; it is exported so handler tests in other packages can
+// build an authenticated context without minting a JWT.
+func SetPrincipal(c echo.Context, p Principal) { c.Set(principalKey, p) }
 
 // CurrentPrincipal returns the Principal set by Middleware, if any.
 func CurrentPrincipal(c echo.Context) (Principal, bool) {
@@ -430,6 +514,71 @@ func (m *Manager) RevokeSession(c echo.Context) error {
 	return c.JSON(http.StatusOK, map[string]string{"message": "session revoked"})
 }
 
+// ownSessions returns the caller's sessions only.
+func (m *Manager) ownSessions(username string) ([]*store.Session, error) {
+	all, err := m.users.ListSessions()
+	if err != nil {
+		return nil, err
+	}
+	mine := []*store.Session{}
+	for _, s := range all {
+		if s.Username == username {
+			mine = append(mine, s)
+		}
+	}
+	return mine, nil
+}
+
+// ListMySessions — GET /api/admin/sessions/mine. Any signed-in user can see
+// where they are signed in; the full list stays admin-only.
+func (m *Manager) ListMySessions(c echo.Context) error {
+	p, ok := CurrentPrincipal(c)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "not authenticated"})
+	}
+	sessions, err := m.ownSessions(p.Username)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, map[string]any{
+		"sessions":   sessions,
+		"count":      len(sessions),
+		"current_id": p.SessionID,
+	})
+}
+
+// RevokeMySession — DELETE /api/admin/sessions/mine/:id. Only the caller's
+// own sessions: another user's id answers 404, exactly like a missing one,
+// so the endpoint can't be used to probe which sessions exist.
+func (m *Manager) RevokeMySession(c echo.Context) error {
+	p, ok := CurrentPrincipal(c)
+	if !ok {
+		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "not authenticated"})
+	}
+	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
+	if err != nil {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid session id"})
+	}
+	sessions, err := m.ownSessions(p.Username)
+	if err != nil {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	owned := false
+	for _, s := range sessions {
+		if s.ID == id {
+			owned = true
+			break
+		}
+	}
+	if !owned {
+		return c.JSON(http.StatusNotFound, map[string]string{"error": "session not found"})
+	}
+	if err := m.users.DeleteSession(id); err != nil && !errors.Is(err, store.ErrSessionNotFound) {
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
+	}
+	return c.JSON(http.StatusOK, map[string]string{"message": "session revoked"})
+}
+
 // ChangePassword — POST /api/admin/auth/password (JWT requis). Changes the
 // password of the authenticated user.
 func (m *Manager) ChangePassword(c echo.Context) error {
@@ -444,8 +593,12 @@ func (m *Manager) ChangePassword(c echo.Context) error {
 	if err := c.Bind(&body); err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid request"})
 	}
-	if _, ok := m.verify(p.Username, body.CurrentPassword); !ok {
-		return c.JSON(http.StatusUnauthorized, map[string]string{"error": "wrong current password"})
+	u, ok := m.verify(p.Username, body.CurrentPassword)
+	if !ok {
+		// 403, not 401: the caller *is* authenticated. A 401 here made the UI
+		// treat a mistyped current password as an expired session and log out.
+		m.auditRecord(p.Username, "change-password", c.RealIP(), "failure", "wrong current password")
+		return c.JSON(http.StatusForbidden, map[string]string{"error": "wrong current password"})
 	}
 	if len(body.NewPassword) < 8 {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "password must be at least 8 characters"})
@@ -457,11 +610,16 @@ func (m *Manager) ChangePassword(c echo.Context) error {
 	if err := m.users.UpdateUserPassword(p.Username, string(hash)); err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "failed to update password"})
 	}
+	// A password change is how a user evicts someone who got hold of the old
+	// one: every other session of the account dies with it.
+	_ = m.users.DeleteUserSessionsExcept(u.ID, p.SessionID)
 	m.auditRecord(p.Username, "change-password", c.RealIP(), "success", "")
 	return c.JSON(http.StatusOK, map[string]string{"message": "password updated"})
 }
 
 func (m *Manager) Username() string { return m.username }
+
+const machineDenied = "robot accounts can only use the registry API (/v2)"
 
 // Middleware vérifie le JWT, rejette les tokens révoqués et installe le
 // Principal dans le contexte.
@@ -475,6 +633,9 @@ func (m *Manager) Middleware() echo.MiddlewareFunc {
 			p, err := m.validate(strings.TrimPrefix(header, "Bearer "))
 			if err != nil {
 				return c.JSON(http.StatusUnauthorized, map[string]string{"error": err.Error()})
+			}
+			if p.Machine() {
+				return c.JSON(http.StatusForbidden, map[string]string{"error": machineDenied})
 			}
 			c.Set(principalKey, p)
 			return next(c)
@@ -499,6 +660,9 @@ func (m *Manager) MiddlewareEventStream() echo.MiddlewareFunc {
 			p, err := m.validate(raw)
 			if err != nil {
 				return c.JSON(http.StatusUnauthorized, map[string]string{"error": err.Error()})
+			}
+			if p.Machine() {
+				return c.JSON(http.StatusForbidden, map[string]string{"error": machineDenied})
 			}
 			c.Set(principalKey, p)
 			return next(c)

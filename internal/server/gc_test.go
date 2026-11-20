@@ -33,7 +33,7 @@ func TestRunGCRemovesOnlyOrphanBlobs(t *testing.T) {
 		t.Fatalf("PutManifest: %v", err)
 	}
 
-	runGC(backend, nil)
+	runGC(backend, nil, 0)
 
 	for _, keep := range []string{configDgst, layerDgst} {
 		if ok, _ := backend.BlobExists(keep); !ok {
@@ -50,8 +50,8 @@ func TestRunGCIsIdempotentOnCleanStore(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewLocal: %v", err)
 	}
-	runGC(backend, nil) // must not panic or error on an empty store
-	runGC(backend, nil)
+	runGC(backend, nil, 0) // must not panic or error on an empty store
+	runGC(backend, nil, 0)
 }
 
 func TestRunGCPublishesEventOnlyWhenSomethingWasRemoved(t *testing.T) {
@@ -64,7 +64,7 @@ func TestRunGCPublishesEventOnlyWhenSomethingWasRemoved(t *testing.T) {
 	defer hub.Unsubscribe(ch)
 
 	// Nothing to collect — must not publish.
-	runGC(backend, hub)
+	runGC(backend, hub, 0)
 	select {
 	case ev := <-ch:
 		t.Fatalf("unexpected event on a no-op GC: %+v", ev)
@@ -77,7 +77,7 @@ func TestRunGCPublishesEventOnlyWhenSomethingWasRemoved(t *testing.T) {
 	if err := backend.PutBlob(dgst, bytes.NewReader(orphan), int64(len(orphan))); err != nil {
 		t.Fatalf("PutBlob: %v", err)
 	}
-	runGC(backend, hub)
+	runGC(backend, hub, 0)
 	select {
 	case ev := <-ch:
 		if ev.Type != "gc" || ev.Actor != "scheduler" {

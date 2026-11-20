@@ -2,9 +2,10 @@ package admin
 
 import (
 	"net/http"
-	"strings"
 
+	"dockyard/internal/auth"
 	"dockyard/internal/cosign"
+	"dockyard/internal/reference"
 	"dockyard/internal/registry"
 	"dockyard/internal/store"
 
@@ -17,7 +18,12 @@ type RemoteHandler struct {
 	client  *registry.Client
 	signing *cosign.Policy
 	db      *store.Store // SQLite — scan results, used by Search
+	// pullPolicy flags tags the vulnerability policy blocks; nil = scanning off.
+	pullPolicy PullPolicy
 }
+
+// SetPullPolicy enables the pull_blocked flag in tag lists.
+func (h *RemoteHandler) SetPullPolicy(p PullPolicy) { h.pullPolicy = p }
 
 func NewRemote(client *registry.Client, signing *cosign.Policy, db *store.Store) *RemoteHandler {
 	return &RemoteHandler{client: client, signing: signing, db: db}
@@ -36,6 +42,9 @@ func (h *RemoteHandler) GetRepositories(c echo.Context) error {
 	}
 	result := make([]repoInfo, 0, len(repos))
 	for _, name := range repos {
+		if !auth.CanAccessRepo(c, name) {
+			continue
+		}
 		tags, _ := h.client.Tags(name)
 		result = append(result, repoInfo{Name: name, Tags: tags, Total: len(tags)})
 	}
@@ -56,30 +65,28 @@ func (h *RemoteHandler) GetTags(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadGateway, map[string]string{"error": err.Error()})
 	}
-	type tagInfo struct {
-		Tag    string `json:"tag"`
-		Digest string `json:"digest"`
-	}
-	result := make([]tagInfo, 0, len(tags))
-	for _, tag := range tags {
-		m, _ := h.client.Manifest(name, tag)
-		var digest string
-		if m != nil {
-			digest = m.Digest
+	result := summarizeTags(tags, func(tag string) TagSummary {
+		summary := TagSummary{Tag: tag}
+		if details, err := h.manifestDetails(name, tag); err == nil {
+			applyDetails(&summary, details)
+		} else if m, _ := h.client.Manifest(name, tag); m != nil {
+			summary.Digest = m.Digest
 		}
-		result = append(result, tagInfo{Tag: tag, Digest: digest})
-	}
+		summary.Scan = tagScanInfo(h.db, summary.Digest)
+		summary.PullBlocked = pullBlocked(h.pullPolicy, summary)
+		return summary
+	})
 	return c.JSON(http.StatusOK, map[string]any{"name": name, "tags": result, "total": len(result)})
 }
 
 // GET /api/admin/repositories/manifest?name=<image>&reference=<tag-or-digest>
 func (h *RemoteHandler) GetManifestDetails(c echo.Context) error {
 	name := c.QueryParam("name")
-	reference := c.QueryParam("reference")
-	if name == "" || reference == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "params 'name' and 'reference' required"})
+	ref := c.QueryParam("reference")
+	if !reference.ValidReference(ref) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "param 'reference' must be a tag or a sha256 digest"})
 	}
-	result, err := h.manifestDetails(name, reference)
+	result, err := h.manifestDetails(name, ref)
 	if err != nil {
 		return c.JSON(http.StatusBadGateway, map[string]string{"error": err.Error()})
 	}
@@ -89,8 +96,8 @@ func (h *RemoteHandler) GetManifestDetails(c echo.Context) error {
 // manifestDetails resolves reference and parses its manifest, tagging the
 // result with signed status when cosign keys are configured. Shared by
 // GetManifestDetails and GetTagDiff.
-func (h *RemoteHandler) manifestDetails(name, reference string) (map[string]any, error) {
-	raw, digest, err := h.client.RawManifest(name, reference)
+func (h *RemoteHandler) manifestDetails(name, ref string) (map[string]any, error) {
+	raw, digest, err := h.client.RawManifest(name, ref)
 	if err != nil {
 		return nil, err
 	}
@@ -114,8 +121,8 @@ func (h *RemoteHandler) GetTagDiff(c echo.Context) error {
 	name := c.QueryParam("name")
 	refA := c.QueryParam("reference_a")
 	refB := c.QueryParam("reference_b")
-	if name == "" || refA == "" || refB == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "params 'name', 'reference_a' and 'reference_b' required"})
+	if !reference.ValidReference(refA) || !reference.ValidReference(refB) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "params 'reference_a' and 'reference_b' must be tags or sha256 digests"})
 	}
 	a, err := h.manifestDetails(name, refA)
 	if err != nil {
@@ -132,8 +139,8 @@ func (h *RemoteHandler) GetTagDiff(c echo.Context) error {
 func (h *RemoteHandler) GetLayerEntries(c echo.Context) error {
 	name := c.QueryParam("name")
 	digest := c.QueryParam("digest")
-	if name == "" || digest == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "params 'name' and 'digest' required"})
+	if !reference.ValidDigest(digest) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "param 'digest' must be sha256:<64 hex chars>"})
 	}
 	if entries, ok := layerEntriesCache.Get(digest); ok {
 		return c.JSON(http.StatusOK, map[string]any{"digest": digest, "entries": entries, "count": len(entries)})
@@ -155,11 +162,8 @@ func (h *RemoteHandler) GetLayerEntries(c echo.Context) error {
 func (h *RemoteHandler) DeleteManifest(c echo.Context) error {
 	name := c.QueryParam("name")
 	digest := c.QueryParam("digest")
-	if name == "" || digest == "" {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "params 'name' and 'digest' required"})
-	}
-	if !strings.HasPrefix(digest, "sha256:") {
-		return c.JSON(http.StatusBadRequest, map[string]string{"error": "digest must start with sha256:"})
+	if !reference.ValidDigest(digest) {
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "param 'digest' must be sha256:<64 hex chars>"})
 	}
 	if err := h.client.DeleteManifest(name, digest); err != nil {
 		return c.JSON(http.StatusBadGateway, map[string]string{"error": err.Error()})

@@ -109,6 +109,30 @@ func (s *Store) DeleteSession(sessionID int64) error {
 	return nil
 }
 
+// SessionExists reports whether a session is still live (not revoked, not
+// expired). Checked on every authenticated request so revocation is immediate.
+func (s *Store) SessionExists(sessionID int64) (bool, error) {
+	var n int
+	err := s.db.QueryRow(
+		`SELECT COUNT(*) FROM sessions WHERE id = ? AND expires_at > ?`, sessionID, nowRFC3339(),
+	).Scan(&n)
+	return n > 0, err
+}
+
+// DeleteUserSessions ends every session of a user (role or password changed
+// by an admin, account compromised…).
+func (s *Store) DeleteUserSessions(userID int64) error {
+	_, err := s.db.Exec(`DELETE FROM sessions WHERE user_id = ?`, userID)
+	return err
+}
+
+// DeleteUserSessionsExcept ends every session of a user but one — the session
+// the user is changing their own password from.
+func (s *Store) DeleteUserSessionsExcept(userID, keepSessionID int64) error {
+	_, err := s.db.Exec(`DELETE FROM sessions WHERE user_id = ? AND id != ?`, userID, keepSessionID)
+	return err
+}
+
 // ── Revoked access tokens (persisted logout blacklist) ───────────────────────
 
 // RevokeToken records an access token hash until its natural expiry.

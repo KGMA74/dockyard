@@ -9,6 +9,30 @@ permissions:
   contents: read
 
 jobs:
+  helm:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: azure/setup-helm@v4
+      - name: Lint
+        run: helm lint helm/dockyard
+      - name: Render the supported configurations
+        run: |
+          helm template t helm/dockyard > /dev/null
+          # S3 keeps a volume for the SQLite state and uses Recreate.
+          helm template t helm/dockyard --set registry.storage.backend=s3 > s3.yaml
+          grep -q 'kind: PersistentVolumeClaim' s3.yaml
+          grep -q 'type: Recreate' s3.yaml
+          helm template t helm/dockyard --set oidc.enabled=true \
+            --set oidc.issuerURL=https://sso.example.com --set oidc.clientID=dockyard \
+            --set oidc.clientSecret=s --set 'oidc.adminGroups={ops,platform}' > oidc.yaml
+          grep -q 'OIDC_ADMIN_GROUPS: "ops,platform"' oidc.yaml
+          grep -q 'OIDC_CLIENT_SECRET' oidc.yaml
+      - name: Refuse unsupported configurations
+        run: |
+          ! helm template t helm/dockyard --set replicaCount=2 2>/dev/null
+          ! helm template t helm/dockyard --set oidc.enabled=true 2>/dev/null
+
   go:
     runs-on: ubuntu-latest
     services:

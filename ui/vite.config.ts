@@ -21,6 +21,20 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: '../internal/ui/dist',
       emptyOutDir: true,
+      rollupOptions: {
+        output: {
+          // Vendor code changes far less often than the app: separate chunks
+          // stay cached in browsers across Dockyard upgrades.
+          manualChunks(id) {
+            if (!id.includes('node_modules')) return undefined
+            if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) return 'react'
+            if (/[\\/]node_modules[\\/](radix-ui|@radix-ui)[\\/]/.test(id)) return 'radix'
+            if (/[\\/]node_modules[\\/](i18next|react-i18next|i18next-browser-languagedetector)[\\/]/.test(id)) return 'i18n'
+            if (/[\\/]node_modules[\\/]@tanstack[\\/]/.test(id)) return 'query'
+            return 'vendor'
+          },
+        },
+      },
     },
     server: {
       proxy: {

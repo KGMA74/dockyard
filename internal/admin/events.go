@@ -5,7 +5,9 @@ import (
 	"net/http"
 	"time"
 
+	"dockyard/internal/auth"
 	"dockyard/internal/events"
+	"dockyard/internal/reference"
 
 	"github.com/labstack/echo/v4"
 )
@@ -23,6 +25,10 @@ func Events(hub *events.Hub) echo.HandlerFunc {
 
 		ch := hub.Subscribe()
 		defer hub.Unsubscribe(ch)
+
+		// Accounts restricted to some repositories only hear about those.
+		principal, _ := auth.CurrentPrincipal(c)
+		restricted := len(principal.RepoPatterns) > 0
 
 		// Keeps the connection alive through proxies/load balancers that
 		// close idle streams.
@@ -45,6 +51,9 @@ func Events(hub *events.Hub) echo.HandlerFunc {
 				if !ok {
 					return nil
 				}
+				if restricted && !eventVisible(principal, ev) {
+					continue
+				}
 				data, err := json.Marshal(ev)
 				if err != nil {
 					continue
@@ -56,4 +65,11 @@ func Events(hub *events.Hub) echo.HandlerFunc {
 			}
 		}
 	}
+}
+
+// eventVisible reports whether a repository-restricted principal may receive
+// ev. Only events that name a repository the account can read get through;
+// registry-wide ones (gc, quota warnings) are admin business.
+func eventVisible(p auth.Principal, ev events.Event) bool {
+	return reference.ValidName(ev.Name) && auth.MatchesRepo(p.RepoPatterns, ev.Name)
 }

@@ -1,42 +1,105 @@
+import { Ban } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { Badge } from '@/components/ui/badge'
-import type { ScanResult } from '../api'
+import type { ScanResult, Severity, TagScanSummary } from '@/api'
+import { StatusBadge, type Tone } from './kit'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
-const STATUS_STYLE: Record<ScanResult['status'], string> = {
-  queued: 'text-muted-foreground',
-  running: 'text-blue-600 dark:text-blue-400 border-blue-500/30 bg-blue-500/10',
-  succeeded: 'text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10',
-  failed: 'text-destructive border-destructive/30 bg-destructive/10',
+const STATUS_TONE: Record<ScanResult['status'], Tone> = {
+  queued: 'neutral',
+  running: 'info',
+  succeeded: 'success',
+  failed: 'danger',
 }
 
 export function ScanStatusBadge({ status }: { status: ScanResult['status'] }) {
   const { t } = useTranslation()
+  return <StatusBadge tone={STATUS_TONE[status]}>{t(`scan.status.${status}`)}</StatusBadge>
+}
+
+export const SEVERITY_TONE: Record<Severity, Tone> = {
+  CRITICAL: 'danger',
+  HIGH: 'warning',
+  MEDIUM: 'info',
+  LOW: 'neutral',
+  UNKNOWN: 'neutral',
+}
+
+export function SeverityBadge({ severity, count }: { severity: Severity; count?: number }) {
+  const { t } = useTranslation()
   return (
-    <Badge variant="outline" className={`capitalize ${STATUS_STYLE[status]}`}>
-      {t(`scanBadges.status.${status}`)}
-    </Badge>
+    <StatusBadge tone={SEVERITY_TONE[severity]}>
+      {t(`scan.severity.${severity}`)}
+      {count !== undefined && <span className="tabular-nums">{count}</span>}
+    </StatusBadge>
   )
 }
 
-const SEVERITY_STYLE = {
-  critical: 'text-destructive border-destructive/30 bg-destructive/10',
-  high: 'text-orange-600 dark:text-orange-400 border-orange-500/30 bg-orange-500/10',
-  medium: 'text-amber-600 dark:text-amber-400 border-amber-500/30 bg-amber-500/10',
-  low: 'text-muted-foreground',
-} as const
+/** One table cell's worth of scan result. Critical and high are what decide
+ *  whether an image ships, so they get badges; everything below is folded
+ *  into a count, keeping a column of these readable down a long tag list. */
+export function CompactScan({ scan, blocked }: { scan?: TagScanSummary; blocked?: boolean }) {
+  const { t } = useTranslation()
+  if (!scan) return <span className="text-xs text-muted-foreground">{t('repository.notScanned')}</span>
+  if (scan.status !== 'succeeded') return <ScanStatusBadge status={scan.status} />
 
-export function SeverityBadge({
-  count,
-  tone,
+  const lower = scan.medium_count + scan.low_count + scan.unknown_count
+  if (scan.critical_count + scan.high_count + lower === 0) {
+    return (
+      <span title={t('scan.clean')}>
+        <StatusBadge tone="success">{t('scan.cleanShort')}</StatusBadge>
+      </span>
+    )
+  }
+  return (
+    <span className="flex flex-wrap items-center gap-1.5">
+      {blocked && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex">
+              <StatusBadge tone="danger">
+                <Ban className="size-3" />
+                {t('repository.pullBlocked')}
+              </StatusBadge>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-64">{t('repository.pullBlockedHint')}</TooltipContent>
+        </Tooltip>
+      )}
+      {scan.critical_count > 0 && <SeverityBadge severity="CRITICAL" count={scan.critical_count} />}
+      {scan.high_count > 0 && <SeverityBadge severity="HIGH" count={scan.high_count} />}
+      {lower > 0 && (
+        <span className="text-xs text-muted-foreground tabular-nums">
+          {scan.critical_count + scan.high_count > 0
+            ? t('repository.lowerSeverities', { count: lower })
+            : t('repository.mediumOrLower', { count: lower })}
+        </span>
+      )}
+    </span>
+  )
+}
+
+/** Severity counts of a finished scan; "No known vulnerabilities" when clean
+ *  (an empty row of badges reads as "not scanned"). */
+export function SeverityCounts({
+  scan,
 }: {
-  count: number
-  tone: keyof typeof SEVERITY_STYLE
+  scan: Pick<ScanResult, 'critical_count' | 'high_count' | 'medium_count' | 'low_count' | 'unknown_count'>
 }) {
   const { t } = useTranslation()
-  if (count === 0) return null
+  const counts: [Severity, number][] = [
+    ['CRITICAL', scan.critical_count],
+    ['HIGH', scan.high_count],
+    ['MEDIUM', scan.medium_count],
+    ['LOW', scan.low_count],
+    ['UNKNOWN', scan.unknown_count],
+  ]
+  const present = counts.filter(([, count]) => count > 0)
+  if (present.length === 0) return <StatusBadge tone="success">{t('scan.clean')}</StatusBadge>
   return (
-    <Badge variant="outline" className={SEVERITY_STYLE[tone]}>
-      {t(`scanBadges.severity.${tone}`)} {count}
-    </Badge>
+    <span className="flex flex-wrap items-center gap-1.5">
+      {present.map(([severity, count]) => (
+        <SeverityBadge key={severity} severity={severity} count={count} />
+      ))}
+    </span>
   )
 }

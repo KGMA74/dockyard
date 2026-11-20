@@ -39,6 +39,9 @@ export default function GrowthChart({ samples }: Props) {
   const trendUp = delta >= 0
 
   const active = hover !== null ? points[hover] : null
+  // The detail row always shows a sample — the hovered one, else the latest —
+  // so the card keeps the same height whether or not the pointer is over it.
+  const shown = active ?? points[points.length - 1]
 
   function onMove(e: React.MouseEvent<SVGSVGElement>) {
     const rect = e.currentTarget.getBoundingClientRect()
@@ -56,10 +59,11 @@ export default function GrowthChart({ samples }: Props) {
         </p>
       </div>
 
+      <div className="relative">
       <svg
         viewBox={`0 0 ${WIDTH} ${HEIGHT}`}
         preserveAspectRatio="none"
-        className="w-full h-28 overflow-visible"
+        className="block w-full h-28 overflow-visible"
         onMouseMove={onMove}
         onMouseLeave={() => setHover(null)}
       >
@@ -83,22 +87,29 @@ export default function GrowthChart({ samples }: Props) {
         />
 
         {active && (
-          <>
-            <line
-              x1={active.x} x2={active.x} y1={PAD_Y} y2={HEIGHT}
-              className="text-border" stroke="currentColor" strokeWidth="1" vectorEffect="non-scaling-stroke"
-            />
-            <circle cx={active.x} cy={active.y} r="4" className="fill-primary" vectorEffect="non-scaling-stroke" />
-          </>
+          <line
+            x1={active.x} x2={active.x} y1={PAD_Y} y2={HEIGHT}
+            className="text-border" stroke="currentColor" strokeWidth="1" vectorEffect="non-scaling-stroke"
+          />
         )}
       </svg>
-
+      {/* The SVG is stretched (preserveAspectRatio="none"), which would squash
+          an SVG circle into an ellipse; an HTML dot stays round. */}
       {active && (
-        <div className="text-xs text-muted-foreground flex items-center justify-between mt-1 tabular-nums">
-          <span>{formatDate(active.sample.at)}</span>
-          <span>{formatBytes(active.sample.total_size)} · {t('insights.repoCount', { count: active.sample.repo_count })}</span>
-        </div>
+        <span
+          aria-hidden
+          className="pointer-events-none absolute size-2 -translate-x-1/2 -translate-y-1/2 rounded-full bg-primary ring-2 ring-card"
+          style={{ left: `${(active.x / WIDTH) * 100}%`, top: `${(active.y / HEIGHT) * 100}%` }}
+        />
       )}
+      </div>
+
+      <div
+        className={`mt-1 flex items-center justify-between text-xs tabular-nums ${active ? 'text-foreground' : 'text-muted-foreground'}`}
+      >
+        <span>{formatDate(shown.sample.at)}</span>
+        <span>{formatBytes(shown.sample.total_size)} · {t('insights.repoCount', { count: shown.sample.repo_count })}</span>
+      </div>
     </div>
   )
 }

@@ -1,3 +1,5 @@
+<img src="./assets/brand/dockyard-app-icon.svg" alt="" width="64" height="64">
+
 # Dockyard — Self-hosted Docker Registry
 
 [![CI](https://github.com/KGMA74/dockyard/actions/workflows/ci.yml/badge.svg)](https://github.com/KGMA74/dockyard/actions/workflows/ci.yml)
@@ -12,15 +14,17 @@ A lightweight, self-hosted Docker Registry V2 server written in Go. Ships as a *
 
 ## Features
 
-- **Embedded UI** — React + Tailwind (shadcn/ui) dashboard, dark/light/system theme, EN/FR localization
+- **Embedded UI** — React + Tailwind (shadcn/ui) console with shareable URLs for every page, repository and tag, a `Ctrl+K` command palette, role-aware navigation (readers only see what they can use), ready-to-copy `docker login/push/pull` commands, a filterable vulnerability report, dark/light/system theme and EN/FR localization (a test keeps both languages in sync)
 - **Two storage backends** — local filesystem or any S3-compatible object store (RustFS, MinIO, AWS S3, …)
 - **Two modes** — embedded registry, or proxy/mirror in front of an existing registry
 - **Multi-arch aware** — manifest lists (OCI indexes) resolve per-platform, real total size instead of 0
-- **Vulnerability scanning** — Trivy scans on demand via the admin API, results with severity counts. The vulnerability DB ships in the image, so scans work offline / air-gapped
+- **Vulnerability scanning and policy** — Trivy scans on demand or on every push; optionally refuse `docker pull` of images with vulnerabilities at or above a severity, with an expiring CVE allowlist for accepted risks. The vulnerability DB ships in the image, so scans work offline / air-gapped
+- **Robot accounts** — registry-only credentials for CI and clusters (`docker login -u robot+<name>`), pusher or reader, scoped to repository patterns, expiring, revocable at once
 - **Signed-push enforcement** — reject pushes without a valid cosign signature, verified server-side
 - **Garbage collection, retention policies, replication, byte quotas** — all with dry-run previews; GC runs on both the local and S3 backends
 - **Tag diff, layer browser, server-side search** — inspect and compare images from the UI
 - **In-app notifications, audit log, webhooks** — over the same event feed
+- **Single sign-on** — any OpenID Connect provider (Authentik, Keycloak, Authelia, Entra ID…), roles from groups, accounts created on first sign-in; CLI secrets for docker login
 - **JWT auth** on the admin API, Docker token auth on `/v2/*`, structured JSON logs, optional OpenTelemetry tracing
 
 ## Modes

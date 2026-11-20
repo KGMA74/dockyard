@@ -1,19 +1,31 @@
-import { useEffect, useState } from 'react'
-import { toast } from 'sonner'
-import { Layers as LayersIcon, FolderOpen, ShieldAlert } from 'lucide-react'
+import { useState } from 'react'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { FileSearch, FolderOpen, ShieldAlert } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
-import { getManifestDetails, listScans, triggerScan, ManifestDetails, ScanResult, TagInfo } from '../api'
+import { toast } from 'sonner'
+import { registryHost, triggerScan, type ScanResult, type TagInfo } from '@/api'
+import { formatDateTime } from '@/lib/format'
+import { useManifest, useScans } from '@/lib/queries'
+import { useSession } from '@/lib/session'
+import { historyIsAttributed } from '@/lib/dockerfile'
+import BuildSteps from './BuildSteps'
 import LayerBrowser from './LayerBrowser'
-import { ScanStatusBadge, SeverityBadge } from './ScanBadges'
-import { Badge } from '@/components/ui/badge'
-import { Button } from '@/components/ui/button'
 import {
-  Sheet,
-  SheetContent,
-  SheetHeader,
-  SheetTitle,
-  SheetDescription,
-} from '@/components/ui/sheet'
+  Command,
+  CopyButton,
+  Digest,
+  ErrorState,
+  errorMessage,
+  isUnavailable,
+  Spinner,
+  StatusBadge,
+  TableSkeleton,
+  TagBadge,
+} from './kit'
+import { ScanStatusBadge, SeverityCounts } from './ScanBadges'
+import VulnerabilityReport from './VulnerabilityReport'
+import { Button } from '@/components/ui/button'
+import { Sheet, SheetContent, SheetDescription, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 
 interface Props {
   imageName: string
@@ -21,231 +33,229 @@ interface Props {
   onClose: () => void
 }
 
+function Block({ title, action, children }: { title: React.ReactNode; action?: React.ReactNode; children: React.ReactNode }) {
+  return (
+    <section className="space-y-2">
+      <div className="flex min-h-6 items-center justify-between gap-2">
+        <h3 className="text-xs font-medium text-muted-foreground">{title}</h3>
+        {action}
+      </div>
+      {children}
+    </section>
+  )
+}
+
+function Stat({ label, value }: { label: string; value: React.ReactNode }) {
+  return (
+    <div>
+      <dt className="text-xs text-muted-foreground">{label}</dt>
+      <dd className="mt-0.5 text-sm font-medium">{value}</dd>
+    </div>
+  )
+}
+
+function ScanBlock({ imageName, tag }: { imageName: string; tag: TagInfo }) {
+  const { t } = useTranslation()
+  const queryClient = useQueryClient()
+  const [showReport, setShowReport] = useState(false)
+  const params = { name: imageName, digest: tag.digest, limit: 1 }
+  const scans = useScans(params, { pollWhileRunning: true })
+  const scan: ScanResult | undefined = scans.data?.scans[0]
+  const inFlight = scan?.status === 'queued' || scan?.status === 'running'
+
+  const trigger = useMutation({
+    mutationFn: () => triggerScan(imageName, tag.digest),
+    onSuccess: result => {
+      if (result.cached) toast.info(t('imageDetails.reusingScan'))
+      void queryClient.invalidateQueries({ queryKey: ['scans'] })
+    },
+    onError: err => toast.error(errorMessage(err, t('imageDetails.scanStartFailed'))),
+  })
+
+  // 404: scanning is not enabled on this server — say nothing, like the rest
+  // of the panel does for features that are off.
+  if (scans.isError && isUnavailable(scans.error)) return null
+  if (scans.isPending) return null
+
+  return (
+    <Block
+      title={
+        <span className="flex items-center gap-1.5">
+          <ShieldAlert className="size-3.5" />
+          {t('imageDetails.vulnScan')}
+        </span>
+      }
+      action={
+        scan && !inFlight ? (
+          <Button variant="ghost" size="xs" onClick={() => trigger.mutate()} disabled={trigger.isPending} className="text-muted-foreground">
+            {trigger.isPending ? <Spinner className="size-3" /> : null}
+            {t('imageDetails.rescan')}
+          </Button>
+        ) : undefined
+      }
+    >
+      {!scan ? (
+        <div className="flex items-center justify-between gap-3 rounded-lg border border-dashed px-3 py-2.5">
+          <p className="text-xs text-muted-foreground">{t('imageDetails.neverScanned')}</p>
+          <Button variant="outline" size="sm" onClick={() => trigger.mutate()} disabled={trigger.isPending}>
+            {trigger.isPending ? <Spinner /> : <ShieldAlert />}
+            {t('imageDetails.scanNow')}
+          </Button>
+        </div>
+      ) : (
+        <div className="space-y-2 rounded-lg border bg-muted/40 px-3 py-2.5">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            {scan.status === 'succeeded' ? <SeverityCounts scan={scan} /> : <ScanStatusBadge status={scan.status} />}
+            {inFlight && <Spinner className="text-muted-foreground" />}
+            {scan.status === 'succeeded' && (
+              <Button variant="outline" size="sm" onClick={() => setShowReport(true)}>
+                <FileSearch />
+                {t('imageDetails.viewReport')}
+              </Button>
+            )}
+          </div>
+          {scan.status === 'failed' && scan.error && (
+            <p className="break-words font-mono text-xs text-destructive">{scan.error}</p>
+          )}
+          {scan.finished_at && (
+            <p className="text-xs text-muted-foreground">{t('imageDetails.scannedAt', { date: formatDateTime(scan.finished_at) })}</p>
+          )}
+        </div>
+      )}
+      {showReport && scan && (
+        <VulnerabilityReport scan={scan} image={`${imageName}:${tag.tag}`} onClose={() => setShowReport(false)} />
+      )}
+    </Block>
+  )
+}
+
 export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
   const { t } = useTranslation()
-  const [details, setDetails] = useState<ManifestDetails | null>(null)
-  const [error, setError] = useState('')
-  const [loading, setLoading] = useState(true)
+  const session = useSession()
+  const manifest = useManifest(imageName, tag.digest)
   const [browsingLayer, setBrowsingLayer] = useState<string | null>(null)
-  // undefined = still loading / feature unavailable (403 in non-admin roles,
-  // or SCAN_ENABLED=false) — the whole section stays hidden in that case.
-  const [scan, setScan] = useState<ScanResult | null | undefined>(undefined)
-  const [triggering, setTriggering] = useState(false)
-
-  useEffect(() => {
-    let cancelled = false
-    setLoading(true)
-    setError('')
-    getManifestDetails(imageName, tag.digest)
-      .then(d => { if (!cancelled) setDetails(d) })
-      .catch(err => { if (!cancelled) setError(err instanceof Error ? err.message : t('imageDetails.loadFailed')) })
-      .finally(() => { if (!cancelled) setLoading(false) })
-    return () => { cancelled = true }
-  }, [imageName, tag.digest, t])
-
-  useEffect(() => {
-    let cancelled = false
-    listScans({ name: imageName, digest: tag.digest, limit: 1 })
-      .then(r => { if (!cancelled) setScan(r.scans[0] ?? null) })
-      .catch(() => { if (!cancelled) setScan(undefined) })
-    return () => { cancelled = true }
-  }, [imageName, tag.digest])
-
-  // Poll while a scan is in flight — the backend docs recommend polling
-  // GET /api/admin/scans/:id rather than wiring SSE for this.
-  useEffect(() => {
-    if (!scan || (scan.status !== 'queued' && scan.status !== 'running')) return
-    const id = setInterval(() => {
-      listScans({ name: imageName, digest: tag.digest, limit: 1 })
-        .then(r => setScan(r.scans[0] ?? null))
-        .catch(() => {})
-    }, 2000)
-    return () => clearInterval(id)
-  }, [scan, imageName, tag.digest])
-
-  async function handleScan() {
-    setTriggering(true)
-    try {
-      const result = await triggerScan(imageName, tag.digest)
-      setScan(result.scan)
-      if (result.cached) toast.info(t('imageDetails.reusingScan'))
-    } catch (err) {
-      toast.error(err instanceof Error ? err.message : t('imageDetails.scanStartFailed'))
-    } finally {
-      setTriggering(false)
-    }
-  }
+  const details = manifest.data
+  const reference = `${registryHost()}/${imageName}`
 
   return (
     <>
-      <Sheet open onOpenChange={open => { if (!open) onClose() }}>
-        <SheetContent side="right" className="overflow-y-auto gap-0">
-          <SheetHeader className="border-b">
-            <SheetTitle className="font-mono text-sm truncate pr-8">{imageName}</SheetTitle>
+      <Sheet open onOpenChange={open => !open && onClose()}>
+        <SheetContent side="right" className="gap-0 overflow-y-auto data-[side=right]:w-full data-[side=right]:sm:max-w-xl">
+          <SheetHeader className="border-b pr-12">
+            <SheetTitle className="truncate font-mono text-sm">{imageName}</SheetTitle>
             <SheetDescription asChild>
-              <span>
-                <span className="inline-block mt-1 font-mono text-xs text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-950/30 px-2 py-0.5 rounded-md border border-blue-200 dark:border-blue-900/30">
-                  {tag.tag}
-                </span>
-              </span>
+              <div className="flex flex-wrap items-center gap-1.5">
+                <TagBadge>{tag.tag}</TagBadge>
+                {details?.signed !== undefined && (
+                  <StatusBadge tone={details.signed ? 'success' : 'neutral'}>
+                    {details.signed ? t('imageDetails.signed') : t('imageDetails.unsigned')}
+                  </StatusBadge>
+                )}
+              </div>
             </SheetDescription>
           </SheetHeader>
 
-          <div className="p-4 space-y-5">
-            {loading ? (
-              <p className="text-sm text-muted-foreground py-10 text-center">{t('common.loading')}</p>
-            ) : error ? (
-              <p className="text-sm text-destructive py-10 text-center">{error}</p>
+          <div className="space-y-6 p-4">
+            <Block title={t('imageDetails.pull')}>
+              <div className="space-y-1.5">
+                <Command>{`docker pull ${reference}:${tag.tag}`}</Command>
+                <Command>{`docker pull ${reference}@${tag.digest}`}</Command>
+              </div>
+              <p className="text-xs text-muted-foreground text-pretty">{t('imageDetails.pullByDigestHint')}</p>
+            </Block>
+
+            {manifest.isPending ? (
+              <TableSkeleton rows={4} />
+            ) : manifest.isError ? (
+              <ErrorState error={manifest.error} onRetry={() => manifest.refetch()} />
             ) : details ? (
               <>
-                <div className="grid grid-cols-2 gap-3">
-                  <Field label={t('imageDetails.totalSize')} value={details.total_size_human} />
-                  <Field
+                <dl className="grid grid-cols-2 gap-x-4 gap-y-3 sm:grid-cols-4">
+                  <Stat label={t('imageDetails.totalSize')} value={details.total_size_human} />
+                  <Stat
                     label={details.platforms ? t('imageDetails.uniqueLayers') : t('imageDetails.layers')}
-                    value={String(details.layers.length)}
+                    value={details.layers.length}
                   />
-                  {details.os && <Field label={t('tagDiff.os')} value={details.os} />}
-                  {details.architecture && <Field label={t('tagDiff.architecture')} value={details.architecture} />}
-                  {details.created && (
-                    <Field label={t('imageDetails.created')} value={new Date(details.created).toLocaleString()} wide />
+                  {details.os && details.architecture && (
+                    <Stat
+                      label={t('imageDetails.platform')}
+                      value={[details.os, details.architecture, details.variant].filter(Boolean).join('/')}
+                    />
                   )}
-                </div>
+                  {details.created && <Stat label={t('imageDetails.built')} value={formatDateTime(details.created)} />}
+                </dl>
 
-                <div>
-                  <p className="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-1.5">
-                    {t('imageDetails.digest')}
-                    {details.signed !== undefined && (
-                      <Badge
-                        variant="outline"
-                        className={
-                          details.signed
-                            ? 'text-emerald-600 dark:text-emerald-400 border-emerald-500/30 bg-emerald-500/10'
-                            : 'text-muted-foreground'
-                        }
-                      >
-                        {details.signed ? t('imageDetails.signed') : t('imageDetails.unsigned')}
-                      </Badge>
-                    )}
-                  </p>
-                  <p className="font-mono text-xs text-muted-foreground bg-muted/50 border rounded-lg px-3 py-2 break-all">
-                    {details.digest}
-                  </p>
-                </div>
-
-                {scan !== undefined && (
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-1.5">
-                      <ShieldAlert className="size-3.5" />
-                      {t('imageDetails.vulnScan')}
-                    </p>
-                    {scan === null ? (
-                      <Button variant="outline" size="sm" onClick={handleScan} disabled={triggering}>
-                        <ShieldAlert />
-                        {triggering ? t('imageDetails.starting') : t('imageDetails.scanForVulns')}
-                      </Button>
-                    ) : (
-                      <div className="bg-muted/50 border rounded-lg px-3 py-2 space-y-2">
-                        <div className="flex items-center justify-between gap-2">
-                          <ScanStatusBadge status={scan.status} />
-                          {(scan.status === 'succeeded' || scan.status === 'failed') && (
-                            <Button variant="outline" size="sm" onClick={handleScan} disabled={triggering}>
-                              {triggering ? t('imageDetails.starting') : t('imageDetails.rescan')}
-                            </Button>
-                          )}
-                        </div>
-                        {scan.status === 'succeeded' && (
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            <SeverityBadge count={scan.critical_count} tone="critical" />
-                            <SeverityBadge count={scan.high_count} tone="high" />
-                            <SeverityBadge count={scan.medium_count} tone="medium" />
-                            <SeverityBadge count={scan.low_count} tone="low" />
-                          </div>
-                        )}
-                        {scan.status === 'failed' && scan.error && (
-                          <p className="text-xs text-destructive">{scan.error}</p>
-                        )}
-                      </div>
-                    )}
+                <Block title={t('imageDetails.digest')}>
+                  <div className="flex items-start gap-1 rounded-lg border bg-muted/40 py-1.5 pr-1 pl-3">
+                    <code className="min-w-0 flex-1 py-0.5 text-xs break-all text-muted-foreground">{details.digest}</code>
+                    <CopyButton value={details.digest} label={t('kit.copyDigest')} />
                   </div>
-                )}
+                </Block>
+
+                {session.isAdmin && <ScanBlock imageName={imageName} tag={tag} />}
 
                 {details.platforms && details.platforms.length > 0 && (
-                  <div>
-                    <p className="text-xs text-muted-foreground font-medium mb-2">
-                      {t('imageDetails.platforms', { count: details.platforms.length })}
-                    </p>
-                    <div className="space-y-1.5">
-                      {details.platforms.map(p => (
-                        <div
-                          key={p.digest}
-                          className="flex items-center justify-between gap-3 bg-muted/50 border rounded-lg px-3 py-2"
-                        >
-                          <Badge variant="secondary" className="font-mono">
-                            {p.os}/{p.architecture}
-                          </Badge>
-                          <span className="text-xs shrink-0 tabular-nums text-muted-foreground">{p.size_human}</span>
-                        </div>
+                  <Block title={t('imageDetails.platforms', { count: details.platforms.length })}>
+                    <ul className="divide-y rounded-lg border">
+                      {details.platforms.map(platform => (
+                        <li key={platform.digest} className="flex items-center gap-3 px-3 py-2">
+                          <code className="shrink-0 text-xs font-medium">
+                            {[platform.os, platform.architecture, platform.variant].filter(Boolean).join('/')}
+                          </code>
+                          <span className="min-w-0 flex-1">
+                            <Digest value={platform.digest} />
+                          </span>
+                          <span className="shrink-0 text-xs text-muted-foreground tabular-nums">{platform.size_human}</span>
+                        </li>
                       ))}
-                    </div>
-                  </div>
+                    </ul>
+                  </Block>
                 )}
 
-                <div>
-                  <p className="text-xs text-muted-foreground font-medium mb-2 flex items-center gap-1.5">
-                    <LayersIcon className="size-3.5" />
-                    {t('imageDetails.layersCount', { count: details.layers.length })}
-                  </p>
+                {historyIsAttributed(details.history) ? (
+                  <Block title={t('imageDetails.history')}>
+                    <p className="-mt-1 text-xs text-muted-foreground text-pretty">{t('imageDetails.historyBody')}</p>
+                    <BuildSteps history={details.history!} onBrowse={setBrowsingLayer} />
+                  </Block>
+                ) : (
+                <Block title={t('imageDetails.layersCount', { count: details.layers.length })}>
+                  {details.history?.length && details.layers.length > 0 ? (
+                    <p className="-mt-1 text-xs text-muted-foreground text-pretty">{t('imageDetails.historyUnmatched')}</p>
+                  ) : null}
                   {details.layers.length === 0 ? (
-                    <p className="text-xs text-muted-foreground/70">{t('imageDetails.noLayers')}</p>
+                    <p className="text-xs text-muted-foreground">{t('imageDetails.noLayers')}</p>
                   ) : (
-                    <div className="space-y-1.5">
-                      {details.layers.map((layer, i) => (
-                        <div
-                          key={layer.digest + i}
-                          className="flex items-center justify-between gap-3 bg-muted/50 border rounded-lg px-3 py-2"
-                        >
-                          <span className="font-mono text-xs text-muted-foreground truncate">
-                            {layer.digest.slice(0, 19)}…
+                    <ol className="divide-y rounded-lg border">
+                      {details.layers.map((layer, index) => (
+                        <li key={layer.digest + index} className="flex items-center gap-3 py-1.5 pr-1.5 pl-3">
+                          <span className="w-5 shrink-0 text-right text-xs text-muted-foreground tabular-nums">{index + 1}</span>
+                          <span className="min-w-0 flex-1">
+                            <Digest value={layer.digest} />
                           </span>
-                          <div className="flex items-center gap-2 shrink-0">
-                            <span className="text-xs tabular-nums">{layer.size_human}</span>
-                            <Button
-                              variant="ghost"
-                              size="icon-xs"
-                              title={t('imageDetails.browseLayer')}
-                              onClick={() => setBrowsingLayer(layer.digest)}
-                              className="text-muted-foreground/60 hover:text-blue-500 dark:hover:text-blue-400"
-                            >
-                              <FolderOpen strokeWidth={1.5} />
-                            </Button>
-                          </div>
-                        </div>
+                          <span className="shrink-0 text-xs tabular-nums">{layer.size_human}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon-xs"
+                            aria-label={t('imageDetails.browseLayer')}
+                            title={t('imageDetails.browseLayer')}
+                            onClick={() => setBrowsingLayer(layer.digest)}
+                            className="text-muted-foreground hover:text-foreground"
+                          >
+                            <FolderOpen />
+                          </Button>
+                        </li>
                       ))}
-                    </div>
+                    </ol>
                   )}
-                </div>
+                </Block>
+                )}
               </>
             ) : null}
           </div>
         </SheetContent>
       </Sheet>
 
-      {browsingLayer && (
-        <LayerBrowser
-          imageName={imageName}
-          digest={browsingLayer}
-          onClose={() => setBrowsingLayer(null)}
-        />
-      )}
+      {browsingLayer && <LayerBrowser imageName={imageName} digest={browsingLayer} onClose={() => setBrowsingLayer(null)} />}
     </>
-  )
-}
-
-function Field({ label, value, wide }: { label: string; value: string; wide?: boolean }) {
-  return (
-    <div className={wide ? 'col-span-2' : undefined}>
-      <p className="text-xs text-muted-foreground font-medium">{label}</p>
-      <p className="text-sm mt-0.5">{value}</p>
-    </div>
   )
 }

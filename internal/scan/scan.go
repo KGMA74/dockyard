@@ -182,6 +182,15 @@ func (d *Dispatcher) execute(sc *store.ScanResult) error {
 	if err != nil {
 		return err
 	}
+	// Recorded before the scan is marked succeeded: the pull gate never sees
+	// a finished scan without its vulnerability list.
+	vulns, err := distinctVulnerabilities(report)
+	if err != nil {
+		return err
+	}
+	if err := d.store.RecordScanVulnerabilities(sc.ID, vulns); err != nil {
+		return fmt.Errorf("scan: record vulnerabilities: %w", err)
+	}
 	version, err := trivyVersion(ctx, d.cfg.TrivyBin)
 	if err != nil {
 		version = ""
