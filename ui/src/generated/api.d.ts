@@ -3178,7 +3178,7 @@ export interface components {
             enabled?: boolean;
             /**
              * Format: uri
-             * @description Required to enable. Absolute http(s)
+             * @description Required to enable. Absolute http(s) URL without credentials.
              */
             issuer_url?: string;
             /** @description Required to enable. */

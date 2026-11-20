@@ -1609,7 +1609,7 @@ components:
       type: object
       properties:
         enabled: { type: boolean }
-        issuer_url: { type: string, format: uri, description: Required to enable. Absolute http(s), no credentials. }
+        issuer_url: { type: string, format: uri, description: "Required to enable. Absolute http(s) URL without credentials." }
         client_id: { type: string, description: Required to enable. }
         client_secret:
           type: string
