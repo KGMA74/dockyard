@@ -10,6 +10,7 @@ import { keys, useHealth, useInvalidate, useMe, useMySessions, useServerConfig }
 import { useSession } from '@/lib/session'
 import { ThemeSwitcher } from '@/theme'
 import ChangePasswordModal from '@/components/ChangePasswordModal'
+import SSOSettingsSection from '@/components/SSOSettingsSection'
 import {
   Command,
   CopyButton,
@@ -435,6 +436,12 @@ export default function SettingsPage() {
           <Command>{`dockyard-cli login ${window.location.origin} -u ${username}`}</Command>
         </Panel>
       </SettingsSection>
+
+      {session.isAdmin && (
+        <SettingsSection title={t('sso.title')} description={t('sso.description')}>
+          <SSOSettingsSection />
+        </SettingsSection>
+      )}
 
       {session.isAdmin && <ServerConfigSection />}
 
