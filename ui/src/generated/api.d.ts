@@ -477,7 +477,10 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** List tags of a repository with digests */
+        /**
+         * List tags of a repository with size, platforms, signature and latest scan
+         * @description Each tag is resolved on the server (up to 8 at a time), so the list can be compared at a glance without one request per tag. Optional fields are absent when unknown — e.g. `signed` without cosign keys, `scan` for a digest never scanned — never filled with a guess.
+         */
         get: {
             parameters: {
                 query: {
@@ -497,12 +500,7 @@ export interface paths {
                     content: {
                         "application/json": {
                             name?: string;
-                            tags?: {
-                                tag?: string;
-                                digest?: string;
-                                /** Format: date-time */
-                                pushed_at?: string;
-                            }[];
+                            tags?: components["schemas"]["TagSummary"][];
                             total?: number;
                         };
                     };
@@ -2215,6 +2213,8 @@ export interface components {
             created?: string;
             architecture?: string;
             os?: string;
+            /** @description CPU variant, e.g. v7 for linux/arm/v7 */
+            variant?: string;
             /** @description Present only when cosign public keys are configured. True if a valid cosign signature was found for this digest. */
             signed?: boolean;
             layers?: {
@@ -2222,13 +2222,49 @@ export interface components {
                 size_bytes?: number;
                 size_human?: string;
             }[];
+            /** @description Build steps from the image config, base first. Steps that produced a layer carry its digest and size — only when the number of layer-producing steps matches the number of layers, so a squashed image is never mislabelled. */
+            history?: {
+                /** @example RUN /bin/sh -c apk add curl # buildkit */
+                created_by?: string;
+                /** Format: date-time */
+                created?: string;
+                empty_layer?: boolean;
+                layer_digest?: string;
+                size_bytes?: number;
+            }[];
             platforms?: {
                 architecture?: string;
                 os?: string;
+                variant?: string;
                 digest?: string;
                 size_bytes?: number;
                 size_human?: string;
             }[];
+        };
+        TagSummary: {
+            tag: string;
+            digest: string;
+            /**
+             * Format: date-time
+             * @description Embedded mode only
+             */
+            pushed_at?: string;
+            /** @description Compressed size; the sum of all platforms for a multi-arch image */
+            size_bytes?: number;
+            /** @description Runnable platforms; attestation entries (unknown/unknown) are left out. */
+            platforms?: string[];
+            /** @description Present only when cosign public keys are configured. */
+            signed?: boolean;
+            /** @description Latest scan of this digest; absent if never scanned. */
+            scan?: {
+                /** @enum {string} */
+                status?: "queued" | "running" | "succeeded" | "failed";
+                critical_count?: number;
+                high_count?: number;
+                medium_count?: number;
+                low_count?: number;
+                unknown_count?: number;
+            };
         };
         SearchResult: {
             name?: string;

@@ -60,19 +60,16 @@ func (h *RemoteHandler) GetTags(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusBadGateway, map[string]string{"error": err.Error()})
 	}
-	type tagInfo struct {
-		Tag    string `json:"tag"`
-		Digest string `json:"digest"`
-	}
-	result := make([]tagInfo, 0, len(tags))
-	for _, tag := range tags {
-		m, _ := h.client.Manifest(name, tag)
-		var digest string
-		if m != nil {
-			digest = m.Digest
+	result := summarizeTags(tags, func(tag string) TagSummary {
+		summary := TagSummary{Tag: tag}
+		if details, err := h.manifestDetails(name, tag); err == nil {
+			applyDetails(&summary, details)
+		} else if m, _ := h.client.Manifest(name, tag); m != nil {
+			summary.Digest = m.Digest
 		}
-		result = append(result, tagInfo{Tag: tag, Digest: digest})
-	}
+		summary.Scan = tagScanInfo(h.db, summary.Digest)
+		return summary
+	})
 	return c.JSON(http.StatusOK, map[string]any{"name": name, "tags": result, "total": len(result)})
 }
 

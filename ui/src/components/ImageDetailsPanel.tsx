@@ -7,6 +7,8 @@ import { registryHost, triggerScan, type ScanResult, type TagInfo } from '@/api'
 import { formatDateTime } from '@/lib/format'
 import { useManifest, useScans } from '@/lib/queries'
 import { useSession } from '@/lib/session'
+import { historyIsAttributed } from '@/lib/dockerfile'
+import BuildSteps from './BuildSteps'
 import LayerBrowser from './LayerBrowser'
 import {
   Command,
@@ -175,7 +177,10 @@ export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
                     value={details.layers.length}
                   />
                   {details.os && details.architecture && (
-                    <Stat label={t('imageDetails.platform')} value={`${details.os}/${details.architecture}`} />
+                    <Stat
+                      label={t('imageDetails.platform')}
+                      value={[details.os, details.architecture, details.variant].filter(Boolean).join('/')}
+                    />
                   )}
                   {details.created && <Stat label={t('imageDetails.built')} value={formatDateTime(details.created)} />}
                 </dl>
@@ -195,7 +200,7 @@ export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
                       {details.platforms.map(platform => (
                         <li key={platform.digest} className="flex items-center gap-3 px-3 py-2">
                           <code className="shrink-0 text-xs font-medium">
-                            {platform.os}/{platform.architecture}
+                            {[platform.os, platform.architecture, platform.variant].filter(Boolean).join('/')}
                           </code>
                           <span className="min-w-0 flex-1">
                             <Digest value={platform.digest} />
@@ -207,7 +212,16 @@ export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
                   </Block>
                 )}
 
+                {historyIsAttributed(details.history) ? (
+                  <Block title={t('imageDetails.history')}>
+                    <p className="-mt-1 text-xs text-muted-foreground text-pretty">{t('imageDetails.historyBody')}</p>
+                    <BuildSteps history={details.history!} onBrowse={setBrowsingLayer} />
+                  </Block>
+                ) : (
                 <Block title={t('imageDetails.layersCount', { count: details.layers.length })}>
+                  {details.history?.length && details.layers.length > 0 ? (
+                    <p className="-mt-1 text-xs text-muted-foreground text-pretty">{t('imageDetails.historyUnmatched')}</p>
+                  ) : null}
                   {details.layers.length === 0 ? (
                     <p className="text-xs text-muted-foreground">{t('imageDetails.noLayers')}</p>
                   ) : (
@@ -234,6 +248,7 @@ export default function ImageDetailsPanel({ imageName, tag, onClose }: Props) {
                     </ol>
                   )}
                 </Block>
+                )}
               </>
             ) : null}
           </div>

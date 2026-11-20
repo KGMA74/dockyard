@@ -37,7 +37,10 @@
     "signature": "Signature",
     "scan": "Scan",
     "pushed": "Poussé",
-    "lastPushed": "Dernier push"
+    "lastPushed": "Dernier push",
+    "size": "Taille",
+    "platforms": "Plateformes",
+    "vulnerabilities": "Vulnérabilités"
   },
   "roles": {
     "admin": "Admin",
@@ -251,7 +254,11 @@
     "tagDeleted": "{{ref}} supprimé",
     "noMatch": "Aucun tag ne correspond à « {{filter}} »",
     "missingTitle": "Ce dépôt n'a aucun tag",
-    "missingBody": "Il a peut-être été supprimé, vidé par une politique de rétention, ou n'a jamais reçu de push."
+    "missingBody": "Il a peut-être été supprimé, vidé par une politique de rétention, ou n'a jamais reçu de push.",
+    "notScanned": "Non scanné",
+    "lowerSeverities": "+{{count}} moins graves",
+    "mediumOrLower": "{{count}} moyennes ou moins",
+    "allPlatforms": "Plateformes : {{list}}"
   },
   "imageDetails": {
     "pull": "Pull",
@@ -277,7 +284,14 @@
     "layersCount_one": "{{count}} couche",
     "layersCount_other": "{{count}} couches",
     "noLayers": "Ce manifest ne liste aucune couche.",
-    "browseLayer": "Parcourir les fichiers de cette couche"
+    "browseLayer": "Parcourir les fichiers de cette couche",
+    "history": "Étapes de build",
+    "historyBody": "Les instructions qui ont construit cette image, de la base vers le haut, avec la couche ajoutée par chacune.",
+    "noLayerAdded": "aucune couche",
+    "historyUnmatched": "Les couches de cette image ne peuvent pas être associées à ses étapes (image aplatie ou réécrite) : les tailles ne sont pas affichées.",
+    "showMetadataSteps_one": "Afficher {{count}} étape qui n'ajoute pas de couche",
+    "showMetadataSteps_other": "Afficher {{count}} étapes qui n'ajoutent pas de couche",
+    "hideMetadataSteps": "Masquer les étapes sans couche"
   },
   "layerBrowser": {
     "title": "Contenu de la couche",
@@ -314,6 +328,7 @@
       "UNKNOWN": "Inconnue"
     },
     "clean": "Aucune vulnérabilité connue",
+    "cleanShort": "Saine",
     "highPlus_one": "{{count}} élevée ou critique",
     "highPlus_other": "{{count}} élevées ou critiques"
   },

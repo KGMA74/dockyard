@@ -26,6 +26,7 @@ type layerDetail struct {
 type platformDetail struct {
 	Architecture string `json:"architecture"`
 	OS           string `json:"os"`
+	Variant      string `json:"variant,omitempty"`
 	Digest       string `json:"digest"`
 	SizeBytes    int64  `json:"size_bytes"`
 	SizeHuman    string `json:"size_human"`
@@ -37,6 +38,7 @@ type manifestListEntry struct {
 	Platform  struct {
 		Architecture string `json:"architecture"`
 		OS           string `json:"os"`
+		Variant      string `json:"variant"`
 	} `json:"platform"`
 }
 
@@ -44,6 +46,53 @@ type ociImageConfig struct {
 	Created      string `json:"created"`
 	Architecture string `json:"architecture"`
 	OS           string `json:"os"`
+	Variant      string `json:"variant"`
+	History      []struct {
+		Created    string `json:"created"`
+		CreatedBy  string `json:"created_by"`
+		EmptyLayer bool   `json:"empty_layer"`
+	} `json:"history"`
+}
+
+// historyStep is one build instruction from the image config, matched to the
+// layer it produced (none for metadata-only steps such as ENV or CMD).
+type historyStep struct {
+	CreatedBy   string `json:"created_by"`
+	Created     string `json:"created,omitempty"`
+	EmptyLayer  bool   `json:"empty_layer"`
+	LayerDigest string `json:"layer_digest,omitempty"`
+	SizeBytes   int64  `json:"size_bytes,omitempty"`
+}
+
+// buildHistory pairs config history with manifest layers. The image spec
+// orders both from the base up and gives every non-empty history entry
+// exactly one layer, so the n-th non-empty entry produced the n-th layer.
+// If the counts disagree (hand-crafted or squashed images) the pairing would
+// be a guess, so layers are left unattributed rather than mislabelled.
+func buildHistory(cfg ociImageConfig, layers []layerDetail) []historyStep {
+	if len(cfg.History) == 0 {
+		return nil
+	}
+	nonEmpty := 0
+	for _, h := range cfg.History {
+		if !h.EmptyLayer {
+			nonEmpty++
+		}
+	}
+	attribute := nonEmpty == len(layers)
+
+	steps := make([]historyStep, 0, len(cfg.History))
+	next := 0
+	for _, h := range cfg.History {
+		step := historyStep{CreatedBy: h.CreatedBy, Created: h.Created, EmptyLayer: h.EmptyLayer}
+		if !h.EmptyLayer && attribute {
+			step.LayerDigest = layers[next].Digest
+			step.SizeBytes = layers[next].SizeBytes
+			next++
+		}
+		steps = append(steps, step)
+	}
+	return steps
 }
 
 // parseManifestDetails parses a V2 manifest into a flat, UI-friendly shape. A tag
@@ -133,6 +182,12 @@ func parseSingleManifest(raw []byte, digest string, getBlob func(string) ([]byte
 				result["created"] = cfg.Created
 				result["architecture"] = cfg.Architecture
 				result["os"] = cfg.OS
+				if cfg.Variant != "" {
+					result["variant"] = cfg.Variant
+				}
+				if history := buildHistory(cfg, layers); history != nil {
+					result["history"] = history
+				}
 			}
 		}
 	}
@@ -182,6 +237,7 @@ func parseManifestList(
 		platforms = append(platforms, platformDetail{
 			Architecture: entry.Platform.Architecture,
 			OS:           entry.Platform.OS,
+			Variant:      entry.Platform.Variant,
 			Digest:       entry.Digest,
 			SizeBytes:    childTotal,
 			SizeHuman:    humanSize(childTotal),

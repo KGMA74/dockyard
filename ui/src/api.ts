@@ -263,10 +263,24 @@ export async function getRepositories(): Promise<{ repositories: RepoSummary[]; 
   return req('/repositories')
 }
 
+export interface TagScanSummary {
+  status: ScanResult['status']
+  critical_count: number
+  high_count: number
+  medium_count: number
+  low_count: number
+  unknown_count: number
+}
+
+/** Optional fields are absent when unknown (no cosign keys, never scanned…). */
 export interface TagInfo {
   tag: string
   digest: string
   pushed_at?: string
+  size_bytes?: number
+  platforms?: string[]
+  signed?: boolean
+  scan?: TagScanSummary
 }
 
 export async function getTags(name: string): Promise<{ name: string; tags: TagInfo[]; total: number }> {
@@ -294,6 +308,7 @@ export interface LayerInfo {
 export interface PlatformInfo {
   architecture: string
   os: string
+  variant?: string
   digest: string
   size_bytes: number
   size_human: string
@@ -309,8 +324,19 @@ export interface ManifestDetails {
   created?: string
   architecture?: string
   os?: string
+  variant?: string
   platforms?: PlatformInfo[]
   signed?: boolean
+  history?: HistoryStep[]
+}
+
+/** One build instruction; layer_digest/size_bytes only when it produced a layer. */
+export interface HistoryStep {
+  created_by: string
+  created?: string
+  empty_layer: boolean
+  layer_digest?: string
+  size_bytes?: number
 }
 
 export async function getManifestDetails(name: string, reference: string): Promise<ManifestDetails> {

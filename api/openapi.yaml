@@ -262,7 +262,12 @@ paths:
   /api/admin/repositories/tags:
     get:
       tags: [repositories]
-      summary: List tags of a repository with digests
+      summary: List tags of a repository with size, platforms, signature and latest scan
+      description: >
+        Each tag is resolved on the server (up to 8 at a time), so the list
+        can be compared at a glance without one request per tag. Optional
+        fields are absent when unknown — e.g. `signed` without cosign keys,
+        `scan` for a digest never scanned — never filled with a guess.
       parameters:
         - { name: name, in: query, required: true, schema: { type: string } }
       responses:
@@ -276,12 +281,7 @@ paths:
                   name: { type: string }
                   tags:
                     type: array
-                    items:
-                      type: object
-                      properties:
-                        tag: { type: string }
-                        digest: { type: string }
-                        pushed_at: { type: string, format: date-time }
+                    items: { $ref: "#/components/schemas/TagSummary" }
                   total: { type: integer }
 
   /api/admin/repositories/manifest:
@@ -1143,6 +1143,7 @@ components:
         created: { type: string, format: date-time }
         architecture: { type: string }
         os: { type: string }
+        variant: { type: string, description: "CPU variant, e.g. v7 for linux/arm/v7" }
         signed:
           type: boolean
           description: >
@@ -1156,6 +1157,21 @@ components:
               digest: { type: string }
               size_bytes: { type: integer }
               size_human: { type: string }
+        history:
+          type: array
+          description: >
+            Build steps from the image config, base first. Steps that
+            produced a layer carry its digest and size — only when the number
+            of layer-producing steps matches the number of layers, so a
+            squashed image is never mislabelled.
+          items:
+            type: object
+            properties:
+              created_by: { type: string, example: "RUN /bin/sh -c apk add curl # buildkit" }
+              created: { type: string, format: date-time }
+              empty_layer: { type: boolean }
+              layer_digest: { type: string }
+              size_bytes: { type: integer }
         platforms:
           type: array
           items:
@@ -1163,9 +1179,34 @@ components:
             properties:
               architecture: { type: string }
               os: { type: string }
+              variant: { type: string }
               digest: { type: string }
               size_bytes: { type: integer }
               size_human: { type: string }
+
+    TagSummary:
+      type: object
+      required: [tag, digest]
+      properties:
+        tag: { type: string }
+        digest: { type: string }
+        pushed_at: { type: string, format: date-time, description: Embedded mode only }
+        size_bytes: { type: integer, description: Compressed size; the sum of all platforms for a multi-arch image }
+        platforms:
+          type: array
+          items: { type: string, example: linux/arm64 }
+          description: Runnable platforms; attestation entries (unknown/unknown) are left out.
+        signed: { type: boolean, description: Present only when cosign public keys are configured. }
+        scan:
+          type: object
+          description: Latest scan of this digest; absent if never scanned.
+          properties:
+            status: { type: string, enum: [queued, running, succeeded, failed] }
+            critical_count: { type: integer }
+            high_count: { type: integer }
+            medium_count: { type: integer }
+            low_count: { type: integer }
+            unknown_count: { type: integer }
 
     SearchResult:
       type: object

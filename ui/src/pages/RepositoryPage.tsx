@@ -25,12 +25,14 @@ import {
   Timestamp,
 } from '@/components/kit'
 import PushGuide from '@/components/PushGuide'
+import { CompactScan } from '@/components/ScanBadges'
+import { formatBytes } from '@/lib/format'
 import TagDiff from '@/components/TagDiff'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 
-type SortKey = 'pushed' | 'tag'
+type SortKey = 'pushed' | 'tag' | 'size'
 type SortState = { key: SortKey; descending: boolean }
 
 // Version-aware comparison: v1.10.0 sorts after v1.9.0.
@@ -43,8 +45,30 @@ function sortTags(tags: TagInfo[], sort: SortState): TagInfo[] {
       const byDate = (a.pushed_at ?? '').localeCompare(b.pushed_at ?? '')
       if (byDate !== 0) return byDate * direction
     }
+    if (sort.key === 'size') {
+      const bySize = (a.size_bytes ?? -1) - (b.size_bytes ?? -1)
+      if (bySize !== 0) return bySize * direction
+    }
     return collator.compare(a.tag, b.tag) * direction
   })
+}
+
+/** "linux/" goes without saying on a container registry; other OSes keep it. */
+function shortPlatform(platform: string): string {
+  return platform.startsWith('linux/') ? platform.slice('linux/'.length) : platform
+}
+
+function Platforms({ platforms }: { platforms?: string[] }) {
+  const { t } = useTranslation()
+  if (!platforms?.length) return <span className="text-muted-foreground">—</span>
+  const shown = platforms.slice(0, 2)
+  const rest = platforms.length - shown.length
+  return (
+    <span className="font-mono text-xs" title={t('repository.allPlatforms', { list: platforms.join(', ') })}>
+      {shown.map(shortPlatform).join(', ')}
+      {rest > 0 && <span className="text-muted-foreground"> +{rest}</span>}
+    </span>
+  )
 }
 
 function SortHeader({
@@ -68,11 +92,10 @@ function SortHeader({
       className={cn(
         'inline-flex items-center gap-1 rounded-sm outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring',
         align === 'right' && 'flex-row-reverse',
-        !active && 'text-muted-foreground',
       )}
     >
       {label}
-      <Icon className={cn('size-3', !active && 'opacity-0')} aria-hidden="true" />
+      <Icon className={cn('size-3 text-muted-foreground', !active && 'opacity-0')} aria-hidden="true" />
     </button>
   )
 }
@@ -96,6 +119,12 @@ export default function RepositoryPage({ repo }: { repo: string }) {
   const images = useMemo(() => all.filter(tag => !isArtifactTag(tag.tag)), [all])
   const artifactCount = all.length - images.length
   const hasPushDates = all.some(tag => tag.pushed_at)
+  // Columns appear only when the server has something to put in them: no
+  // empty "Signature" column on a registry without cosign keys.
+  const hasSizes = all.some(tag => tag.size_bytes !== undefined)
+  const hasPlatforms = all.some(tag => tag.platforms?.length)
+  const hasScans = all.some(tag => tag.scan)
+  const hasSignatures = all.some(tag => tag.signed !== undefined)
 
   const visible = useMemo(() => {
     const needle = filter.trim().toLowerCase()
@@ -257,7 +286,17 @@ export default function RepositoryPage({ repo }: { repo: string }) {
                       <TableHead>
                         <SortHeader label={t('columns.tag')} sortKey="tag" sort={sort} onSort={toggleSort} />
                       </TableHead>
-                      <TableHead className="hidden sm:table-cell">{t('columns.digest')}</TableHead>
+                      {hasPlatforms && (
+                        <TableHead className="hidden lg:table-cell">{t('columns.platforms')}</TableHead>
+                      )}
+                      {hasSizes && (
+                        <TableHead className="hidden text-right sm:table-cell">
+                          <SortHeader label={t('columns.size')} sortKey="size" sort={sort} onSort={toggleSort} align="right" />
+                        </TableHead>
+                      )}
+                      {hasScans && <TableHead className="hidden md:table-cell">{t('columns.vulnerabilities')}</TableHead>}
+                      {hasSignatures && <TableHead className="hidden md:table-cell">{t('columns.signature')}</TableHead>}
+                      <TableHead className="hidden xl:table-cell">{t('columns.digest')}</TableHead>
                       {hasPushDates && (
                         <TableHead className="hidden text-right md:table-cell">
                           <SortHeader label={t('columns.pushed')} sortKey="pushed" sort={sort} onSort={toggleSort} align="right" />
@@ -286,14 +325,38 @@ export default function RepositoryPage({ repo }: { repo: string }) {
                             <span className="flex items-center gap-1.5">
                               <Link
                                 to={repoHref(repo, tag.tag)}
-                                className="inline-flex min-w-0 rounded-full outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                                className="inline-flex min-w-0 rounded-[5px] outline-none focus-visible:ring-2 focus-visible:ring-ring"
                               >
                                 <TagBadge className={artifact ? 'opacity-60' : undefined}>{tag.tag}</TagBadge>
                               </Link>
                               {artifact && <StatusBadge>{t('repository.artifact')}</StatusBadge>}
                             </span>
                           </TableCell>
-                          <TableCell className="hidden sm:table-cell">
+                          {hasPlatforms && (
+                            <TableCell className="hidden lg:table-cell">
+                              {artifact ? null : <Platforms platforms={tag.platforms} />}
+                            </TableCell>
+                          )}
+                          {hasSizes && (
+                            <TableCell className="hidden text-right text-xs tabular-nums sm:table-cell">
+                              {tag.size_bytes !== undefined ? formatBytes(tag.size_bytes) : '—'}
+                            </TableCell>
+                          )}
+                          {hasScans && (
+                            <TableCell className="hidden md:table-cell">
+                              {artifact ? null : <CompactScan scan={tag.scan} />}
+                            </TableCell>
+                          )}
+                          {hasSignatures && (
+                            <TableCell className="hidden md:table-cell">
+                              {artifact ? null : tag.signed ? (
+                                <StatusBadge tone="success">{t('imageDetails.signed')}</StatusBadge>
+                              ) : (
+                                <span className="text-xs text-muted-foreground">{t('imageDetails.unsigned')}</span>
+                              )}
+                            </TableCell>
+                          )}
+                          <TableCell className="hidden xl:table-cell">
                             <Digest value={tag.digest} />
                           </TableCell>
                           {hasPushDates && (

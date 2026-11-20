@@ -92,20 +92,19 @@ func (h *Handler) GetTags(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, err500(err))
 	}
-	type tagInfo struct {
-		Tag      string `json:"tag"`
-		Digest   string `json:"digest"`
-		PushedAt string `json:"pushed_at,omitempty"`
-	}
-	result := make([]tagInfo, 0, len(tags))
-	for _, tag := range tags {
-		_, digest, _ := h.store.GetManifest(name, tag)
-		info := tagInfo{Tag: tag, Digest: digest}
+	result := summarizeTags(tags, func(tag string) TagSummary {
+		summary := TagSummary{Tag: tag}
 		if pushedAt, err := h.store.TagPushedAt(name, tag); err == nil {
-			info.PushedAt = pushedAt.UTC().Format(time.RFC3339)
+			summary.PushedAt = pushedAt.UTC().Format(time.RFC3339)
 		}
-		result = append(result, info)
-	}
+		if details, err := h.manifestDetails(name, tag); err == nil {
+			applyDetails(&summary, details)
+		} else {
+			_, summary.Digest, _ = h.store.GetManifest(name, tag)
+		}
+		summary.Scan = tagScanInfo(h.db, summary.Digest)
+		return summary
+	})
 	return c.JSON(http.StatusOK, map[string]any{"name": name, "tags": result, "total": len(result)})
 }
 

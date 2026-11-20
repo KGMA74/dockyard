@@ -37,7 +37,10 @@
     "signature": "Signature",
     "scan": "Scan",
     "pushed": "Pushed",
-    "lastPushed": "Last pushed"
+    "lastPushed": "Last pushed",
+    "size": "Size",
+    "platforms": "Platforms",
+    "vulnerabilities": "Vulnerabilities"
   },
   "roles": {
     "admin": "Admin",
@@ -251,7 +254,11 @@
     "tagDeleted": "Deleted {{ref}}",
     "noMatch": "No tag matches “{{filter}}”",
     "missingTitle": "This repository has no tags",
-    "missingBody": "It may have been deleted, emptied by a retention policy, or never pushed to."
+    "missingBody": "It may have been deleted, emptied by a retention policy, or never pushed to.",
+    "notScanned": "Not scanned",
+    "lowerSeverities": "+{{count}} lower",
+    "mediumOrLower": "{{count}} medium or lower",
+    "allPlatforms": "Platforms: {{list}}"
   },
   "imageDetails": {
     "pull": "Pull",
@@ -277,7 +284,14 @@
     "layersCount_one": "{{count}} layer",
     "layersCount_other": "{{count}} layers",
     "noLayers": "This manifest lists no layers.",
-    "browseLayer": "Browse the files in this layer"
+    "browseLayer": "Browse the files in this layer",
+    "history": "Build steps",
+    "historyBody": "The instructions this image was built from, base first, with the layer each one added.",
+    "noLayerAdded": "no layer",
+    "historyUnmatched": "This image's layers can't be matched to its steps (it was squashed or rewritten), so sizes are not shown.",
+    "showMetadataSteps_one": "Show {{count}} step that adds no layer",
+    "showMetadataSteps_other": "Show {{count}} steps that add no layer",
+    "hideMetadataSteps": "Hide steps that add no layer"
   },
   "layerBrowser": {
     "title": "Layer contents",
@@ -314,6 +328,7 @@
       "UNKNOWN": "Unknown"
     },
     "clean": "No known vulnerabilities",
+    "cleanShort": "Clean",
     "highPlus_one": "{{count}} high or critical",
     "highPlus_other": "{{count}} high or critical"
   },
