@@ -2,8 +2,8 @@ apiVersion: v2
 name: dockyard
 description: A self-hosted Docker Registry V2 server
 type: application
-version: 0.7.1
-appVersion: "0.7.1"
+version: 0.7.2
+appVersion: "0.7.2"
 keywords:
   - docker
   - registry
@@ -33,13 +33,13 @@ annotations:
   # overwrites it from the GitHub release notes of that tag.
   artifacthub.io/changes: |
     - kind: fixed
-      description: Vulnerability scans failed with 401 Unauthorized when registry auth was on (V2_AUTH_ENABLED=true) and anonymous pull off; trivy now pulls with a token of its own, nothing to configure
-    - kind: security
-      description: The scanner token is short-lived (SCAN_TIMEOUT + 1 minute), pull only and limited to the scanned repository; it is passed to trivy in its environment, never on the command line, in logs or in stored reports
-    - kind: security
-      description: Trivy runs with an explicit, minimal environment (PATH, proxy and CA variables) instead of inheriting all of Dockyard's, JWT_SECRET included
+      description: Scans of Java images failed because the scanner token was sent to every registry, so ghcr.io refused the Java DB download (DENIED invalid token); the token now goes to Dockyard alone, through a private per-scan DOCKER_CONFIG removed when trivy exits
+    - kind: fixed
+      description: Trivy failed with "stat /tmp no such file or directory" in the scratch image; its TMPDIR is now a directory on the cache volume, and the image has a /tmp for running trivy by hand
     - kind: changed
-      description: The scanner no longer has a per-process password for /v2; a scan that still gets a 401 says whether trivy had a token
+      description: Scans never download a database; Dockyard refreshes the vulnerability DB and the Java DB itself, without credentials, at startup and every 12 hours (the Java DB is ~1 GB, size the volume for it)
+    - kind: added
+      description: Build argument TRIVY_JAVA_DB=true ships the Java DB in the image for air-gapped installs; databases baked into the image are seeded into a cache that lacks them
   artifacthub.io/images: |
     - name: dockyard
-      image: ghcr.io/kgma74/dockyard:0.7.1
+      image: ghcr.io/kgma74/dockyard:0.7.2
