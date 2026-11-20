@@ -222,7 +222,10 @@ func NewServer() (*http.Server, func(context.Context) error) {
 			DefaultRole:   cfg.OIDCDefaultRole,
 			DisplayName:   cfg.OIDCDisplayName,
 		})
-		slog.Info("single sign-on enabled", "issuer", cfg.OIDCIssuerURL)
+		slog.Info("single sign-on enabled by the deployment", "issuer", cfg.OIDCIssuerURL)
+	} else if cfg.OIDCClientSecret != "" {
+		// Configured from the console, with the secret kept in the deployment.
+		authMgr.SetOIDCEnvClientSecret(cfg.OIDCClientSecret)
 	}
 
 	tlsConfig, err := tlsutil.Config(tlsutil.Options{

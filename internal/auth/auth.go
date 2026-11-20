@@ -5,11 +5,14 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"log/slog"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"dockyard/internal/reference"
@@ -90,8 +93,18 @@ type Manager struct {
 	audit   AuditSink
 	// scannerSecret authenticates the internal scanner (see ScannerCredentials).
 	scannerSecret string
-	// oidc is nil unless single sign-on is configured (EnableOIDC).
-	oidc *oidcState
+	// oidc holds the active single sign-on configuration, nil when SSO is
+	// off. Swapped whole when an admin changes it from the console.
+	oidc     atomic.Pointer[oidcState]
+	ssoCodes loginCodes
+	// oidcMu serializes configuration changes. oidcEnvManaged: the
+	// deployment set OIDC_ISSUER_URL (oidcEnvCfg) and the console may only
+	// look. oidcEnvSecret: OIDC_CLIENT_SECRET alone, used by a configuration
+	// made in the console.
+	oidcMu         sync.Mutex
+	oidcEnvManaged bool
+	oidcEnvCfg     OIDCConfig
+	oidcEnvSecret  string
 }
 
 // SetAuditSink enables audit records for logins, logouts and password
@@ -131,6 +144,11 @@ func New(username, initialPassword, jwtSecret, previousSecret, dataDir string, u
 		if _, err := users.CreateUser(username, hash, store.RoleAdmin, nil); err != nil {
 			return nil, err
 		}
+	}
+	// SSO configured from the console. EnableOIDC (the deployment's OIDC_*
+	// variables) replaces it afterwards when set.
+	if err := m.reloadOIDC(); err != nil {
+		slog.Error("sso: saved configuration not applied", "err", err)
 	}
 	go m.cleanupLoop()
 	return m, nil

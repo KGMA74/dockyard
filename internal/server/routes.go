@@ -326,6 +326,11 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	// Effective server configuration, secrets left out.
 	api.GET("/config", s.handleConfig, auth.RequireAdmin)
+	// Single sign-on set up from the console (read-only when the deployment
+	// configures it). The test runs discovery against an issuer URL.
+	api.GET("/sso", s.auth.SSOSettings, auth.RequireAdmin)
+	api.PUT("/sso", s.auth.UpdateSSOSettings, auth.RequireAdmin)
+	api.POST("/sso/test", s.auth.TestSSOSettings, auth.RequireAdmin, strictLimiter)
 
 	// Audit trail of sensitive actions (logins, pushes, deletions, GC).
 	api.GET("/audit", auditor.List, auth.RequireAdmin)
