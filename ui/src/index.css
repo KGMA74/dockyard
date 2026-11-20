@@ -244,6 +244,10 @@
 @layer base {
   * {
     @apply border-border outline-ring/50;
+    /* Thin, theme-coloured scrollbars instead of the chunky OS default
+       (17px on Windows) — they frame the content rather than compete with it. */
+    scrollbar-width: thin;
+    scrollbar-color: color-mix(in oklab, var(--muted-foreground) 35%, transparent) transparent;
     }
   body {
     @apply bg-background text-foreground;
