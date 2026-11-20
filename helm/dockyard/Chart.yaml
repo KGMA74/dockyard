@@ -2,8 +2,8 @@ apiVersion: v2
 name: dockyard
 description: A self-hosted Docker Registry V2 server
 type: application
-version: 0.6.1
-appVersion: "0.6.1"
+version: 0.7.0
+appVersion: "0.7.0"
 keywords:
   - docker
   - registry
@@ -32,12 +32,12 @@ annotations:
   # tag being released (a hand-written changelog). Otherwise the workflow
   # overwrites it from the GitHub release notes of that tag.
   artifacthub.io/changes: |
-    - kind: security
-      description: Registry tokens from /v2/token (password, CLI secret, anonymous pull) were accepted by the admin API; they are now confined to /v2
-    - kind: security
-      description: Every signed token carries its audience, so the SSO flow cookie can never pass for a session
+    - kind: added
+      description: Configure single sign-on from the console (Settings → Single sign-on), applied at once without a restart, with an issuer connection test
+    - kind: added
+      description: The SSO client secret set in the console is stored encrypted (AES-256-GCM, key derived from JWT_SECRET) and survives a JWT_SECRET rotation
     - kind: changed
-      description: Warning at startup when OIDC_REDIRECT_URL is not set
+      description: oidc.enabled=true keeps working and makes the console read-only; oidc.clientSecret alone keeps just the secret in Kubernetes
   artifacthub.io/images: |
     - name: dockyard
-      image: ghcr.io/kgma74/dockyard:0.6.1
+      image: ghcr.io/kgma74/dockyard:0.7.0
