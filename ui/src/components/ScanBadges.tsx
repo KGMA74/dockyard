@@ -1,6 +1,8 @@
+import { Ban } from 'lucide-react'
 import { useTranslation } from 'react-i18next'
 import type { ScanResult, Severity, TagScanSummary } from '@/api'
 import { StatusBadge, type Tone } from './kit'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 const STATUS_TONE: Record<ScanResult['status'], Tone> = {
   queued: 'neutral',
@@ -35,7 +37,7 @@ export function SeverityBadge({ severity, count }: { severity: Severity; count?:
 /** One table cell's worth of scan result. Critical and high are what decide
  *  whether an image ships, so they get badges; everything below is folded
  *  into a count, keeping a column of these readable down a long tag list. */
-export function CompactScan({ scan }: { scan?: TagScanSummary }) {
+export function CompactScan({ scan, blocked }: { scan?: TagScanSummary; blocked?: boolean }) {
   const { t } = useTranslation()
   if (!scan) return <span className="text-xs text-muted-foreground">{t('repository.notScanned')}</span>
   if (scan.status !== 'succeeded') return <ScanStatusBadge status={scan.status} />
@@ -50,6 +52,19 @@ export function CompactScan({ scan }: { scan?: TagScanSummary }) {
   }
   return (
     <span className="flex flex-wrap items-center gap-1.5">
+      {blocked && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span className="inline-flex">
+              <StatusBadge tone="danger">
+                <Ban className="size-3" />
+                {t('repository.pullBlocked')}
+              </StatusBadge>
+            </span>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-64">{t('repository.pullBlockedHint')}</TooltipContent>
+        </Tooltip>
+      )}
       {scan.critical_count > 0 && <SeverityBadge severity="CRITICAL" count={scan.critical_count} />}
       {scan.high_count > 0 && <SeverityBadge severity="HIGH" count={scan.high_count} />}
       {lower > 0 && (

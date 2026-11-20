@@ -6,7 +6,7 @@ import type { Tone } from '@/components/kit'
 // auth events, and as "METHOD /api/admin/path" for admin API mutations. The
 // second form is precise but not something anyone wants to read in a table.
 
-const KNOWN_ACTIONS = ['login', 'logout', 'change-password', 'push', 'delete-manifest', 'scan']
+const KNOWN_ACTIONS = ['login', 'logout', 'change-password', 'push', 'delete-manifest', 'scan', 'pull-blocked']
 
 const ADMIN_ROUTES: [RegExp, string][] = [
   [/^DELETE \/api\/admin\/repositories\/manifests$/, 'deleteTag'],
@@ -32,6 +32,9 @@ const ADMIN_ROUTES: [RegExp, string][] = [
   [/^POST \/api\/admin\/signing\/policies$/, 'createSigningPolicy'],
   [/^DELETE \/api\/admin\/signing\/policies\/[^/]+$/, 'deleteSigningPolicy'],
   [/^POST \/api\/admin\/scans$/, 'scan'],
+  [/^PUT \/api\/admin\/vulnerability-policy$/, 'updateVulnPolicy'],
+  [/^POST \/api\/admin\/vulnerability-policy\/allowlist$/, 'allowCve'],
+  [/^DELETE \/api\/admin\/vulnerability-policy\/allowlist\/[^/]+$/, 'disallowCve'],
   [/^POST \/api\/admin\/robots$/, 'createRobot'],
   [/^POST \/api\/admin\/robots\/[^/]+\/secret$/, 'rotateRobot'],
   [/^DELETE \/api\/admin\/robots\/[^/]+$/, 'deleteRobot'],

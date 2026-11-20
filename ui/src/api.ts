@@ -281,6 +281,8 @@ export interface TagInfo {
   platforms?: string[]
   signed?: boolean
   scan?: TagScanSummary
+  /** The vulnerability policy refuses docker pull of this tag. */
+  pull_blocked?: boolean
 }
 
 export async function getTags(name: string): Promise<{ name: string; tags: TagInfo[]; total: number }> {
@@ -782,6 +784,44 @@ export async function createSigningPolicy(repoPattern: string, required: boolean
 
 export async function deleteSigningPolicy(id: number): Promise<void> {
   return req(`/signing/policies/${id}`, { method: 'DELETE' })
+}
+
+/** '' = never block; otherwise the lowest severity that blocks a pull. */
+export type BlockSeverity = '' | 'CRITICAL' | 'HIGH' | 'MEDIUM' | 'LOW'
+
+export interface VulnerabilityPolicy {
+  scan_on_push: boolean
+  block_severity: BlockSeverity
+  updated_by: string
+  updated_at: string
+}
+
+export interface AllowedCVE {
+  cve_id: string
+  reason: string
+  expires_at: string | null
+  created_by: string
+  created_at: string
+}
+
+export async function getVulnerabilityPolicy(): Promise<{
+  policy: VulnerabilityPolicy
+  allowlist: AllowedCVE[]
+  scanning_enabled: boolean
+}> {
+  return req('/vulnerability-policy')
+}
+
+export async function updateVulnerabilityPolicy(policy: { scan_on_push: boolean; block_severity: BlockSeverity }): Promise<VulnerabilityPolicy> {
+  return req('/vulnerability-policy', { method: 'PUT', body: JSON.stringify(policy) })
+}
+
+export async function allowCVE(entry: { cve_id: string; reason: string; expires_in_days: number }): Promise<void> {
+  return req('/vulnerability-policy/allowlist', { method: 'POST', body: JSON.stringify(entry) })
+}
+
+export async function disallowCVE(cveId: string): Promise<void> {
+  return req(`/vulnerability-policy/allowlist/${encodeURIComponent(cveId)}`, { method: 'DELETE' })
 }
 
 export type QuotaScopeType = 'repo' | 'user'

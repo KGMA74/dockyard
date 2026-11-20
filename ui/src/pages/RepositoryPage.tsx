@@ -344,7 +344,7 @@ export default function RepositoryPage({ repo }: { repo: string }) {
                           )}
                           {hasScans && (
                             <TableCell className="hidden md:table-cell">
-                              {artifact ? null : <CompactScan scan={tag.scan} />}
+                              {artifact ? null : <CompactScan scan={tag.scan} blocked={tag.pull_blocked} />}
                             </TableCell>
                           )}
                           {hasSignatures && (

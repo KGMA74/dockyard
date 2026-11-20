@@ -69,7 +69,7 @@ export default function ScansSection() {
                           </span>
                         )}
                       </TableCell>
-                      <TableCell className="hidden text-muted-foreground md:table-cell">{scan.requested_by || '—'}</TableCell>
+                      <TableCell className="hidden text-muted-foreground md:table-cell">{scan.requested_by === 'on-push' ? t('scans.onPush') : scan.requested_by || '—'}</TableCell>
                       <TableCell className="hidden text-right text-xs text-muted-foreground sm:table-cell">
                         <Timestamp value={scan.finished_at ?? scan.created_at} />
                       </TableCell>
