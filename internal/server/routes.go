@@ -248,6 +248,12 @@ func (s *Server) RegisterRoutes() http.Handler {
 	// Refresh authenticates with the refresh token itself, not a JWT — it must
 	// stay outside the middleware group (the access token may already be dead).
 	e.POST("/api/admin/auth/refresh", s.auth.Refresh)
+	// Single sign-on: public by nature (that is how one signs in). The
+	// exchange trades a one-time code for tokens: brute-force limited.
+	e.GET("/api/admin/auth/oidc", s.auth.OIDCInfo)
+	e.GET("/api/admin/auth/oidc/login", s.auth.OIDCLogin)
+	e.GET("/api/admin/auth/oidc/callback", s.auth.OIDCCallback)
+	e.POST("/api/admin/auth/oidc/exchange", s.auth.OIDCExchange, strictLimiter)
 
 	// ── Admin API ─────────────────────────────────────────────────────────────
 	api := e.Group("/api/admin", s.auth.Middleware(), auditor.AdminMiddleware())
@@ -292,6 +298,9 @@ func (s *Server) RegisterRoutes() http.Handler {
 		api.POST("/gc", h.GarbageCollect, auth.RequireAdmin)
 	}
 	api.POST("/auth/password", s.auth.ChangePassword)
+	api.GET("/auth/me", s.auth.Me)
+	api.POST("/auth/cli-secret", s.auth.CreateCLISecret)
+	api.DELETE("/auth/cli-secret", s.auth.DeleteCLISecret)
 
 	// User management — SQLite-backed, available in both modes, admin only.
 	uh := admin.NewUsers(s.store)

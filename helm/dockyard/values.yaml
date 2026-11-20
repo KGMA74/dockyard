@@ -48,6 +48,36 @@ auth:
   # (and optionally s3-access-key, s3-secret-key, registry-password).
   # When set, no Secret is created by this chart.
 
+# Single sign-on with an OpenID Connect provider (Authentik, Keycloak,
+# Authelia, Zitadel, Entra ID, Google, Dex…). Register Dockyard as a
+# confidential client with the redirect URI
+#   https://<your-host>/api/admin/auth/oidc/callback
+# Accounts are created on first sign-in; password sign-in keeps working for
+# local accounts (the bootstrap admin included).
+oidc:
+  enabled: false
+  issuerURL: ""          # e.g. https://auth.example.com/application/o/dockyard/
+  clientID: ""
+  # Stored in the chart's Secret as OIDC_CLIENT_SECRET. With
+  # auth.existingSecret, put it there under that key instead.
+  clientSecret: ""
+  # Defaults to the callback on the host the browser used; set it when a
+  # proxy rewrites the Host header.
+  redirectURL: ""
+  displayName: "SSO"     # the button reads "Sign in with <displayName>"
+  scopes: [openid, profile, email, groups]
+  usernameClaim: preferred_username
+  groupsClaim: groups
+  # Group → role. When any list is set, the role is re-synced from the
+  # groups at every sign-in; when all are empty, new accounts get
+  # defaultRole and admins manage roles in the UI.
+  adminGroups: []
+  pusherGroups: []
+  readerGroups: []
+  # Role of users in none of the groups: reader, pusher, admin, or "none" to
+  # refuse them.
+  defaultRole: reader
+
 serviceAccount:
   # Create a dedicated ServiceAccount (no extra permissions granted).
   create: true

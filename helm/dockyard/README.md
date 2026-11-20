@@ -78,7 +78,13 @@ This does not delete the PVC created for local storage; remove it manually if yo
 | `auth.v2Enabled`           | Require auth (Docker token auth + Basic fallback) on `/v2/*` (Docker push/pull) | `true`     |
 | `auth.v2AnonymousPull`     | Allow unauthenticated pulls while pushes still require login (public-read registry). Only relevant when `v2Enabled` is true | `false` |
 | `auth.jwtSecret`           | JWT signing secret — auto-generated on first install if left empty          | `""`           |
-| `auth.existingSecret`      | Name of an existing Secret holding `jwt-secret`/`auth-password` (and optionally S3 keys) | `""`           |
+| `auth.existingSecret`      | Name of an existing Secret holding `jwt-secret`/`auth-password` (and optionally S3 keys, `OIDC_CLIENT_SECRET`) | `""`           |
+| `oidc.enabled`             | Single sign-on with an OpenID Connect provider (redirect URI: `https://<host>/api/admin/auth/oidc/callback`) | `false` |
+| `oidc.issuerURL` / `oidc.clientID` / `oidc.clientSecret` | Provider issuer and confidential client credentials | `""` |
+| `oidc.displayName`         | Label of the "Sign in with …" button                                         | `SSO`          |
+| `oidc.adminGroups` / `pusherGroups` / `readerGroups` | Groups mapped to roles; when set, roles are synced at every sign-in | `[]` |
+| `oidc.defaultRole`         | Role for users in none of the groups (`reader`, `pusher`, `admin`, or `none` to refuse them) | `reader` |
+| `oidc.usernameClaim` / `oidc.groupsClaim` | Claims read for the username and the groups                        | `preferred_username` / `groups` |
 
 ### Signed push (cosign)
 

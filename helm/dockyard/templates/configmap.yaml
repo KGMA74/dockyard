@@ -38,6 +38,25 @@ data:
   SCAN_MAX_REPORT_BYTES: {{ (.Values.scan).maxReportBytes | default 20971520 | quote }}
   SCAN_DEDUP_WINDOW: {{ (.Values.scan).dedupWindow | default "1h" | quote }}
   TRIVY_INSECURE_REGISTRY: {{ (.Values.scan).insecureRegistry | default true | toString | quote }}
+  {{- if (.Values.oidc).enabled }}
+  {{- if not .Values.oidc.issuerURL }}
+  {{- fail "oidc.enabled requires oidc.issuerURL" }}
+  {{- end }}
+  {{- if not .Values.oidc.clientID }}
+  {{- fail "oidc.enabled requires oidc.clientID" }}
+  {{- end }}
+  OIDC_ISSUER_URL: {{ .Values.oidc.issuerURL | quote }}
+  OIDC_CLIENT_ID: {{ .Values.oidc.clientID | quote }}
+  OIDC_REDIRECT_URL: {{ .Values.oidc.redirectURL | default "" | quote }}
+  OIDC_DISPLAY_NAME: {{ .Values.oidc.displayName | default "SSO" | quote }}
+  OIDC_SCOPES: {{ join "," (.Values.oidc.scopes | default (list "openid" "profile" "email")) | quote }}
+  OIDC_USERNAME_CLAIM: {{ .Values.oidc.usernameClaim | default "preferred_username" | quote }}
+  OIDC_GROUPS_CLAIM: {{ .Values.oidc.groupsClaim | default "groups" | quote }}
+  OIDC_ADMIN_GROUPS: {{ join "," (.Values.oidc.adminGroups | default list) | quote }}
+  OIDC_PUSHER_GROUPS: {{ join "," (.Values.oidc.pusherGroups | default list) | quote }}
+  OIDC_READER_GROUPS: {{ join "," (.Values.oidc.readerGroups | default list) | quote }}
+  OIDC_DEFAULT_ROLE: {{ .Values.oidc.defaultRole | default "reader" | quote }}
+  {{- end }}
   REQUIRE_SIGNED_PUSH: {{ (.Values.signing).enabled | default false | toString | quote }}
   {{- if (.Values.signing).publicKeysSecret }}
   COSIGN_PUBLIC_KEYS_DIR: "/etc/dockyard-cosign-keys"

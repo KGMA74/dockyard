@@ -48,6 +48,27 @@ type Config struct {
 	V2AuthEnabled     bool
 	V2AnonymousPull   bool
 
+	// Single sign-on (OpenID Connect). Enabled when OIDCIssuerURL is set.
+	OIDCIssuerURL    string
+	OIDCClientID     string
+	OIDCClientSecret string
+	// OIDCRedirectURL defaults to <scheme>://<host>/api/admin/auth/oidc/callback
+	// of the request; set it when a proxy rewrites the host.
+	OIDCRedirectURL   string
+	OIDCScopes        []string
+	OIDCUsernameClaim string
+	OIDCGroupsClaim   string
+	// Group → role mapping. When any is set, the role is synced from the
+	// groups at every sign-in; otherwise admins manage SSO users' roles.
+	OIDCAdminGroups  []string
+	OIDCPusherGroups []string
+	OIDCReaderGroups []string
+	// OIDCDefaultRole applies to users in none of the groups: reader,
+	// pusher, admin, or "none" to refuse them.
+	OIDCDefaultRole string
+	// OIDCDisplayName labels the sign-in button ("Sign in with …").
+	OIDCDisplayName string
+
 	// CORSAllowedOrigins is empty by default: the UI is embedded and served
 	// same-origin, so no cross-origin access is needed at all.
 	CORSAllowedOrigins []string
@@ -145,6 +166,19 @@ func Load() *Config {
 		// or V2_ANONYMOUS_PULL=true for a public-read registry.
 		V2AuthEnabled:   getEnv("V2_AUTH_ENABLED", "true") == "true",
 		V2AnonymousPull: getEnv("V2_ANONYMOUS_PULL", "false") == "true",
+
+		OIDCIssuerURL:     getEnv("OIDC_ISSUER_URL", ""),
+		OIDCClientID:      getEnv("OIDC_CLIENT_ID", ""),
+		OIDCClientSecret:  getEnv("OIDC_CLIENT_SECRET", ""),
+		OIDCRedirectURL:   getEnv("OIDC_REDIRECT_URL", ""),
+		OIDCScopes:        splitList(getEnv("OIDC_SCOPES", "openid,profile,email,groups")),
+		OIDCUsernameClaim: getEnv("OIDC_USERNAME_CLAIM", "preferred_username"),
+		OIDCGroupsClaim:   getEnv("OIDC_GROUPS_CLAIM", "groups"),
+		OIDCAdminGroups:   splitList(getEnv("OIDC_ADMIN_GROUPS", "")),
+		OIDCPusherGroups:  splitList(getEnv("OIDC_PUSHER_GROUPS", "")),
+		OIDCReaderGroups:  splitList(getEnv("OIDC_READER_GROUPS", "")),
+		OIDCDefaultRole:   getEnv("OIDC_DEFAULT_ROLE", "reader"),
+		OIDCDisplayName:   getEnv("OIDC_DISPLAY_NAME", "SSO"),
 
 		CORSAllowedOrigins:   splitList(getEnv("CORS_ALLOWED_ORIGINS", "")),
 		RateLimitLoginPerMin: getEnvInt("RATE_LIMIT_LOGIN_PER_MIN", 10),

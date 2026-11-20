@@ -93,6 +93,105 @@ paths:
         "200": { $ref: "#/components/responses/Message" }
         "401": { $ref: "#/components/responses/Unauthorized" }
 
+  /api/admin/auth/oidc:
+    get:
+      tags: [auth]
+      summary: Whether single sign-on is configured (public)
+      security: []
+      responses:
+        "200":
+          description: SSO availability, for the login page
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled: { type: boolean }
+                  name: { type: string, description: Provider label for the sign-in button }
+
+  /api/admin/auth/oidc/login:
+    get:
+      tags: [auth]
+      summary: Start an SSO sign-in (browser navigation)
+      description: >
+        Redirects to the provider (authorization code flow with PKCE, state and nonce).
+        `return` is the path to land on afterwards; anything but a local path is ignored.
+      security: []
+      parameters:
+        - { name: return, in: query, schema: { type: string, example: /images } }
+      responses:
+        "302": { description: Redirect to the identity provider }
+        "404": { description: SSO is not configured }
+
+  /api/admin/auth/oidc/callback:
+    get:
+      tags: [auth]
+      summary: Provider callback (browser navigation)
+      description: >
+        Redirects to `/login#oidc_code=<one-time code>&return=<path>` on success, or
+        `/login#oidc_error=<reason>` (provider_denied, expired, provider_unreachable, exchange_failed,
+        invalid_token, not_allowed, username_invalid, username_taken, session_failed).
+      security: []
+      responses:
+        "302": { description: Back to the console }
+
+  /api/admin/auth/oidc/exchange:
+    post:
+      tags: [auth]
+      summary: Trade the one-time sign-in code for session tokens
+      description: The code is valid for one minute and a single use.
+      security: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [code]
+              properties:
+                code: { type: string }
+      responses:
+        "200":
+          description: Session tokens, as for a password login
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/AuthTokens" }
+        "401": { description: Code expired or already used }
+
+  /api/admin/auth/me:
+    get:
+      tags: [auth]
+      summary: The signed-in account
+      responses:
+        "200":
+          description: Account
+          content:
+            application/json:
+              schema: { $ref: "#/components/schemas/User" }
+
+  /api/admin/auth/cli-secret:
+    post:
+      tags: [auth]
+      summary: Issue a CLI secret for docker login
+      description: >
+        A generated secret the account can use as its docker login password (the only way for an
+        SSO account, which has no password). Replaces any previous one; shown once.
+      responses:
+        "201":
+          description: The secret
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  username: { type: string }
+                  secret: { type: string, example: dkc_… }
+    delete:
+      tags: [auth]
+      summary: Revoke the CLI secret
+      responses:
+        "200": { description: Revoked }
+
   /api/admin/auth/password:
     post:
       tags: [auth]
@@ -1332,6 +1431,8 @@ components:
           items: { type: string }
         created_at: { type: string, format: date-time }
         updated_at: { type: string, format: date-time }
+        auth_source: { type: string, enum: [local, oidc], description: "oidc accounts sign in through SSO and have no password" }
+        has_cli_secret: { type: boolean }
 
     Robot:
       type: object

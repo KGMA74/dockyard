@@ -203,6 +203,27 @@ func NewServer() (*http.Server, func(context.Context) error) {
 		os.Exit(1)
 	}
 	srv.auth = authMgr
+	if cfg.OIDCIssuerURL != "" {
+		if cfg.OIDCClientID == "" {
+			slog.Error("OIDC_ISSUER_URL is set but OIDC_CLIENT_ID is not")
+			os.Exit(1)
+		}
+		authMgr.EnableOIDC(auth.OIDCConfig{
+			IssuerURL:     cfg.OIDCIssuerURL,
+			ClientID:      cfg.OIDCClientID,
+			ClientSecret:  cfg.OIDCClientSecret,
+			RedirectURL:   cfg.OIDCRedirectURL,
+			Scopes:        cfg.OIDCScopes,
+			UsernameClaim: cfg.OIDCUsernameClaim,
+			GroupsClaim:   cfg.OIDCGroupsClaim,
+			AdminGroups:   cfg.OIDCAdminGroups,
+			PusherGroups:  cfg.OIDCPusherGroups,
+			ReaderGroups:  cfg.OIDCReaderGroups,
+			DefaultRole:   cfg.OIDCDefaultRole,
+			DisplayName:   cfg.OIDCDisplayName,
+		})
+		slog.Info("single sign-on enabled", "issuer", cfg.OIDCIssuerURL)
+	}
 
 	tlsConfig, err := tlsutil.Config(tlsutil.Options{
 		Mode:      cfg.TLSMode,

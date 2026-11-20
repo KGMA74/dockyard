@@ -70,6 +70,8 @@ type Manager struct {
 	audit   AuditSink
 	// scannerSecret authenticates the internal scanner (see ScannerCredentials).
 	scannerSecret string
+	// oidc is nil unless single sign-on is configured (EnableOIDC).
+	oidc *oidcState
 }
 
 // SetAuditSink enables audit records for logins, logouts and password
@@ -157,8 +159,10 @@ func (m *Manager) token(u *store.User, sessionID int64) (string, error) {
 		"role":  u.Role,
 		"repos": u.RepoPatterns,
 		"sid":   strconv.FormatInt(sessionID, 10),
-		"exp":   time.Now().Add(accessTTL).Unix(),
-		"iat":   time.Now().Unix(),
+		// "oidc" accounts have no password: the UI hides password changes.
+		"src": u.AuthSource,
+		"exp": time.Now().Add(accessTTL).Unix(),
+		"iat": time.Now().Unix(),
 	}
 	return jwt.NewWithClaims(jwt.SigningMethodHS256, claims).SignedString(m.secrets[0])
 }

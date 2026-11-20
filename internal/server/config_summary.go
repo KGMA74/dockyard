@@ -56,6 +56,7 @@ func newConfigSummary(cfg *config.Config, mode mode, cosignKeys int, tracingEnab
 	access := []ConfigItem{
 		{Key: "v2_auth", Value: cfg.V2AuthEnabled, Env: "V2_AUTH_ENABLED"},
 		{Key: "anonymous_pull", Value: cfg.V2AnonymousPull, Env: "V2_ANONYMOUS_PULL"},
+		{Key: "sso", Value: ssoSummary(cfg), Env: "OIDC_ISSUER_URL"},
 		{Key: "tls", Value: tlsMode, Env: "TLS_MODE"},
 		{Key: "login_rate_limit", Value: cfg.RateLimitLoginPerMin, Env: "RATE_LIMIT_LOGIN_PER_MIN"},
 		{Key: "global_rate_limit", Value: cfg.RateLimitGlobalRPS, Env: "RATE_LIMIT_GLOBAL_RPS"},
@@ -98,6 +99,15 @@ func newConfigSummary(cfg *config.Config, mode mode, cosignKeys int, tracingEnab
 
 // redactURL drops user:password@ from a URL; unparsable input is hidden
 // entirely rather than echoed back.
+// ssoSummary is the identity provider's issuer, or "off". The client secret
+// is never part of it.
+func ssoSummary(cfg *config.Config) string {
+	if cfg.OIDCIssuerURL == "" {
+		return "off"
+	}
+	return redactURL(cfg.OIDCIssuerURL)
+}
+
 func redactURL(raw string) string {
 	if raw == "" {
 		return ""
