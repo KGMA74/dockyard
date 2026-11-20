@@ -23,6 +23,7 @@ import {
   StatusBadge,
   Timestamp,
 } from '@/components/kit'
+import RobotsSection from '@/components/RobotsSection'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -231,6 +232,8 @@ export default function AccessPage() {
           )}
         </QueryPanel>
       </Section>
+
+      <RobotsSection />
 
       <Section title={t('access.sessions')} description={t('access.sessionsBody')}>
         <QueryPanel

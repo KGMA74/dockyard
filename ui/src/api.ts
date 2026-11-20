@@ -492,6 +492,50 @@ export async function deleteUser(username: string): Promise<void> {
   return req(`/users/${encodeURIComponent(username)}`, { method: 'DELETE' })
 }
 
+export type RobotRole = 'pusher' | 'reader'
+
+/** A registry-only credential for CI pipelines and clusters. */
+export interface RobotInfo {
+  id: number
+  name: string
+  /** What `docker login -u` takes: robot+<name>. */
+  username: string
+  description: string
+  role: RobotRole
+  repo_patterns: string[]
+  created_by: string
+  created_at: string
+  expires_at: string | null
+  last_used_at: string | null
+}
+
+/** Returned on creation and rotation only — the secret is never shown again. */
+export interface RobotWithSecret extends RobotInfo {
+  secret: string
+}
+
+export async function listRobots(): Promise<{ robots: RobotInfo[]; count: number }> {
+  return req('/robots')
+}
+
+export async function createRobot(robot: {
+  name: string
+  description: string
+  role: RobotRole
+  repo_patterns: string[]
+  expires_in_days: number
+}): Promise<RobotWithSecret> {
+  return req('/robots', { method: 'POST', body: JSON.stringify(robot) })
+}
+
+export async function rotateRobotSecret(id: number, expiresInDays: number): Promise<RobotWithSecret> {
+  return req(`/robots/${id}/secret`, { method: 'POST', body: JSON.stringify({ expires_in_days: expiresInDays }) })
+}
+
+export async function deleteRobot(id: number): Promise<void> {
+  return req(`/robots/${id}`, { method: 'DELETE' })
+}
+
 export interface SessionInfo {
   id: number
   username: string
