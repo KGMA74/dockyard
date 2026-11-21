@@ -72,7 +72,8 @@
     "groupOperate": "Exploitation",
     "groupAdmin": "Administration",
     "signOut": "Se déconnecter",
-    "unknownUser": "Utilisateur inconnu"
+    "unknownUser": "Utilisateur inconnu",
+    "vulnerabilities": "Vulnérabilités"
   },
   "shell": {
     "toggleSidebar": "Afficher ou masquer le menu",
@@ -988,5 +989,37 @@
         "action": "Documentation"
       }
     }
+  },
+  "vulnPage": {
+    "title": "Vulnérabilités",
+    "description": "Toutes les images scannées du registre classées par risque, et les vulnérabilités présentes dans le plus d'images.",
+    "offTitle": "Le scan est désactivé",
+    "offBody": "Le scan de vulnérabilités n'est pas activé sur ce serveur (SCAN_ENABLED, ou scan.enabled dans le chart Helm).",
+    "scanned": "Images scannées",
+    "cleanHint_one": "{{count}} sans vulnérabilité connue",
+    "cleanHint_other": "{{count}} sans vulnérabilité connue",
+    "withCritical": "Avec des vulnérabilités critiques",
+    "blocked": "Pull bloqué",
+    "blockedHint": "par la politique de vulnérabilités",
+    "distinct": "Vulnérabilités distinctes",
+    "filter": "Filtrer par image ou CVE…",
+    "blockedOnly": "Seulement les images au pull bloqué",
+    "affectedBy": "Touchées par {{id}}",
+    "imagesTitle": "Images par risque",
+    "imagesBody": "Le dernier scan de chaque image, les plus critiques d'abord. Les images supprimées depuis leur scan sont écartées.",
+    "noScansTitle": "Aucune image scannée pour l'instant",
+    "noScansBody": "Scannez une image depuis la page de son dépôt, ou activez le scan au push dans Sécurité.",
+    "noMatch": "Aucune image ne correspond à ces filtres.",
+    "image": "Image",
+    "scannedAt": "Scannée",
+    "cvesTitle": "Vulnérabilités les plus répandues",
+    "cvesBody": "Les plus graves d'abord, puis celles présentes dans le plus d'images : une seule mise à jour de l'image de base en retire souvent une de nombreuses images. {{shown}} sur {{total}} affichées.",
+    "affected": "Images",
+    "imageCount_one": "{{count}} image",
+    "imageCount_other": "{{count}} images",
+    "showAffected": "Voir les images touchées",
+    "accepted": "Acceptée",
+    "accept": "Accepter le risque…",
+    "showMore": "Afficher {{count}} de plus"
   }
 }

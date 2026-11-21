@@ -35,6 +35,7 @@ export type Route =
   | { page: 'activity' }
   | { page: 'storage' }
   | { page: 'security' }
+  | { page: 'vulnerabilities' }
   | { page: 'access' }
   | { page: 'integrations' }
   | { page: 'settings' }
@@ -48,6 +49,7 @@ const SIMPLE_PAGES: Record<string, PageId> = {
   '/activity': 'activity',
   '/storage': 'storage',
   '/security': 'security',
+  '/vulnerabilities': 'vulnerabilities',
   '/access': 'access',
   '/integrations': 'integrations',
   '/settings': 'settings',

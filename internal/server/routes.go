@@ -387,6 +387,8 @@ func (s *Server) RegisterRoutes() http.Handler {
 		api.GET("/scans", sh.List, auth.RequireAdmin)
 		api.GET("/scans/:id", sh.Get, auth.RequireAdmin)
 		api.GET("/scans/:id/report", sh.Report, auth.RequireAdmin)
+		// Registry-wide view: images by risk, most widespread CVEs.
+		api.GET("/vulnerabilities", scan.NewOverviewHandler(s.store, policyState, scanResolver).Get, auth.RequireAdmin)
 	}
 
 	// Vulnerability policy — scan on push, pull blocking, CVE allowlist.

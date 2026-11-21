@@ -1070,6 +1070,71 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/vulnerabilities": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Registry-wide vulnerability overview (admin only, scanning on)
+         * @description The latest successful scan of every scanned image, most critical first, with whether the vulnerability policy blocks its pull; and the vulnerabilities found in those images, most severe and most widespread first (at most 500; cve_count is the total), each with the scans it appears in and whether it is on the active allowlist. Images deleted since their scan are left out. 404 when scanning is off.
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The overview */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            images?: {
+                                scan_id?: number;
+                                name?: string;
+                                reference?: string;
+                                digest?: string;
+                                trivy_version?: string;
+                                critical_count?: number;
+                                high_count?: number;
+                                medium_count?: number;
+                                low_count?: number;
+                                unknown_count?: number;
+                                /** Format: date-time */
+                                finished_at?: string;
+                                pull_blocked?: boolean;
+                            }[];
+                            cves?: {
+                                id?: string;
+                                /** @enum {string} */
+                                severity?: "CRITICAL" | "HIGH" | "MEDIUM" | "LOW" | "UNKNOWN";
+                                scan_ids?: number[];
+                                allowlisted?: boolean;
+                            }[];
+                            cve_count?: number;
+                        };
+                    };
+                };
+                403: components["responses"]["Forbidden"];
+                404: components["responses"]["NotFound"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/setup": {
         parameters: {
             query?: never;

@@ -712,6 +712,34 @@ export interface ConfigItem {
 }
 
 /** Effective server configuration, secrets left out (admin only). */
+export interface VulnImage {
+  scan_id: number
+  name: string
+  reference: string
+  digest: string
+  trivy_version?: string
+  critical_count: number
+  high_count: number
+  medium_count: number
+  low_count: number
+  unknown_count: number
+  finished_at?: string
+  pull_blocked?: boolean
+}
+
+export interface VulnCVE {
+  id: string
+  severity: Severity
+  scan_ids: number[]
+  allowlisted?: boolean
+}
+
+/** Registry-wide view: every image's latest scan by risk, and the
+ *  vulnerabilities affecting the most images (admin, scanning on). */
+export async function getVulnerabilityOverview(): Promise<{ images: VulnImage[]; cves: VulnCVE[]; cve_count: number }> {
+  return req('/vulnerabilities')
+}
+
 export type SetupStepId = 'admin_password' | 'first_image' | 'robot_account' | 'scan_on_push' | 'team' | 'https'
 
 /** The getting-started checklist, ticked from the instance's state (admin). */

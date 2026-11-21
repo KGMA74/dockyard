@@ -72,7 +72,8 @@
     "groupOperate": "Operate",
     "groupAdmin": "Administer",
     "signOut": "Sign out",
-    "unknownUser": "Unknown user"
+    "unknownUser": "Unknown user",
+    "vulnerabilities": "Vulnerabilities"
   },
   "shell": {
     "toggleSidebar": "Toggle sidebar",
@@ -988,5 +989,37 @@
         "action": "Documentation"
       }
     }
+  },
+  "vulnPage": {
+    "title": "Vulnerabilities",
+    "description": "Every scanned image in the registry by risk, and the vulnerabilities found in the most images.",
+    "offTitle": "Scanning is off",
+    "offBody": "Vulnerability scanning is not enabled on this server (SCAN_ENABLED, or scan.enabled in the Helm chart).",
+    "scanned": "Scanned images",
+    "cleanHint_one": "{{count}} with no known vulnerability",
+    "cleanHint_other": "{{count}} with no known vulnerability",
+    "withCritical": "With critical vulnerabilities",
+    "blocked": "Pull blocked",
+    "blockedHint": "by the vulnerability policy",
+    "distinct": "Distinct vulnerabilities",
+    "filter": "Filter by image or CVE…",
+    "blockedOnly": "Only images whose pull is blocked",
+    "affectedBy": "Affected by {{id}}",
+    "imagesTitle": "Images by risk",
+    "imagesBody": "Each image's latest scan, most critical first. Images deleted since their scan are left out.",
+    "noScansTitle": "No scanned image yet",
+    "noScansBody": "Scan an image from its repository page, or turn on scan on push in Security.",
+    "noMatch": "No image matches these filters.",
+    "image": "Image",
+    "scannedAt": "Scanned",
+    "cvesTitle": "Most widespread vulnerabilities",
+    "cvesBody": "The most severe first, then the ones found in the most images: a single base-image update often clears one from many images. {{shown}} of {{total}} shown.",
+    "affected": "Images",
+    "imageCount_one": "{{count}} image",
+    "imageCount_other": "{{count}} images",
+    "showAffected": "Show the images it affects",
+    "accepted": "Accepted",
+    "accept": "Accept the risk…",
+    "showMore": "Show {{count}} more"
   }
 }
