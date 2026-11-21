@@ -19,7 +19,7 @@ Un serveur Docker Registry V2 léger, écrit en Go. Livré sous forme d'un **bin
 
 ## Fonctionnalités
 
-- **UI embarquée** — dashboard React + Tailwind (shadcn/ui), thème clair/sombre/système, localisation FR/EN
+- **UI embarquée** — console React + Tailwind (shadcn/ui) : liste de démarrage pour les nouvelles installations, page Vulnérabilités pour tout le registre, scans et rapports à un clic de chaque tag, commandes de pull docker / podman / Kubernetes prêtes à copier, thème clair/sombre/système, localisation FR/EN
 - **Deux backends de stockage** — filesystem local ou tout stockage objet compatible S3 (RustFS, MinIO, AWS S3, …)
 - **Deux modes** — registry embarquée, ou proxy/mirror devant une registry existante
 - **Support multi-arch** — les manifest lists (index OCI) sont résolues par plateforme, vraie taille totale au lieu de 0
