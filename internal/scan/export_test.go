@@ -249,3 +249,28 @@ func TestReportExportEmptyAndErrors(t *testing.T) {
 		t.Fatalf("unknown scan = %d, want 404", rec.Code)
 	}
 }
+
+// A report says what is exploitable in an image: no copy may linger in a
+// browser or proxy cache, and taking one out of Dockyard is audited.
+func TestReportExportIsNotCachedAndIsAudited(t *testing.T) {
+	h, sc := newExportFixture(t)
+	for _, q := range []string{"", "?format=json", "?format=csv", "?format=pdf"} {
+		if got := getReport(t, h, sc.ID, q).Header().Get("Cache-Control"); got != "no-store" {
+			t.Errorf("report%s: Cache-Control = %q, want no-store", q, got)
+		}
+	}
+
+	entries, _, err := h.store.ListAudit("team/app", "", 50, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var exports []string
+	for _, e := range entries {
+		if e.Action == "scan-export" && e.Tag == "1.0" && e.Result == "success" {
+			exports = append(exports, e.Details)
+		}
+	}
+	if strings.Join(exports, ",") != "pdf,csv,json" && strings.Join(exports, ",") != "json,csv,pdf" {
+		t.Fatalf("audited exports = %v, want one each for json, csv and pdf (the console's inline read is not an export)", exports)
+	}
+}
