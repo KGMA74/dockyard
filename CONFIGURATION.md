@@ -11,6 +11,16 @@ RATE_LIMIT_GLOBAL_RPS=100
 # CORS is OFF by default (the UI is embedded, same-origin). Open the API to
 # external browser clients with a comma-separated origin list:
 CORS_ALLOWED_ORIGINS=https://tools.example.com
+# Whose X-Forwarded-For header is believed for the client IP (rate limiting,
+# audit log), as comma-separated CIDRs. Empty = loopback and private-network
+# peers only, i.e. a reverse proxy or ingress on the same host/cluster. Never
+# list a public range you don't control: the header is client-controlled.
+TRUSTED_PROXIES=10.0.0.0/8
+
+# ── Registry access ───────────────────────────────────────────────────────────
+# Auth on /v2/* is on by default (V2_AUTH_ENABLED in the README). This makes
+# the registry public-read: pulls need no login, pushes and deletes still do.
+V2_ANONYMOUS_PULL=false
 
 # ── Single sign-on (OpenID Connect) ───────────────────────────────────────────
 # Any OIDC provider: Authentik, Keycloak, Authelia, Zitadel, Entra ID, Google,
@@ -98,6 +108,7 @@ TRIVY_SERVER_URL=http://trivy:4954
 
 TRIVY_BIN_PATH=/trivy                # path to the trivy binary in the image
 TRIVY_CACHE_DIR=                     # empty = <storage>/trivy-cache
+TRIVY_DB_SEED_DIR=/opt/trivy-cache   # databases baked into the image, copied into a cache that lacks them
 SCAN_TIMEOUT=5m                      # per-scan subprocess timeout
 SCAN_MAX_REPORT_BYTES=20971520       # cap on the raw trivy JSON report (20 MiB)
 SCAN_DEDUP_WINDOW=1h                 # reuse a recent successful scan for the same digest

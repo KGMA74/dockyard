@@ -58,15 +58,25 @@ variable "auth_password" {
 }
 
 variable "replica_count" {
-  description = "Number of Dockyard replicas. Keep at 1 unless autoscaling_enabled is also true (S3 backend required for more than 1)."
+  description = "Number of Dockyard replicas. Must be 1: users, sessions and policies live in SQLite on the pod's volume, so a second replica would serve a divergent copy, and the chart refuses to render with more (since chart 0.6.0)."
   type        = number
   default     = 1
+
+  validation {
+    condition     = var.replica_count == 1
+    error_message = "Dockyard runs as a single replica (its state is in SQLite on the pod's volume); the chart refuses replicaCount > 1. Set replica_count = 1."
+  }
 }
 
 variable "autoscaling_enabled" {
-  description = "Enable the Horizontal Pod Autoscaler. Requires an S3 storage backend, which this module always configures, so it's safe to turn on."
+  description = "Kept for compatibility; must stay false. Dockyard runs as a single replica (see replica_count), and the chart refuses to render with autoscaling.enabled."
   type        = bool
   default     = false
+
+  validation {
+    condition     = !var.autoscaling_enabled
+    error_message = "Dockyard cannot be autoscaled: its state is in SQLite on the pod's volume, and the chart refuses autoscaling.enabled. Leave autoscaling_enabled = false."
+  }
 }
 
 variable "ingress_enabled" {

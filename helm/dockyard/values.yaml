@@ -11,7 +11,8 @@ fullnameOverride: ""
 
 registry:
   # embedded: Dockyard is the registry (blobs stored locally or on S3)
-  # proxy: Dockyard forwards /v2/* to an upstream registry
+  # proxy: Dockyard forwards /v2/* to an upstream registry (registry.proxy.*)
+  # mirror: pull-through cache of that upstream, also accepting direct pushes
   mode: embedded
 
   storage:
@@ -230,7 +231,9 @@ probes:
 # - local: holds the images AND Dockyard's state.
 # - s3: images go to the bucket; the volume holds Dockyard's state only —
 #   users, sessions, policies, audit log (SQLite), the Trivy cache and ACME
-#   certificates. 1–2Gi is plenty there.
+#   certificates. 1–2Gi is plenty without scanning; with scan.enabled keep a
+#   few Gi for the Trivy databases (the Java DB alone is ~1 GB to download,
+#   larger unpacked) — the default 10Gi covers it.
 # Disabling it makes all of that ephemeral: users created in the UI vanish
 # on every pod restart.
 persistence:

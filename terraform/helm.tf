@@ -33,8 +33,8 @@ locals {
     }
 
     ingress = {
-      enabled     = var.ingress_enabled
-      className   = var.ingress_class_name
+      enabled   = var.ingress_enabled
+      className = var.ingress_class_name
       hosts = var.ingress_enabled ? [
         {
           host = var.ingress_host
