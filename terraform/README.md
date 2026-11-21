@@ -37,13 +37,33 @@ terraform apply
   (or read it from `terraform.tfvars`/`TF_VAR_auth_password`) rather than
   ship a guessable one. Change it after first login regardless; this value
   only matters for the very first startup.
-- `autoscaling_enabled` is safe to turn on here since this module always
-  configures the S3 backend (required — see `helm/dockyard/templates/hpa.yaml`,
-  which refuses to render with local storage).
+- Dockyard runs as **a single replica**, S3 or not: users, sessions,
+  policies and the audit log live in SQLite on the pod's volume, and a second
+  replica would serve a divergent copy. The chart refuses `replicaCount > 1`
+  and `autoscaling.enabled` (since chart 0.6.0); `replica_count` and
+  `autoscaling_enabled` are kept for compatibility and validated to `1` and
+  `false`.
+- The chart mounts a persistent volume (`persistence.*`, 10Gi by default)
+  even with the S3 backend: the images go to the bucket, Dockyard's state and
+  the Trivy cache stay on the volume. With scanning on, keep a few Gi for the
+  Trivy databases (the Java DB alone is ~1 GB to download, larger unpacked).
+- The IAM user's access key is passed to the chart as a Helm value: it ends
+  up in the Terraform state and in the Helm release secret. Keep the state
+  encrypted and access-controlled (see the remote state note below).
 - `extra_helm_values` deep-merges over everything this module sets, so you
   can reach any value in `helm/dockyard/values.yaml` without this module
   needing a dedicated Terraform variable for it — e.g. TLS, cosign signing,
-  Trivy scanning, resource limits.
+  Trivy scanning, single sign-on, resource limits:
+
+  ```hcl
+  extra_helm_values = {
+    scan = { enabled = true }
+    resources = {
+      requests = { cpu = "250m", memory = "256Mi" }
+      limits   = { memory = "1Gi" } # scans run trivy inside the pod
+    }
+  }
+  ```
 - State is left unconfigured (local backend) — add a `backend` block in
   `versions.tf` for remote state before using this against real
   infrastructure with more than one operator.

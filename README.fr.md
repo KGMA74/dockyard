@@ -87,7 +87,7 @@ flowchart TB
 
 ## Démarrage rapide
 
-**Prérequis :** Go 1.21+, Node.js 22+ (pour builder l'UI), Docker.
+**Prérequis :** Go 1.26+, Node.js 22+ (pour builder l'UI), Docker.
 
 ```bash
 cp .env.example .env   # ajuster les valeurs si nécessaire
@@ -141,13 +141,13 @@ AUTH_USERNAME=admin
 AUTH_PASSWORD=changeme123       # mot de passe initial (premier démarrage uniquement)
 JWT_SECRET=changez-moi-pour-une-longue-chaine-aleatoire
 
-# Auth sur /v2/* — token auth Docker + fallback Basic. false = registry ouverte (dev uniquement).
-V2_AUTH_ENABLED=false
+# Auth sur /v2/* — token auth Docker + fallback Basic. Activée par défaut ; false = registry ouverte (dev uniquement).
+V2_AUTH_ENABLED=true
 ```
 
 Le bucket du backend S3 est créé automatiquement au premier démarrage s'il n'existe pas. Le garbage collection fonctionne sur les deux backends (les identifiants S3 doivent avoir `s3:ListBucket`) ; seule la vue de debug de l'arbre de stockage est réservée au backend local.
 
-Rate limiting, CORS, TLS natif, Prometheus/OpenTelemetry, scan Trivy, application cosign, et identifiants upstream proxy/mirror sont documentés dans la **[référence de configuration complète](./CONFIGURATION.md)** (en anglais).
+Single sign-on, lecture publique (pull anonyme), rate limiting, proxys de confiance, CORS, TLS natif, Prometheus/OpenTelemetry, scan Trivy, application cosign, et identifiants upstream proxy/mirror sont documentés dans la **[référence de configuration complète](./CONFIGURATION.md)** (en anglais).
 
 ## Authentification
 

@@ -1,6 +1,6 @@
 # Dockyard
 
-A self-hosted Docker Registry V2 server, with an embedded UI, S3-compatible storage, and an optional proxy mode in front of an existing registry.
+A self-hosted Docker Registry V2 server, with an embedded UI, S3-compatible storage, vulnerability scanning, and optional proxy or pull-through mirror modes in front of an existing registry.
 
 ## TL;DR
 
@@ -16,6 +16,7 @@ This chart deploys Dockyard, either as:
 
 - **`embedded`** — Dockyard is the registry itself, storing blobs/manifests on a local PVC or an S3-compatible bucket.
 - **`proxy`** — Dockyard forwards `/v2/*` traffic to an existing upstream registry and exposes the same admin API/UI in front of it.
+- **`mirror`** — a pull-through cache: Dockyard serves from its own storage, fetches what it lacks from the upstream registry (`registry.proxy.*`) and keeps it, and accepts direct pushes too.
 
 ## Prerequisites
 
@@ -56,8 +57,8 @@ This does not delete the PVC created for local storage; remove it manually if yo
 
 | Name                        | Description                                             | Value        |
 | ----------------------------- | ---------------------------------------------------------- | -------------- |
-| `registry.mode`                | `embedded` or `proxy`                                       | `embedded`    |
-| `registry.storage.backend`     | `local` or `s3` (embedded mode only)                        | `local`       |
+| `registry.mode`                | `embedded`, `proxy` or `mirror`                             | `embedded`    |
+| `registry.storage.backend`     | `local` or `s3` (embedded and mirror modes)                 | `local`       |
 | `registry.storage.path`        | Filesystem path for local storage                           | `/data/registry` |
 | `registry.s3.endpoint`         | S3-compatible endpoint (empty for AWS S3)                   | `""`           |
 | `registry.s3.bucket`           | Bucket name (created automatically if missing)              | `dockyard-registry` |
@@ -65,7 +66,7 @@ This does not delete the PVC created for local storage; remove it manually if yo
 | `registry.s3.secure`           | Use TLS for the S3 endpoint                                 | `"true"`       |
 | `registry.s3.accessKey`        | S3 access key                                                | `""`           |
 | `registry.s3.secretKey`        | S3 secret key                                                | `""`           |
-| `registry.proxy.url`           | Upstream registry URL (proxy mode only)                     | `""`           |
+| `registry.proxy.url`           | Upstream registry URL (proxy and mirror modes)              | `""`           |
 | `registry.proxy.username`      | Upstream registry username                                  | `""`           |
 | `registry.proxy.password`      | Upstream registry password                                  | `""`           |
 
@@ -95,11 +96,13 @@ This does not delete the PVC created for local storage; remove it manually if yo
 
 ### Vulnerability scanning (Trivy)
 
+Scans never download a database themselves: Dockyard refreshes the vulnerability DB and the Java DB (needed for images with jars) at startup and every 12 hours, without credentials, unless `scan.offline` is set. Scans queued during the first download wait for it. With registry auth on, each scan pulls with a short-lived token for that repository alone; there is nothing to configure.
+
 | Name                        | Description                                                                          | Value      |
 | ----------------------------- | ----------------------------------------------------------------------------------------- | ------------ |
-| `scan.enabled`                 | Enable on-demand Trivy scans via the admin API                                            | `false`     |
+| `scan.enabled`                 | Enable Trivy scans: on demand, on push (vulnerability policy) and downloadable reports (PDF, CSV, JSON) | `false`     |
 | `scan.trivyServerURL`          | External `trivy server --listen` to defer to (shared DB across instances). Empty = standalone: the vulnerability DB shipped in the image seeds `cacheDir` on startup, so the first scan needs no internet access | `""` |
-| `scan.offline`                 | Air-gapped mode: never update the DB, scan with the one shipped in the image (or already cached) | `false` |
+| `scan.offline`                 | Air-gapped mode: never download the DBs, scan with those shipped in the image (or already cached). The default image ships no Java DB: build one with `--build-arg TRIVY_JAVA_DB=true` to scan Java images offline | `false` |
 | `scan.cacheDir`                | Trivy vulnerability DB cache path. Empty = computed automatically under `<registry.storage.path>/trivy-cache` | `""` |
 | `scan.timeout`                 | Per-scan timeout                                                                           | `5m`        |
 | `scan.maxReportBytes`          | Max stored report size                                                                     | `20971520`  |
@@ -147,7 +150,7 @@ Dockyard runs as **a single replica**. Users, sessions, retention/replication po
 
 ### Persistence
 
-The volume is mounted at `registry.storage.path` **with both storage backends**. With `local` it holds the images and Dockyard's state; with `s3` the images go to the bucket and the volume only holds the state — users, sessions, policies and audit log (SQLite), the Trivy cache and ACME certificates — so 1–2Gi is enough. With `persistence.enabled: false` all of that is lost on every pod restart.
+The volume is mounted at `registry.storage.path` **with both storage backends**. With `local` it holds the images and Dockyard's state; with `s3` the images go to the bucket and the volume only holds the state — users, sessions, policies and audit log (SQLite), the Trivy cache and ACME certificates. 1–2Gi is enough without scanning; with `scan.enabled`, keep a few Gi for the Trivy databases (the Java DB alone is ~1 GB to download and larger unpacked) — the default 10Gi covers it. With `persistence.enabled: false` all of that is lost on every pod restart.
 
 | Name                          | Description                              | Value          |
 | ------------------------------- | ------------------------------------------- | ---------------- |
