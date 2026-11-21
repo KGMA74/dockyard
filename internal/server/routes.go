@@ -321,6 +321,8 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	// Effective server configuration, secrets left out.
 	api.GET("/config", s.handleConfig, auth.RequireAdmin)
+	// Getting-started checklist, ticked from the instance's actual state.
+	api.GET("/setup", s.handleSetup, auth.RequireAdmin)
 	// Single sign-on set up from the console (read-only when the deployment
 	// configures it). The test runs discovery against an issuer URL.
 	api.GET("/sso", s.auth.SSOSettings, auth.RequireAdmin)
@@ -385,6 +387,8 @@ func (s *Server) RegisterRoutes() http.Handler {
 		api.GET("/scans", sh.List, auth.RequireAdmin)
 		api.GET("/scans/:id", sh.Get, auth.RequireAdmin)
 		api.GET("/scans/:id/report", sh.Report, auth.RequireAdmin)
+		// Registry-wide view: images by risk, most widespread CVEs.
+		api.GET("/vulnerabilities", scan.NewOverviewHandler(s.store, policyState, scanResolver).Get, auth.RequireAdmin)
 	}
 
 	// Vulnerability policy — scan on push, pull blocking, CVE allowlist.

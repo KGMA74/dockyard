@@ -2,8 +2,8 @@ apiVersion: v2
 name: dockyard
 description: A self-hosted Docker Registry V2 server
 type: application
-version: 0.8.0
-appVersion: "0.8.0"
+version: 0.9.0
+appVersion: "0.9.0"
 keywords:
   - docker
   - registry
@@ -35,15 +35,17 @@ annotations:
   # overwrites it from the GitHub release notes of that tag.
   artifacthub.io/changes: |
     - kind: added
-      description: Download a scan's vulnerability report as PDF (to share, in English or French), CSV (for a spreadsheet) or JSON (raw Trivy report), from the report window or GET /api/admin/scans/{id}/report?format=pdf|csv|json
-    - kind: security
-      description: Report responses are never cached (Cache-Control no-store), each export is recorded in the audit log, and CSV cells that would run as spreadsheet formulas are neutralized
+      description: A Vulnerabilities page for the whole registry — every scanned image by risk with its pull-blocked status and report, and the CVEs found in the most images (click one to see the images it affects), backed by GET /api/admin/vulnerabilities
+    - kind: added
+      description: A getting-started checklist for admins of a new install (admin password, first image, robot account for CI, scan on push, team, HTTPS), each step ticked from the server state and linked to where it is done, backed by GET /api/admin/setup
+    - kind: added
+      description: On a repository page, scan an unscanned tag (or every unscanned tag) in one click, open a tag report from its vulnerability counts, and copy pull commands for docker, podman or Kubernetes (with the image pull secret)
     - kind: changed
-      description: The Terraform module rejects replica_count other than 1 and autoscaling_enabled (the chart refuses both since 0.6.0) with a clear message, and its S3 lifecycle rule no longer triggers the AWS provider's deprecation warning
-    - kind: changed
-      description: Documentation brought up to date — every admin endpoint in API.md, all settings in CONFIGURATION.md (TRUSTED_PROXIES, V2_ANONYMOUS_PULL, TRIVY_DB_SEED_DIR), mirror mode and Trivy databases in the chart README, Go 1.26 prerequisite
-    - kind: changed
-      description: Dependency updates — go-jose 4.1.6 (used by single sign-on)
+      description: On small screens the size and vulnerabilities of each tag show under its name, where the columns are hidden
+    - kind: fixed
+      description: With several console tabs open over plain HTTP, the seventh tab and beyond never loaded (each tab held a live-update connection and browsers allow six per host); one connection is now shared by all tabs
+    - kind: fixed
+      description: A finished scan now refreshes the tag list too, so its vulnerability badges update without a reload
   artifacthub.io/images: |
     - name: dockyard
-      image: ghcr.io/kgma74/dockyard:0.8.0
+      image: ghcr.io/kgma74/dockyard:0.9.0

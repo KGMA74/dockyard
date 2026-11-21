@@ -41,6 +41,9 @@ type Server struct {
 	v2AnonymousPull bool
 	authUsername    string
 	authPassword    string
+	// tlsEnabled: Dockyard serves HTTPS itself (TLS_MODE), for the setup
+	// checklist.
+	tlsEnabled bool
 
 	corsAllowedOrigins   []string
 	rateLimitLoginPerMin int
@@ -92,6 +95,7 @@ func NewServer() (*http.Server, func(context.Context) error) {
 		v2AnonymousPull: cfg.V2AnonymousPull,
 		authUsername:    cfg.AuthUsername,
 		authPassword:    cfg.AuthPassword,
+		tlsEnabled:      cfg.TLSMode != "" && cfg.TLSMode != "off",
 		events:          events.NewHub(),
 
 		corsAllowedOrigins:   cfg.CORSAllowedOrigins,

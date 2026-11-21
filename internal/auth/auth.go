@@ -175,6 +175,17 @@ func (m *Manager) cleanupLoop() {
 // answered ~1000x faster than known ones — a free account-enumeration oracle.
 var dummyHash, _ = bcrypt.GenerateFromPassword([]byte("dockyard-timing-equalizer"), bcrypt.DefaultCost)
 
+// StillUsesPassword reports whether username's password is still password.
+// The setup checklist asks it about the bootstrap admin and the password
+// the deployment set (AUTH_PASSWORD): still valid means nobody changed it.
+func (m *Manager) StillUsesPassword(username, password string) bool {
+	if username == "" || password == "" {
+		return false
+	}
+	_, ok := m.verify(username, password)
+	return ok
+}
+
 func (m *Manager) verify(username, password string) (*store.User, bool) {
 	u, err := m.users.GetUser(username)
 	if err != nil {

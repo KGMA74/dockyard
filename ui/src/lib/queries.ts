@@ -13,6 +13,8 @@ import {
   getRepositories,
   getScanVulnerabilities,
   getServerConfig,
+  getSetup,
+  getVulnerabilityOverview,
   getSigningStatus,
   getStorageStats,
   getTags,
@@ -47,6 +49,8 @@ export const keys = {
   sessions: ['sessions'] as const,
   mySessions: ['sessions', 'mine'] as const,
   serverConfig: ['server-config'] as const,
+  setup: ['setup'] as const,
+  vulnOverview: ['scans', 'overview'] as const,
   retention: ['retention'] as const,
   quotas: ['quotas'] as const,
   webhooks: ['webhooks'] as const,
@@ -117,6 +121,12 @@ export const useRobots = () => useQuery({ queryKey: keys.robots, queryFn: listRo
 export const useMe = () => useQuery({ queryKey: keys.me, queryFn: getMe })
 export const useSessions = () => useQuery({ queryKey: keys.sessions, queryFn: listSessions })
 export const useMySessions = () => useQuery({ queryKey: keys.mySessions, queryFn: listMySessions })
+/** Under ['scans'], so a finished scan refreshes it like the other scan views. */
+export const useVulnerabilityOverview = () =>
+  useQuery({ queryKey: keys.vulnOverview, queryFn: getVulnerabilityOverview })
+/** Re-read whenever the overview mounts: steps get done elsewhere. */
+export const useSetup = (enabled: boolean) =>
+  useQuery({ queryKey: keys.setup, queryFn: getSetup, enabled, select: data => data.steps })
 export const useServerConfig = (enabled: boolean) =>
   useQuery({
     queryKey: keys.serverConfig,
@@ -153,7 +163,8 @@ export function useInvalidate() {
 export function invalidateForEvent(client: QueryClient, event: RegistryEvent): void {
   const stale: (readonly unknown[])[] = [['audit']]
   if (event.type === 'scan') {
-    stale.push(['scans'])
+    // The tag list shows each tag's latest scan too.
+    stale.push(['scans'], keys.tags(event.name))
   } else if (event.type === 'quota_warning') {
     stale.push(keys.quotas)
   } else {

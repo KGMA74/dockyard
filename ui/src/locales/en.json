@@ -72,7 +72,8 @@
     "groupOperate": "Operate",
     "groupAdmin": "Administer",
     "signOut": "Sign out",
-    "unknownUser": "Unknown user"
+    "unknownUser": "Unknown user",
+    "vulnerabilities": "Vulnerabilities"
   },
   "shell": {
     "toggleSidebar": "Toggle sidebar",
@@ -274,7 +275,22 @@
     "pullBlockedHint": "docker pull of this tag is refused by the vulnerability policy. Rebuild the image, or allowlist the CVEs on the Security page if the risk is accepted.",
     "lowerSeverities": "+{{count}} lower",
     "mediumOrLower": "{{count}} medium or lower",
-    "allPlatforms": "Platforms: {{list}}"
+    "allPlatforms": "Platforms: {{list}}",
+    "scan": "Scan",
+    "scanTag": "Scan {{tag}} for vulnerabilities",
+    "scanUnscanned_one": "Scan the unscanned tag",
+    "scanUnscanned_other": "Scan the {{count}} unscanned tags",
+    "scansQueued_one": "Scan queued",
+    "scansQueued_other": "{{count}} scans queued",
+    "scansReused_one": "A recent scan was reused",
+    "scansReused_other": "{{count}} recent scans were reused",
+    "openReport": "Open the vulnerability report",
+    "openReportOf": "Open the vulnerability report of {{tag}}",
+    "pullTool": "Tool",
+    "tool_docker": "docker",
+    "tool_podman": "podman",
+    "tool_kubernetes": "Kubernetes",
+    "kubernetesHint": "Create a robot account (Access → Robot accounts) for the cluster and use its name and secret above: a robot can only pull and push, and can be revoked on its own."
   },
   "imageDetails": {
     "pull": "Pull",
@@ -933,5 +949,77 @@
     "failed": "Could not delete — try again.",
     "typePrefix": "Type",
     "typeSuffix": "to confirm."
+  },
+  "setup": {
+    "title": "Get started",
+    "body": "What is left to make this registry safe and ready for your team. Each step ticks itself once done.",
+    "progress": "{{done}} of {{total}} done",
+    "dismiss": "Hide the getting-started checklist",
+    "done": "Done",
+    "todo": "To do",
+    "steps": {
+      "admin_password": {
+        "title": "Change the admin password",
+        "body": "The password the deployment set is still the one in use: anyone who read the configuration can sign in.",
+        "action": "Change it"
+      },
+      "first_image": {
+        "title": "Push a first image",
+        "body": "The commands below already contain this registry's address.",
+        "action": "See how"
+      },
+      "robot_account": {
+        "title": "Create a robot account for CI",
+        "body": "Give pipelines and clusters their own credentials, scoped and revocable, instead of a person's password.",
+        "action": "Robot accounts"
+      },
+      "scan_on_push": {
+        "title": "Scan every pushed image",
+        "body": "Turn on scan on push to find vulnerabilities as soon as an image arrives, and optionally block pulls of vulnerable ones.",
+        "action": "Security"
+      },
+      "team": {
+        "title": "Invite your team",
+        "body": "Create accounts with the right role for each person, or set up single sign-on.",
+        "action": "Access"
+      },
+      "https": {
+        "title": "Serve the registry over HTTPS",
+        "body": "Plain HTTP sends passwords in clear and needs insecure-registries on every Docker host. Use TLS_MODE or an ingress with a certificate.",
+        "action": "Documentation"
+      }
+    }
+  },
+  "vulnPage": {
+    "title": "Vulnerabilities",
+    "description": "Every scanned image in the registry by risk, and the vulnerabilities found in the most images.",
+    "offTitle": "Scanning is off",
+    "offBody": "Vulnerability scanning is not enabled on this server (SCAN_ENABLED, or scan.enabled in the Helm chart).",
+    "scanned": "Scanned images",
+    "cleanHint_one": "{{count}} with no known vulnerability",
+    "cleanHint_other": "{{count}} with no known vulnerability",
+    "withCritical": "With critical vulnerabilities",
+    "blocked": "Pull blocked",
+    "blockedHint": "by the vulnerability policy",
+    "distinct": "Distinct vulnerabilities",
+    "filter": "Filter by image or CVE…",
+    "blockedOnly": "Only images whose pull is blocked",
+    "affectedBy": "Affected by {{id}}",
+    "imagesTitle": "Images by risk",
+    "imagesBody": "Each image's latest scan, most critical first. Images deleted since their scan are left out.",
+    "noScansTitle": "No scanned image yet",
+    "noScansBody": "Scan an image from its repository page, or turn on scan on push in Security.",
+    "noMatch": "No image matches these filters.",
+    "image": "Image",
+    "scannedAt": "Scanned",
+    "cvesTitle": "Most widespread vulnerabilities",
+    "cvesBody": "The most severe first, then the ones found in the most images: a single base-image update often clears one from many images. {{shown}} of {{total}} shown.",
+    "affected": "Images",
+    "imageCount_one": "{{count}} image",
+    "imageCount_other": "{{count}} images",
+    "showAffected": "Show the images it affects",
+    "accepted": "Accepted",
+    "accept": "Accept the risk…",
+    "showMore": "Show {{count}} more"
   }
 }

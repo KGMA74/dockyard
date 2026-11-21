@@ -56,6 +56,7 @@ Every endpoint needs `Authorization: Bearer <token>` except login, refresh, logo
 | `DELETE` | `/api/admin/sessions/:id` | Revoke a session (admin) |
 | `GET` | `/api/admin/audit?repo=&actor=&limit=&offset=` | Audit trail: logins, pushes, deletions, GC, scan exports… (admin) |
 | `GET` | `/api/admin/config` | Read-only summary of the server configuration, secrets left out (admin) |
+| `GET` | `/api/admin/setup` | Getting-started checklist ticked from the instance's state: admin password changed, first image, robot account, scan on push, team, HTTPS (admin) |
 
 ### Repositories and storage
 
@@ -85,6 +86,7 @@ Every endpoint needs `Authorization: Bearer <token>` except login, refresh, logo
 | `GET` | `/api/admin/scans/:id` | One scan: status, counts by severity, Trivy version (admin) |
 | `GET` | `/api/admin/scans/:id/report` | The raw Trivy JSON report (admin) |
 | `GET` | `/api/admin/scans/:id/report?format=pdf\|csv\|json&lang=en\|fr` | Download the report: a PDF to share, the findings as CSV, or the raw JSON — `Content-Disposition: attachment`, named after the image; each download is audited (admin) |
+| `GET` | `/api/admin/vulnerabilities` | Registry-wide view: every image's latest scan by risk (with pull-blocked flag), and the CVEs found in the most images, with the allowlist (admin) |
 | `GET` / `PUT` | `/api/admin/vulnerability-policy` | Read / set `{scan_on_push, block_severity}`; the GET also returns the allowlist (admin) |
 | `POST` | `/api/admin/vulnerability-policy/allowlist` | Accept a CVE `{cve_id, reason, expires_in_days}` — it no longer blocks pulls until it expires (admin) |
 | `DELETE` | `/api/admin/vulnerability-policy/allowlist/:cve` | Remove a CVE from the allowlist (admin) |

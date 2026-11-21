@@ -1,6 +1,7 @@
 import {
   Activity,
   Box,
+  Bug,
   HardDrive,
   LayoutDashboard,
   LogOut,
@@ -56,6 +57,7 @@ export const NAVIGATION: NavGroup[] = [
       { page: 'activity', href: '/activity', icon: Activity, adminOnly: true },
       { page: 'storage', href: '/storage', icon: HardDrive, adminOnly: true },
       { page: 'security', href: '/security', icon: ShieldCheck, adminOnly: true },
+      { page: 'vulnerabilities', href: '/vulnerabilities', icon: Bug, adminOnly: true },
     ],
   },
   {

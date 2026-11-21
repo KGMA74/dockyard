@@ -494,6 +494,81 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
+  /api/admin/vulnerabilities:
+    get:
+      tags: [scan]
+      summary: Registry-wide vulnerability overview (admin only, scanning on)
+      description: >-
+        The latest successful scan of every scanned image, most critical
+        first, with whether the vulnerability policy blocks its pull; and
+        the vulnerabilities found in those images, most severe and most
+        widespread first (at most 500; cve_count is the total), each with
+        the scans it appears in and whether it is on the active allowlist.
+        Images deleted since their scan are left out. 404 when scanning is off.
+      responses:
+        "200":
+          description: The overview
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  images:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        scan_id: { type: integer }
+                        name: { type: string }
+                        reference: { type: string }
+                        digest: { type: string }
+                        trivy_version: { type: string }
+                        critical_count: { type: integer }
+                        high_count: { type: integer }
+                        medium_count: { type: integer }
+                        low_count: { type: integer }
+                        unknown_count: { type: integer }
+                        finished_at: { type: string, format: date-time }
+                        pull_blocked: { type: boolean }
+                  cves:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: { type: string }
+                        severity: { type: string, enum: [CRITICAL, HIGH, MEDIUM, LOW, UNKNOWN] }
+                        scan_ids: { type: array, items: { type: integer } }
+                        allowlisted: { type: boolean }
+                  cve_count: { type: integer }
+        "403": { $ref: "#/components/responses/Forbidden" }
+        "404": { $ref: "#/components/responses/NotFound" }
+
+  /api/admin/setup:
+    get:
+      tags: [system]
+      summary: Getting-started checklist (admin only)
+      description: >-
+        Steps an admin should take on a new install, each ticked from the
+        instance's actual state. Steps that do not apply here are left out
+        (first_image in proxy mode, scan_on_push with scanning off).
+      responses:
+        "200":
+          description: The checklist
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  steps:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, done]
+                      properties:
+                        id: { type: string, enum: [admin_password, first_image, robot_account, scan_on_push, team, https] }
+                        done: { type: boolean }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
   /api/admin/config:
     get:
       tags: [system]
@@ -1615,6 +1690,8 @@ components:
           type: object
           description: Latest scan of this digest; absent if never scanned.
           properties:
+            id: { type: integer, description: "The scan, to fetch its report" }
+            trivy_version: { type: string }
             status: { type: string, enum: [queued, running, succeeded, failed] }
             critical_count: { type: integer }
             high_count: { type: integer }

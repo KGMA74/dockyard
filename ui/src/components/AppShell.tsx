@@ -24,6 +24,7 @@ import RepositoryPage from '@/pages/RepositoryPage'
 const ActivityPage = lazy(() => import('@/pages/ActivityPage'))
 const StoragePage = lazy(() => import('@/pages/StoragePage'))
 const SecurityPage = lazy(() => import('@/pages/SecurityPage'))
+const VulnerabilitiesPage = lazy(() => import('@/pages/VulnerabilitiesPage'))
 const AccessPage = lazy(() => import('@/pages/AccessPage'))
 const IntegrationsPage = lazy(() => import('@/pages/IntegrationsPage'))
 const SettingsPage = lazy(() => import('@/pages/SettingsPage'))
@@ -31,7 +32,7 @@ const SettingsPage = lazy(() => import('@/pages/SettingsPage'))
 /** How long the live feed may be down before the header says so. */
 const OFFLINE_GRACE_MS = 5000
 
-const ADMIN_PAGES: PageId[] =['activity', 'storage', 'security', 'access', 'integrations']
+const ADMIN_PAGES: PageId[] = ['activity', 'storage', 'security', 'vulnerabilities', 'access', 'integrations']
 
 // The shadcn Sidebar persists its state in a cookie; this is a SPA (no SSR),
 // so read it back here to seed `defaultOpen` across reloads.
@@ -69,6 +70,8 @@ function PageContent({ route }: { route: Route }) {
       return <StoragePage />
     case 'security':
       return <SecurityPage />
+    case 'vulnerabilities':
+      return <VulnerabilitiesPage />
     case 'access':
       return <AccessPage />
     case 'integrations':

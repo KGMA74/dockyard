@@ -147,7 +147,7 @@ function accessTokenStale(): boolean {
 // timeout, deploy) got a 401 and live updates silently stopped until a page
 // reload. On error we close, refresh the token if needed, and reopen with
 // exponential backoff. `onStatus` reports whether the feed is live.
-export function subscribeToEvents(
+function openEventStream(
   onEvent: (event: RegistryEvent) => void,
   onStatus?: (connected: boolean) => void,
 ): () => void {
@@ -187,6 +187,94 @@ export function subscribeToEvents(
     stopped = true
     clearTimeout(timer)
     source?.close()
+  }
+}
+
+const EVENTS_LOCK = 'dockyard-events'
+const EVENTS_CHANNEL = 'dockyard-events'
+
+type FeedMessage =
+  | { type: 'event'; event: RegistryEvent }
+  | { type: 'status'; connected: boolean }
+  | { type: 'hello' }
+
+/** Subscribes to the registry's live event feed, with one connection per
+ *  browser rather than per tab.
+ *
+ *  Every open console tab used to hold its own SSE stream. Over plain HTTP
+ *  (HTTP/1.1) browsers allow about six connections per host, so from the
+ *  sixth tab on every other request — page data, logins — queued behind the
+ *  streams and the console looked frozen. Now the tab holding a Web Lock
+ *  opens the only stream and relays what it receives over a
+ *  BroadcastChannel; when it closes, the lock passes to another tab, which
+ *  takes over. Without those APIs (old browsers), each tab streams on its
+ *  own as before. */
+export function subscribeToEvents(
+  onEvent: (event: RegistryEvent) => void,
+  onStatus?: (connected: boolean) => void,
+): () => void {
+  if (typeof BroadcastChannel === 'undefined' || !navigator.locks) {
+    return openEventStream(onEvent, onStatus)
+  }
+
+  const channel = new BroadcastChannel(EVENTS_CHANNEL)
+  const abort = new AbortController()
+  let stopped = false
+  let leading = false
+  let lastStatus: boolean | undefined
+  let stopStream: (() => void) | undefined
+  let releaseLock: (() => void) | undefined
+
+  const post = (message: FeedMessage) => {
+    try {
+      channel.postMessage(message)
+    } catch {
+      // channel closed while unsubscribing
+    }
+  }
+
+  // A BroadcastChannel never delivers to the tab that posted, so the leader
+  // handles its own events directly and only followers read these.
+  channel.onmessage = ({ data }: MessageEvent<FeedMessage>) => {
+    if (data.type === 'event') onEvent(data.event)
+    else if (data.type === 'status') onStatus?.(data.connected)
+    else if (data.type === 'hello' && leading && lastStatus !== undefined) {
+      post({ type: 'status', connected: lastStatus })
+    }
+  }
+  // A newly opened tab asks the leader, if any, whether the feed is live.
+  post({ type: 'hello' })
+
+  navigator.locks
+    .request(EVENTS_LOCK, { signal: abort.signal }, () => {
+      if (stopped) return Promise.resolve()
+      leading = true
+      stopStream = openEventStream(
+        event => {
+          onEvent(event)
+          post({ type: 'event', event })
+        },
+        connected => {
+          lastStatus = connected
+          onStatus?.(connected)
+          post({ type: 'status', connected })
+        },
+      )
+      // Held until this tab unsubscribes (or closes, which frees it too).
+      return new Promise<void>(resolve => {
+        releaseLock = resolve
+      })
+    })
+    .catch(() => {
+      // AbortError: unsubscribed while still waiting for the lock.
+    })
+
+  return () => {
+    stopped = true
+    abort.abort()
+    stopStream?.()
+    releaseLock?.()
+    channel.close()
   }
 }
 
@@ -308,6 +396,8 @@ export async function getRepositories(): Promise<{ repositories: RepoSummary[]; 
 }
 
 export interface TagScanSummary {
+  id: number
+  trivy_version?: string
   status: ScanResult['status']
   critical_count: number
   high_count: number
@@ -622,6 +712,41 @@ export interface ConfigItem {
 }
 
 /** Effective server configuration, secrets left out (admin only). */
+export interface VulnImage {
+  scan_id: number
+  name: string
+  reference: string
+  digest: string
+  trivy_version?: string
+  critical_count: number
+  high_count: number
+  medium_count: number
+  low_count: number
+  unknown_count: number
+  finished_at?: string
+  pull_blocked?: boolean
+}
+
+export interface VulnCVE {
+  id: string
+  severity: Severity
+  scan_ids: number[]
+  allowlisted?: boolean
+}
+
+/** Registry-wide view: every image's latest scan by risk, and the
+ *  vulnerabilities affecting the most images (admin, scanning on). */
+export async function getVulnerabilityOverview(): Promise<{ images: VulnImage[]; cves: VulnCVE[]; cve_count: number }> {
+  return req('/vulnerabilities')
+}
+
+export type SetupStepId = 'admin_password' | 'first_image' | 'robot_account' | 'scan_on_push' | 'team' | 'https'
+
+/** The getting-started checklist, ticked from the instance's state (admin). */
+export async function getSetup(): Promise<{ steps: { id: SetupStepId; done: boolean }[] }> {
+  return req('/setup')
+}
+
 export async function getServerConfig(): Promise<{ groups: { id: ConfigGroupId; items: ConfigItem[] }[] }> {
   return req('/config')
 }
