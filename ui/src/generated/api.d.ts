@@ -3284,7 +3284,7 @@ export interface components {
             signed?: boolean;
             /** @description Latest scan of this digest; absent if never scanned. */
             scan?: {
-                /** @description The scan */
+                /** @description The scan, to fetch its report */
                 id?: number;
                 trivy_version?: string;
                 /** @enum {string} */

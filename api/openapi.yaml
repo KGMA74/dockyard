@@ -1690,7 +1690,7 @@ components:
           type: object
           description: Latest scan of this digest; absent if never scanned.
           properties:
-            id: { type: integer, description: The scan, to fetch its report }
+            id: { type: integer, description: "The scan, to fetch its report" }
             trivy_version: { type: string }
             status: { type: string, enum: [queued, running, succeeded, failed] }
             critical_count: { type: integer }
