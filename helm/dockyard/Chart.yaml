@@ -22,6 +22,8 @@ annotations:
     - name: Source
       url: https://github.com/kgma74/dockyard
   artifacthub.io/screenshots: |
+    - title: Overview — counts, recent pushes, registry status, ready-to-copy docker commands
+      url: https://raw.githubusercontent.com/kgma74/dockyard/main/assets/screenshots/overview-en-light.png
     - title: Images list
       url: https://raw.githubusercontent.com/kgma74/dockyard/main/assets/screenshots/images-list.jpg
     - title: Image details — layers, size, signature status
