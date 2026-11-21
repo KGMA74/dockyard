@@ -3,7 +3,7 @@ import { ArrowDown, ArrowUp, FolderSearch, GitCompare, Info, RefreshCw, Search, 
 import { useTranslation } from 'react-i18next'
 import { toast } from 'sonner'
 import { deleteManifest, deleteRepository, registryHost, type TagInfo } from '@/api'
-import { keys, useInvalidate, useTags } from '@/lib/queries'
+import { keys, useInvalidate, useScans, useTags } from '@/lib/queries'
 import { Link, navigate, repoHref, setQueryParam, useLocation } from '@/lib/router'
 import { isArtifactTag, useSession } from '@/lib/session'
 import { cn } from '@/lib/utils'
@@ -11,7 +11,6 @@ import DeleteModal from '@/components/DeleteModal'
 import ImageDetailsPanel from '@/components/ImageDetailsPanel'
 import {
   Checkbox,
-  Command,
   CopyButton,
   Digest,
   EmptyState,
@@ -25,6 +24,7 @@ import {
   Timestamp,
 } from '@/components/kit'
 import PushGuide from '@/components/PushGuide'
+import { PullCommands, ScanUnscannedButton, TagScanCell } from '@/components/RepoShortcuts'
 import { CompactScan } from '@/components/ScanBadges'
 import { formatBytes } from '@/lib/format'
 import TagDiff from '@/components/TagDiff'
@@ -123,7 +123,11 @@ export default function RepositoryPage({ repo }: { repo: string }) {
   // empty "Signature" column on a registry without cosign keys.
   const hasSizes = all.some(tag => tag.size_bytes !== undefined)
   const hasPlatforms = all.some(tag => tag.platforms?.length)
-  const hasScans = all.some(tag => tag.scan)
+  // Admins can scan from the list when the server has scanning on (the
+  // scans endpoint answers 404 otherwise).
+  const scanList = useScans({ limit: 1 }, { enabled: session.isAdmin })
+  const canScan = session.isAdmin && scanList.isSuccess
+  const hasScans = canScan || all.some(tag => tag.scan)
   const hasSignatures = all.some(tag => tag.signed !== undefined)
 
   const visible = useMemo(() => {
@@ -230,12 +234,7 @@ export default function RepositoryPage({ repo }: { repo: string }) {
         </Panel>
       ) : (
         <>
-          {featured && (
-            <div className="max-w-2xl space-y-1.5">
-              <p className="text-xs font-medium text-muted-foreground">{t('repository.pull')}</p>
-              <Command>{`docker pull ${registryHost()}/${repo}:${featured.tag}`}</Command>
-            </div>
-          )}
+          {featured && <PullCommands repo={repo} tag={featured.tag} />}
 
           <div className="space-y-3">
             <div className="flex flex-wrap items-center gap-x-4 gap-y-2">
@@ -256,6 +255,7 @@ export default function RepositoryPage({ repo }: { repo: string }) {
                   {t('repository.showArtifacts', { count: artifactCount })}
                 </label>
               )}
+              {canScan && <ScanUnscannedButton repo={repo} tags={images} />}
               <div className="ml-auto flex min-h-7 items-center gap-2 text-xs text-muted-foreground" aria-live="polite">
                 {selected.length === 0 && images.length > 1 && <span>{t('repository.compareHint')}</span>}
                 {selected.length === 1 && <span>{t('repository.pickOneMore', { tag: selected[0] })}</span>}
@@ -331,6 +331,13 @@ export default function RepositoryPage({ repo }: { repo: string }) {
                               </Link>
                               {artifact && <StatusBadge>{t('repository.artifact')}</StatusBadge>}
                             </span>
+                            {/* Small screens hide the size and vulnerability columns: keep them here. */}
+                            {!artifact && (
+                              <span className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground md:hidden">
+                                {tag.size_bytes !== undefined && <span className="tabular-nums sm:hidden">{formatBytes(tag.size_bytes)}</span>}
+                                {hasScans && <CompactScan scan={tag.scan} blocked={tag.pull_blocked} />}
+                              </span>
+                            )}
                           </TableCell>
                           {hasPlatforms && (
                             <TableCell className="hidden lg:table-cell">
@@ -344,7 +351,7 @@ export default function RepositoryPage({ repo }: { repo: string }) {
                           )}
                           {hasScans && (
                             <TableCell className="hidden md:table-cell">
-                              {artifact ? null : <CompactScan scan={tag.scan} blocked={tag.pull_blocked} />}
+                              {artifact ? null : <TagScanCell repo={repo} tag={tag} canScan={canScan} />}
                             </TableCell>
                           )}
                           {hasSignatures && (

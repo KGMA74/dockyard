@@ -153,7 +153,8 @@ export function useInvalidate() {
 export function invalidateForEvent(client: QueryClient, event: RegistryEvent): void {
   const stale: (readonly unknown[])[] = [['audit']]
   if (event.type === 'scan') {
-    stale.push(['scans'])
+    // The tag list shows each tag's latest scan too.
+    stale.push(['scans'], keys.tags(event.name))
   } else if (event.type === 'quota_warning') {
     stale.push(keys.quotas)
   } else {

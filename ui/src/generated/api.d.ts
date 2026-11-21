@@ -3173,6 +3173,9 @@ export interface components {
             signed?: boolean;
             /** @description Latest scan of this digest; absent if never scanned. */
             scan?: {
+                /** @description The scan */
+                id?: number;
+                trivy_version?: string;
                 /** @enum {string} */
                 status?: "queued" | "running" | "succeeded" | "failed";
                 critical_count?: number;

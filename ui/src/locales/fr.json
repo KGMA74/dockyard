@@ -274,7 +274,22 @@
     "pullBlockedHint": "La politique de vulnérabilités refuse docker pull sur ce tag. Reconstruisez l'image, ou ajoutez les CVE aux exceptions dans Sécurité si le risque est accepté.",
     "lowerSeverities": "+{{count}} moins graves",
     "mediumOrLower": "{{count}} moyennes ou moins",
-    "allPlatforms": "Plateformes : {{list}}"
+    "allPlatforms": "Plateformes : {{list}}",
+    "scan": "Scanner",
+    "scanTag": "Scanner {{tag}} pour trouver ses vulnérabilités",
+    "scanUnscanned_one": "Scanner le tag non scanné",
+    "scanUnscanned_other": "Scanner les {{count}} tags non scannés",
+    "scansQueued_one": "Scan mis en file",
+    "scansQueued_other": "{{count}} scans mis en file",
+    "scansReused_one": "Un scan récent a été réutilisé",
+    "scansReused_other": "{{count}} scans récents ont été réutilisés",
+    "openReport": "Ouvrir le rapport de vulnérabilités",
+    "openReportOf": "Ouvrir le rapport de vulnérabilités de {{tag}}",
+    "pullTool": "Outil",
+    "tool_docker": "docker",
+    "tool_podman": "podman",
+    "tool_kubernetes": "Kubernetes",
+    "kubernetesHint": "Créez un compte robot pour le cluster (Accès → Comptes robots) et utilisez son nom et son secret ci-dessus : un robot ne peut que tirer et pousser, et se révoque à part."
   },
   "imageDetails": {
     "pull": "Pull",

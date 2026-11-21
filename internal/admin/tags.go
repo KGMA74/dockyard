@@ -30,8 +30,11 @@ func pullBlocked(policy PullPolicy, summary TagSummary) bool {
 	return policy != nil && summary.Scan != nil && policy.Blocks(summary.Digest)
 }
 
-// TagScanInfo is the latest scan of a tag's digest.
+// TagScanInfo is the latest scan of a tag's digest. ID lets the console open
+// that scan's report straight from the tag list.
 type TagScanInfo struct {
+	ID            int64  `json:"id"`
+	TrivyVersion  string `json:"trivy_version,omitempty"`
 	Status        string `json:"status"`
 	CriticalCount int    `json:"critical_count"`
 	HighCount     int    `json:"high_count"`
@@ -49,6 +52,8 @@ func tagScanInfo(db *store.Store, digest string) *TagScanInfo {
 		return nil
 	}
 	return &TagScanInfo{
+		ID:            sc.ID,
+		TrivyVersion:  sc.TrivyVersion,
 		Status:        sc.Status,
 		CriticalCount: sc.CriticalCount,
 		HighCount:     sc.HighCount,

@@ -396,6 +396,8 @@ export async function getRepositories(): Promise<{ repositories: RepoSummary[]; 
 }
 
 export interface TagScanSummary {
+  id: number
+  trivy_version?: string
   status: ScanResult['status']
   critical_count: number
   high_count: number

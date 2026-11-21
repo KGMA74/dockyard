@@ -274,7 +274,22 @@
     "pullBlockedHint": "docker pull of this tag is refused by the vulnerability policy. Rebuild the image, or allowlist the CVEs on the Security page if the risk is accepted.",
     "lowerSeverities": "+{{count}} lower",
     "mediumOrLower": "{{count}} medium or lower",
-    "allPlatforms": "Platforms: {{list}}"
+    "allPlatforms": "Platforms: {{list}}",
+    "scan": "Scan",
+    "scanTag": "Scan {{tag}} for vulnerabilities",
+    "scanUnscanned_one": "Scan the unscanned tag",
+    "scanUnscanned_other": "Scan the {{count}} unscanned tags",
+    "scansQueued_one": "Scan queued",
+    "scansQueued_other": "{{count}} scans queued",
+    "scansReused_one": "A recent scan was reused",
+    "scansReused_other": "{{count}} recent scans were reused",
+    "openReport": "Open the vulnerability report",
+    "openReportOf": "Open the vulnerability report of {{tag}}",
+    "pullTool": "Tool",
+    "tool_docker": "docker",
+    "tool_podman": "podman",
+    "tool_kubernetes": "Kubernetes",
+    "kubernetesHint": "Create a robot account (Access → Robot accounts) for the cluster and use its name and secret above: a robot can only pull and push, and can be revoked on its own."
   },
   "imageDetails": {
     "pull": "Pull",
