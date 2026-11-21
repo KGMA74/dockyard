@@ -2,8 +2,8 @@ apiVersion: v2
 name: dockyard
 description: A self-hosted Docker Registry V2 server
 type: application
-version: 0.7.2
-appVersion: "0.7.2"
+version: 0.8.0
+appVersion: "0.8.0"
 keywords:
   - docker
   - registry
@@ -34,14 +34,16 @@ annotations:
   # tag being released (a hand-written changelog). Otherwise the workflow
   # overwrites it from the GitHub release notes of that tag.
   artifacthub.io/changes: |
-    - kind: fixed
-      description: Scans of Java images failed because the scanner token was sent to every registry, so ghcr.io refused the Java DB download (DENIED invalid token); the token now goes to Dockyard alone, through a private per-scan DOCKER_CONFIG removed when trivy exits
-    - kind: fixed
-      description: Trivy failed with "stat /tmp no such file or directory" in the scratch image; its TMPDIR is now a directory on the cache volume, and the image has a /tmp for running trivy by hand
-    - kind: changed
-      description: Scans never download a database; Dockyard refreshes the vulnerability DB and the Java DB itself, without credentials, at startup and every 12 hours (the Java DB is ~1 GB, size the volume for it)
     - kind: added
-      description: Build argument TRIVY_JAVA_DB=true ships the Java DB in the image for air-gapped installs; databases baked into the image are seeded into a cache that lacks them
+      description: Download a scan's vulnerability report as PDF (to share, in English or French), CSV (for a spreadsheet) or JSON (raw Trivy report), from the report window or GET /api/admin/scans/{id}/report?format=pdf|csv|json
+    - kind: security
+      description: Report responses are never cached (Cache-Control no-store), each export is recorded in the audit log, and CSV cells that would run as spreadsheet formulas are neutralized
+    - kind: changed
+      description: The Terraform module rejects replica_count other than 1 and autoscaling_enabled (the chart refuses both since 0.6.0) with a clear message, and its S3 lifecycle rule no longer triggers the AWS provider's deprecation warning
+    - kind: changed
+      description: Documentation brought up to date — every admin endpoint in API.md, all settings in CONFIGURATION.md (TRUSTED_PROXIES, V2_ANONYMOUS_PULL, TRIVY_DB_SEED_DIR), mirror mode and Trivy databases in the chart README, Go 1.26 prerequisite
+    - kind: changed
+      description: Dependency updates — go-jose 4.1.6 (used by single sign-on)
   artifacthub.io/images: |
     - name: dockyard
-      image: ghcr.io/kgma74/dockyard:0.7.2
+      image: ghcr.io/kgma74/dockyard:0.8.0
