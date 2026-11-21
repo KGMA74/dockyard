@@ -12,13 +12,18 @@ A lightweight, self-hosted Docker Registry V2 server written in Go. Ships as a *
 
 > Built on the [Docker Registry HTTP API V2](https://distribution.github.io/distribution/spec/api/) specification — the same protocol implemented by [distribution/distribution](https://github.com/distribution/distribution).
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="./assets/screenshots/overview-en-dark.png">
+  <img src="./assets/screenshots/overview-en-light.png" alt="Dockyard console overview: repository, tag, storage and blob counts, recently pushed repositories, registry status, ready-to-copy docker login/tag/push commands and recent activity">
+</picture>
+
 ## Features
 
 - **Embedded UI** — React + Tailwind (shadcn/ui) console with shareable URLs for every page, repository and tag, a `Ctrl+K` command palette, role-aware navigation (readers only see what they can use), ready-to-copy `docker login/push/pull` commands, a filterable vulnerability report, dark/light/system theme and EN/FR localization (a test keeps both languages in sync)
 - **Two storage backends** — local filesystem or any S3-compatible object store (RustFS, MinIO, AWS S3, …)
 - **Two modes** — embedded registry, or proxy/mirror in front of an existing registry
 - **Multi-arch aware** — manifest lists (OCI indexes) resolve per-platform, real total size instead of 0
-- **Vulnerability scanning and policy** — Trivy scans on demand or on every push; optionally refuse `docker pull` of images with vulnerabilities at or above a severity, with an expiring CVE allowlist for accepted risks. The vulnerability DB ships in the image, so scans work offline / air-gapped
+- **Vulnerability scanning and policy** — Trivy scans on demand or on every push; optionally refuse `docker pull` of images with vulnerabilities at or above a severity, with an expiring CVE allowlist for accepted risks. The vulnerability DB ships in the image, so scans work offline / air-gapped; the Java DB (images with jars) is downloaded at startup, or shipped too with `--build-arg TRIVY_JAVA_DB=true`
 - **Robot accounts** — registry-only credentials for CI and clusters (`docker login -u robot+<name>`), pusher or reader, scoped to repository patterns, expiring, revocable at once
 - **Signed-push enforcement** — reject pushes without a valid cosign signature, verified server-side
 - **Garbage collection, retention policies, replication, byte quotas** — all with dry-run previews; GC runs on both the local and S3 backends
@@ -34,6 +39,51 @@ A lightweight, self-hosted Docker Registry V2 server written in Go. Ships as a *
 | `embedded` | Dockyard **is** the registry — stores blobs and manifests itself |
 | `proxy` | Dockyard sits in front of an existing registry and exposes the admin UI/API |
 | `mirror` | Pull-through cache: serves from local storage, fetches misses from `REGISTRY_URL` (write-through), also accepts direct pushes |
+
+## Architecture
+
+```mermaid
+flowchart TB
+    docker(["docker · CI · Kubernetes"])
+    browser(["Browser"])
+
+    subgraph dockyard["Dockyard"]
+        v2["/v2 — Registry API<br/>token auth · RBAC · pull gate · cosign"]
+        console["Web console + /api/admin<br/>JWT sessions · SSO · live updates"]
+        engine["Registry engine<br/>embedded · proxy · mirror"]
+        db[("SQLite<br/>users · scans · policies · audit")]
+        hub(["Event hub"])
+        scan["Scan dispatcher<br/>trivy subprocess"]
+        jobs["GC · retention · replication<br/>quotas · webhooks"]
+    end
+
+    upstream["Upstream registry<br/>proxy / mirror modes"]
+    storage[("Blob storage<br/>local disk or S3")]
+    oidc["OIDC provider"]
+    ghcr["ghcr.io<br/>trivy databases"]
+    remote["Other registries<br/>webhook endpoints"]
+
+    docker --> v2
+    browser --> console
+    v2 --> engine
+    console --> engine
+    console --> db
+    console -.-> oidc
+    engine -.-> upstream
+    engine --> storage
+    storage ~~~ upstream
+    engine --> hub
+    hub --> scan
+    hub --> jobs
+    scan -->|"pulls with a per-scan token"| v2
+    scan -.->|"DB refresh, no credentials"| ghcr
+    jobs --> remote
+```
+
+- **One process.** The registry protocol, the console and its API, and the background jobs all run in the same Go binary. Blobs and manifests go to the storage backend; accounts, sessions, scan results, policies and the audit log go to an embedded SQLite database.
+- **`/v2`** speaks the Docker Registry protocol to `docker`, CI runners and Kubernetes. Every request passes token auth (`/v2/token`), role and repository-pattern checks, then the vulnerability pull gate and the signed-push check, before reaching the registry engine. In `proxy` and `mirror` modes the engine forwards to the upstream registry.
+- **Events** (push, delete, scan, GC…) drive the rest: scan on push, replication, webhooks, and the console's live notifications.
+- **Scanning** runs Trivy as a subprocess. Trivy pulls the image back from Dockyard on `localhost` with a short-lived token for that repository alone. Its vulnerability databases are refreshed from ghcr.io without any credentials.
 
 ## Getting Started
 

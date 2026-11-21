@@ -113,12 +113,12 @@ type Config struct {
 	TrivyServerURL string
 	TrivyBinPath   string
 	TrivyCacheDir  string // empty = computed from StoragePath at startup
-	// TrivyDBSeedDir holds a vulnerability DB baked into the image at build time
-	// (Dockerfile). On first run the cache dir is seeded from here so the first
-	// scan works with no network. Default /opt/trivy-cache.
+	// TrivyDBSeedDir holds the databases baked into the image at build time
+	// (Dockerfile). Those the cache dir lacks are seeded from here so the
+	// first scan works with no network. Default /opt/trivy-cache.
 	TrivyDBSeedDir string
-	// TrivyOffline scans using only the seeded/cached DB and never reaches the
-	// network (adds --skip-db-update). For air-gapped hosts.
+	// TrivyOffline never downloads the databases (no startup or periodic
+	// refresh): scans use only the seeded/cached ones. For air-gapped hosts.
 	TrivyOffline       bool
 	ScanTimeout        time.Duration
 	ScanMaxReportBytes int64

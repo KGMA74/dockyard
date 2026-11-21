@@ -124,15 +124,19 @@ scan:
   # Vulnerability scanning: Dockyard shells out to a `trivy` binary bundled in
   # its own image. Standalone by default (empty trivyServerURL): the image
   # ships a vulnerability DB that seeds cacheDir on startup, so the first
-  # scan works without internet access; a background refresh keeps it up to
-  # date unless `offline` is true. Set trivyServerURL to defer to a
+  # scan works without internet access. Scans never download a database:
+  # Dockyard refreshes the vulnerability DB and the Java DB (images with
+  # jars; ~1 GB to download, more once unpacked on the volume — size
+  # persistence.size for it) at startup and every 12 hours, unless `offline`
+  # is true. Set trivyServerURL to defer to a
   # shared/external `trivy server --listen` deployment instead (mutualized
   # DB across instances) — Dockyard never runs or manages Trivy itself in
   # that case.
   enabled: false
   trivyServerURL: ""
-  # Air-gapped clusters: never try to update the DB, scan with the one
-  # shipped in the image (or already cached).
+  # Air-gapped clusters: never download the DBs, scan with those shipped in
+  # the image (or already cached). The default image ships no Java DB: build
+  # one with --build-arg TRIVY_JAVA_DB=true to scan Java images offline.
   offline: false
   # Empty = computed automatically under the storage volume
   # (<registry.storage.path>/trivy-cache). Override only if you need the

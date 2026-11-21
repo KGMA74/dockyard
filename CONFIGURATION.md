@@ -77,12 +77,19 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://otel-collector:4318
 # Off by default. Dockyard shells out to the `trivy` binary bundled in its own
 # image. SCAN_ENABLED=true is enough to turn it on — standalone mode is the
 # default. The image ships a vulnerability DB (downloaded at build time); on
-# startup it seeds an empty TRIVY_CACHE_DIR, so the very first scan works
-# without internet access. A background refresh then keeps the cache up to
-# date unless TRIVY_OFFLINE=true. Trigger a scan via
+# startup it is copied into TRIVY_CACHE_DIR if the cache has none, so the very
+# first scan works without internet access. Trigger a scan via
 # POST /api/admin/scans {"name","reference"}.
+#
+# Scans never download a database themselves. Dockyard refreshes them at
+# startup and every 12 hours, with no credentials, before and between scans
+# (scans queued meanwhile wait): the vulnerability DB (standalone mode) and
+# the Java DB, needed for images with jars. The Java DB is ~1 GB to download
+# and larger once unpacked in TRIVY_CACHE_DIR — size the volume for it.
+# Air-gapped: build the image with --build-arg TRIVY_JAVA_DB=true to ship
+# the Java DB too; it is copied into a cache that lacks one.
 SCAN_ENABLED=true
-TRIVY_OFFLINE=false                  # true = air-gapped: never update the DB, scan with the shipped/cached one
+TRIVY_OFFLINE=false                  # true = air-gapped: never download the DBs, scan with the shipped/cached ones
 
 # Advanced: point at a shared/external trivy server instead of standalone —
 # useful to mutualize an always-fresh DB across multiple Dockyard instances
@@ -97,12 +104,17 @@ SCAN_DEDUP_WINDOW=1h                 # reuse a recent successful scan for the sa
 TRIVY_INSECURE_REGISTRY=true         # trivy pulls from Dockyard over plain HTTP on localhost
 
 # Nothing to set for registry auth. With V2_AUTH_ENABLED=true (embedded mode)
-# each scan hands trivy its own token, in its environment only: pull only, on
-# the scanned repository alone, valid for SCAN_TIMEOUT + 1 minute, signed with
-# JWT_SECRET. Trivy runs with an explicit environment: it inherits only PATH,
-# HTTP_PROXY, HTTPS_PROXY, NO_PROXY, SSL_CERT_FILE and SSL_CERT_DIR (and
-# SYSTEMROOT on Windows) from Dockyard's, never JWT_SECRET or other secrets —
-# so TRIVY_* variables meant for trivy itself are not passed through either.
+# each scan gets its own token: pull only, on the scanned repository alone,
+# valid for SCAN_TIMEOUT + 1 minute, signed with JWT_SECRET. Trivy finds it in
+# a private DOCKER_CONFIG made for that scan (<cache>/tmp/registry-auth-*,
+# 0700, config.json 0600) under Dockyard's own localhost:<PORT> alone, so it
+# is never sent to another registry; the directory is removed when trivy
+# exits, and leftovers of an interrupted scan at the next start.
+# Trivy runs with an explicit environment: it inherits only PATH, HTTP_PROXY,
+# HTTPS_PROXY, NO_PROXY, SSL_CERT_FILE and SSL_CERT_DIR (and SYSTEMROOT on
+# Windows) from Dockyard's, never JWT_SECRET or other secrets — so TRIVY_*
+# variables meant for trivy itself are not passed through either. TMPDIR is
+# <cache>/tmp, on the volume (the image has no usable /tmp of its own).
 
 # ── Signed-push enforcement (cosign) ──────────────────────────────────────────
 # Off by default. When on, tag pushes are rejected unless a valid cosign
