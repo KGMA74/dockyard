@@ -1,9 +1,13 @@
 package scan
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
+	"log/slog"
 	"net/http"
 	"strconv"
+	"time"
 
 	"dockyard/internal/audit"
 	"dockyard/internal/auth"
@@ -109,11 +113,20 @@ func (h *Handler) Get(c echo.Context) error {
 	return c.JSON(http.StatusOK, sc)
 }
 
-// Report — GET /api/admin/scans/:id/report
+// Report — GET /api/admin/scans/:id/report[?format=json|csv|pdf[&lang=en|fr]]
+// Without format: the raw trivy JSON, inline, as the console reads it. With
+// one: a download (Content-Disposition: attachment) — the same JSON, the
+// findings as CSV, or a PDF report.
 func (h *Handler) Report(c echo.Context) error {
 	id, err := strconv.ParseInt(c.Param("id"), 10, 64)
 	if err != nil {
 		return c.JSON(http.StatusBadRequest, map[string]string{"error": "invalid scan id"})
+	}
+	format := c.QueryParam("format")
+	switch format {
+	case "", "json", "csv", "pdf":
+	default:
+		return c.JSON(http.StatusBadRequest, map[string]string{"error": "format must be json, csv or pdf"})
 	}
 	report, err := h.store.ScanReport(id)
 	if errors.Is(err, store.ErrScanNotFound) {
@@ -122,5 +135,60 @@ func (h *Handler) Report(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusInternalServerError, map[string]string{"error": err.Error()})
 	}
-	return c.Blob(http.StatusOK, "application/json", report)
+	// A vulnerability report says what in an image is exploitable: never
+	// let a browser or proxy keep a copy.
+	c.Response().Header().Set("Cache-Control", "no-store")
+	if format == "" {
+		// The console's own read: the raw report, inline.
+		return c.Blob(http.StatusOK, "application/json", report)
+	}
+
+	body, contentType, sc, err := h.exportReport(id, report, format, c.QueryParam("lang"))
+	if err != nil {
+		// The cause goes to the log, not to the client.
+		slog.Error("scan: report export failed", "scan", id, "format", format, "err", err)
+		return c.JSON(http.StatusInternalServerError, map[string]string{"error": "report export failed"})
+	}
+	// Exporting takes the findings out of Dockyard: on the record.
+	if h.auditor != nil {
+		actor := ""
+		if p, ok := auth.CurrentPrincipal(c); ok {
+			actor = p.Username
+		}
+		h.auditor.Record(actor, "scan-export", sc.Name, sc.Reference, c.RealIP(), "success", format)
+	}
+	c.Response().Header().Set(echo.HeaderContentDisposition, fmt.Sprintf("attachment; filename=%q", reportFilename(sc, format)))
+	return c.Blob(http.StatusOK, contentType, body)
+}
+
+// exportReport renders a stored report in format (json, csv or pdf).
+func (h *Handler) exportReport(id int64, report []byte, format, lang string) ([]byte, string, *store.ScanResult, error) {
+	sc, err := h.store.ScanByID(id)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	if format == "json" {
+		return report, "application/json", sc, nil
+	}
+	entries, err := h.store.ListAllowedCVEs()
+	if err != nil {
+		return nil, "", nil, err
+	}
+	now := time.Now()
+	rows, err := reportRows(report, activeAllowlist(entries, now))
+	if err != nil {
+		return nil, "", nil, err
+	}
+	if format == "csv" {
+		var buf bytes.Buffer
+		if err := writeCSV(&buf, rows); err != nil {
+			return nil, "", nil, err
+		}
+		return buf.Bytes(), "text/csv; charset=utf-8", sc, nil
+	}
+	doc, err := renderPDF(sc, rows, lang, now)
+	if err != nil {
+		return nil, "", nil, err
+	}
+	return doc, "application/pdf", sc, nil
 }

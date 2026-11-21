@@ -2176,10 +2176,17 @@ export interface paths {
             path?: never;
             cookie?: never;
         };
-        /** Get the full trivy JSON report for a scan (admin only) */
+        /**
+         * Get or download the report of a scan (admin only)
+         * @description Without `format`, returns the raw trivy JSON report inline. With `format`, returns it as a download (`Content-Disposition: attachment`, named after the image): `json` is the same raw report, `csv` lists the findings one per row (most severe first, with whether each CVE is on the active allowlist), `pdf` is a printable report.
+         */
         get: {
             parameters: {
-                query?: never;
+                query?: {
+                    format?: "json" | "csv" | "pdf";
+                    /** @description Language of the PDF report (default en). */
+                    lang?: "en" | "fr";
+                };
                 header?: never;
                 path: {
                     id: number;
@@ -2188,15 +2195,18 @@ export interface paths {
             };
             requestBody?: never;
             responses: {
-                /** @description Raw trivy report JSON */
+                /** @description The report */
                 200: {
                     headers: {
                         [name: string]: unknown;
                     };
                     content: {
                         "application/json": Record<string, never>;
+                        "text/csv": string;
+                        "application/pdf": string;
                     };
                 };
+                400: components["responses"]["BadRequest"];
                 403: components["responses"]["Forbidden"];
                 404: components["responses"]["NotFound"];
             };

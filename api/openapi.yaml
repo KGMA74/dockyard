@@ -1035,15 +1035,35 @@ paths:
   /api/admin/scans/{id}/report:
     get:
       tags: [scan]
-      summary: Get the full trivy JSON report for a scan (admin only)
+      summary: Get or download the report of a scan (admin only)
+      description: >-
+        Without `format`, returns the raw trivy JSON report inline. With
+        `format`, returns it as a download (`Content-Disposition: attachment`,
+        named after the image): `json` is the same raw report, `csv` lists
+        the findings one per row (most severe first, with whether each CVE
+        is on the active allowlist), `pdf` is a printable report.
       parameters:
         - { name: id, in: path, required: true, schema: { type: integer } }
+        - name: format
+          in: query
+          required: false
+          schema: { type: string, enum: [json, csv, pdf] }
+        - name: lang
+          in: query
+          required: false
+          description: Language of the PDF report (default en).
+          schema: { type: string, enum: [en, fr] }
       responses:
         "200":
-          description: Raw trivy report JSON
+          description: The report
           content:
             application/json:
               schema: { type: object }
+            text/csv:
+              schema: { type: string }
+            application/pdf:
+              schema: { type: string, format: binary }
+        "400": { $ref: "#/components/responses/BadRequest" }
         "403": { $ref: "#/components/responses/Forbidden" }
         "404": { $ref: "#/components/responses/NotFound" }
 
