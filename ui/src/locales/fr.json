@@ -365,7 +365,12 @@
     "count_other": "{{count}} vulnérabilités",
     "truncated": "Les {{shown}} premières sur {{total}} sont affichées — affinez les filtres pour voir le reste.",
     "cleanTitle": "Aucune vulnérabilité connue",
-    "cleanBody": "Trivy n'a rien trouvé dans cette image avec sa base de vulnérabilités actuelle."
+    "cleanBody": "Trivy n'a rien trouvé dans cette image avec sa base de vulnérabilités actuelle.",
+    "download": "Télécharger",
+    "format_pdf": "Rapport à partager : synthèse et tous les résultats",
+    "format_csv": "Résultats pour un tableur",
+    "format_json": "Rapport Trivy brut, pour l'outillage",
+    "downloadFailed": "Échec du téléchargement : {{message}}"
   },
   "activity": {
     "title": "Activité",

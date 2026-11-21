@@ -365,7 +365,12 @@
     "count_other": "{{count}} vulnerabilities",
     "truncated": "Showing the first {{shown}} of {{total}} — narrow the filters to see the rest.",
     "cleanTitle": "No known vulnerabilities",
-    "cleanBody": "Trivy found nothing in this image against its current vulnerability database."
+    "cleanBody": "Trivy found nothing in this image against its current vulnerability database.",
+    "download": "Download",
+    "format_pdf": "Report to share: summary and every finding",
+    "format_csv": "Findings for a spreadsheet",
+    "format_json": "Raw Trivy report, for tooling",
+    "downloadFailed": "Download failed: {{message}}"
   },
   "activity": {
     "title": "Activity",

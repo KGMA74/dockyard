@@ -811,6 +811,34 @@ export async function getScanVulnerabilities(id: number): Promise<Vulnerability[
   return parseTrivyReport(await req<unknown>(`/scans/${id}/report`))
 }
 
+export type ReportFormat = 'json' | 'csv' | 'pdf'
+
+/** Downloads a scan report as a file. The endpoint needs the bearer token, so
+ *  a plain link would not do: fetch it, then hand the browser a blob URL. */
+export async function downloadScanReport(id: number, format: ReportFormat, retried = false): Promise<void> {
+  const lang = i18n.language?.startsWith('fr') ? 'fr' : 'en'
+  const res = await fetch(`${BASE}/scans/${id}/report?format=${format}&lang=${lang}`, {
+    headers: { Authorization: `Bearer ${token()}` },
+  })
+  if (res.status === 401 && !retried && (await tryRefresh())) {
+    return downloadScanReport(id, format, true)
+  }
+  if (!res.ok) throw await parseError(res)
+  const name = /filename="([^"]+)"/.exec(res.headers.get('content-disposition') ?? '')?.[1] ?? `scan-${id}.${format}`
+  const url = URL.createObjectURL(await res.blob())
+  try {
+    const a = document.createElement('a')
+    a.href = url
+    a.download = name
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+  } finally {
+    // Revoked on the next tick: the click has started the download by then.
+    setTimeout(() => URL.revokeObjectURL(url), 0)
+  }
+}
+
 export interface SigningPolicy {
   id: number
   repo_pattern: string
