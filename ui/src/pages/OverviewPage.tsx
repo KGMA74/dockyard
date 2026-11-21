@@ -20,6 +20,7 @@ import {
   Timestamp,
 } from '@/components/kit'
 import PushGuide from '@/components/PushGuide'
+import SetupChecklist from '@/components/SetupChecklist'
 import StatTile from '@/components/StatTile'
 import { Button } from '@/components/ui/button'
 
@@ -180,6 +181,8 @@ export default function OverviewPage() {
         }
       />
 
+      <SetupChecklist />
+
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <StatTile icon={Boxes} label={t('overview.repositories')} value={repos ? String(repos.length) : undefined} />
         <StatTile
@@ -231,7 +234,11 @@ export default function OverviewPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        <Section title={session.canPush ? t('overview.pushTitle') : t('overview.pullTitle')} description={t('overview.pushBody')}>
+        <Section
+          id="push-guide"
+          title={session.canPush ? t('overview.pushTitle') : t('overview.pullTitle')}
+          description={t('overview.pushBody')}
+        >
           <Panel className="p-4">
             <PushGuide />
           </Panel>

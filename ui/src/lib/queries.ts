@@ -13,6 +13,7 @@ import {
   getRepositories,
   getScanVulnerabilities,
   getServerConfig,
+  getSetup,
   getSigningStatus,
   getStorageStats,
   getTags,
@@ -47,6 +48,7 @@ export const keys = {
   sessions: ['sessions'] as const,
   mySessions: ['sessions', 'mine'] as const,
   serverConfig: ['server-config'] as const,
+  setup: ['setup'] as const,
   retention: ['retention'] as const,
   quotas: ['quotas'] as const,
   webhooks: ['webhooks'] as const,
@@ -117,6 +119,9 @@ export const useRobots = () => useQuery({ queryKey: keys.robots, queryFn: listRo
 export const useMe = () => useQuery({ queryKey: keys.me, queryFn: getMe })
 export const useSessions = () => useQuery({ queryKey: keys.sessions, queryFn: listSessions })
 export const useMySessions = () => useQuery({ queryKey: keys.mySessions, queryFn: listMySessions })
+/** Re-read whenever the overview mounts: steps get done elsewhere. */
+export const useSetup = (enabled: boolean) =>
+  useQuery({ queryKey: keys.setup, queryFn: getSetup, enabled, select: data => data.steps })
 export const useServerConfig = (enabled: boolean) =>
   useQuery({
     queryKey: keys.serverConfig,

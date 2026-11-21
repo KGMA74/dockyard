@@ -494,6 +494,32 @@ paths:
         "400": { $ref: "#/components/responses/BadRequest" }
         "403": { $ref: "#/components/responses/Forbidden" }
 
+  /api/admin/setup:
+    get:
+      tags: [system]
+      summary: Getting-started checklist (admin only)
+      description: >-
+        Steps an admin should take on a new install, each ticked from the
+        instance's actual state. Steps that do not apply here are left out
+        (first_image in proxy mode, scan_on_push with scanning off).
+      responses:
+        "200":
+          description: The checklist
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  steps:
+                    type: array
+                    items:
+                      type: object
+                      required: [id, done]
+                      properties:
+                        id: { type: string, enum: [admin_password, first_image, robot_account, scan_on_push, team, https] }
+                        done: { type: boolean }
+        "403": { $ref: "#/components/responses/Forbidden" }
+
   /api/admin/config:
     get:
       tags: [system]

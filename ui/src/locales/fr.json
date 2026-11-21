@@ -948,5 +948,45 @@
     "failed": "Suppression impossible — réessayez.",
     "typePrefix": "Saisissez",
     "typeSuffix": "pour confirmer."
+  },
+  "setup": {
+    "title": "Bien démarrer",
+    "body": "Ce qu'il reste à faire pour que ce registre soit sûr et prêt pour votre équipe. Chaque étape se coche toute seule une fois faite.",
+    "progress": "{{done}} sur {{total}} faites",
+    "dismiss": "Masquer la liste de démarrage",
+    "done": "Fait",
+    "todo": "À faire",
+    "steps": {
+      "admin_password": {
+        "title": "Changer le mot de passe admin",
+        "body": "Le mot de passe défini au déploiement est toujours celui en service : quiconque a lu la configuration peut se connecter.",
+        "action": "Le changer"
+      },
+      "first_image": {
+        "title": "Pousser une première image",
+        "body": "Les commandes ci-dessous contiennent déjà l'adresse de ce registre.",
+        "action": "Voir comment"
+      },
+      "robot_account": {
+        "title": "Créer un compte robot pour la CI",
+        "body": "Donnez aux pipelines et aux clusters leurs propres identifiants, limités et révocables, plutôt que le mot de passe d'une personne.",
+        "action": "Comptes robots"
+      },
+      "scan_on_push": {
+        "title": "Scanner chaque image poussée",
+        "body": "Activez le scan au push pour trouver les vulnérabilités dès qu'une image arrive, et bloquer au besoin le pull des images vulnérables.",
+        "action": "Sécurité"
+      },
+      "team": {
+        "title": "Inviter votre équipe",
+        "body": "Créez des comptes avec le bon rôle pour chacun, ou configurez le single sign-on.",
+        "action": "Accès"
+      },
+      "https": {
+        "title": "Servir le registre en HTTPS",
+        "body": "En HTTP simple, les mots de passe circulent en clair et chaque hôte Docker doit déclarer insecure-registries. Utilisez TLS_MODE ou un ingress avec certificat.",
+        "action": "Documentation"
+      }
+    }
   }
 }

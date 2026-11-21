@@ -712,6 +712,13 @@ export interface ConfigItem {
 }
 
 /** Effective server configuration, secrets left out (admin only). */
+export type SetupStepId = 'admin_password' | 'first_image' | 'robot_account' | 'scan_on_push' | 'team' | 'https'
+
+/** The getting-started checklist, ticked from the instance's state (admin). */
+export async function getSetup(): Promise<{ steps: { id: SetupStepId; done: boolean }[] }> {
+  return req('/setup')
+}
+
 export async function getServerConfig(): Promise<{ groups: { id: ConfigGroupId; items: ConfigItem[] }[] }> {
   return req('/config')
 }

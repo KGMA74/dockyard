@@ -1070,6 +1070,52 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/admin/setup": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        /**
+         * Getting-started checklist (admin only)
+         * @description Steps an admin should take on a new install, each ticked from the instance's actual state. Steps that do not apply here are left out (first_image in proxy mode, scan_on_push with scanning off).
+         */
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description The checklist */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "application/json": {
+                            steps?: {
+                                /** @enum {string} */
+                                id: "admin_password" | "first_image" | "robot_account" | "scan_on_push" | "team" | "https";
+                                done: boolean;
+                            }[];
+                        };
+                    };
+                };
+                403: components["responses"]["Forbidden"];
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/admin/config": {
         parameters: {
             query?: never;

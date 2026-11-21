@@ -948,5 +948,45 @@
     "failed": "Could not delete — try again.",
     "typePrefix": "Type",
     "typeSuffix": "to confirm."
+  },
+  "setup": {
+    "title": "Get started",
+    "body": "What is left to make this registry safe and ready for your team. Each step ticks itself once done.",
+    "progress": "{{done}} of {{total}} done",
+    "dismiss": "Hide the getting-started checklist",
+    "done": "Done",
+    "todo": "To do",
+    "steps": {
+      "admin_password": {
+        "title": "Change the admin password",
+        "body": "The password the deployment set is still the one in use: anyone who read the configuration can sign in.",
+        "action": "Change it"
+      },
+      "first_image": {
+        "title": "Push a first image",
+        "body": "The commands below already contain this registry's address.",
+        "action": "See how"
+      },
+      "robot_account": {
+        "title": "Create a robot account for CI",
+        "body": "Give pipelines and clusters their own credentials, scoped and revocable, instead of a person's password.",
+        "action": "Robot accounts"
+      },
+      "scan_on_push": {
+        "title": "Scan every pushed image",
+        "body": "Turn on scan on push to find vulnerabilities as soon as an image arrives, and optionally block pulls of vulnerable ones.",
+        "action": "Security"
+      },
+      "team": {
+        "title": "Invite your team",
+        "body": "Create accounts with the right role for each person, or set up single sign-on.",
+        "action": "Access"
+      },
+      "https": {
+        "title": "Serve the registry over HTTPS",
+        "body": "Plain HTTP sends passwords in clear and needs insecure-registries on every Docker host. Use TLS_MODE or an ingress with a certificate.",
+        "action": "Documentation"
+      }
+    }
   }
 }

@@ -321,6 +321,8 @@ func (s *Server) RegisterRoutes() http.Handler {
 
 	// Effective server configuration, secrets left out.
 	api.GET("/config", s.handleConfig, auth.RequireAdmin)
+	// Getting-started checklist, ticked from the instance's actual state.
+	api.GET("/setup", s.handleSetup, auth.RequireAdmin)
 	// Single sign-on set up from the console (read-only when the deployment
 	// configures it). The test runs discovery against an issuer URL.
 	api.GET("/sso", s.auth.SSOSettings, auth.RequireAdmin)
