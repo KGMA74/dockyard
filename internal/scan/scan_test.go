@@ -28,7 +28,9 @@ func openTestStore(t *testing.T) *store.Store {
 
 func waitForStatus(t *testing.T, st *store.Store, id int64, want string) *store.ScanResult {
 	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
+	// Generous: under -race -cover each fake trivy process takes over a
+	// second to start, and a scan after the DB refresh runs four of them.
+	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		sc, err := st.ScanByID(id)
 		if err != nil {
